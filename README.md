@@ -2,6 +2,12 @@
 
 **Интеллектуальный сборщик Hackintosh EFI** — GUI-приложение (RU/EN), которое сканирует ваше железо на Windows, автоматически подбирает и **реально скачивает** kext и OpenCore, генерирует `config.plist`, прогоняет его через **ocvalidate** и даёт рекомендации.
 
+[![Лицензия: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Версия](https://img.shields.io/badge/version-v1.0.0-brightgreen.svg)](https://github.com/SLEP-KOMP/HackicLab/releases)
+[![Платформа: Windows](https://img.shields.io/badge/platform-Windows-0078d6.svg)](https://github.com/SLEP-KOMP/HackicLab)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://www.python.org/)
+[![GUI: PySide6](https://img.shields.io/badge/GUI-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
+
 ## Возможности
 
 - **Автосканирование железа** на Windows (CPU/GPU/аудио/сеть/host-платформа) через WMI/CIM/PnP/PowerShell.
@@ -17,6 +23,10 @@
 
 - **Платформа:** Windows только.
 - **Python 3.10+** (для запуска из исходников) либо готовый `HackicLab.exe`.
+
+## Загрузка
+
+Готовый портативный дистрибутив для Windows — в разделе [Releases](https://github.com/SLEP-KOMP/HackicLab/releases). Просто скачайте `HackicLab.exe` и запустите — установка не требуется.
 
 ## Технологии
 
