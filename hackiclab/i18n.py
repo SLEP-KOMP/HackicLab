@@ -1,0 +1,278 @@
+"""Интернационализация (RU/EN) для интерфейса HackicLab."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Lang:
+    code: str
+    native: str
+
+
+LANGS = [Lang("ru", "Русский"), Lang("en", "English")]
+
+
+# Пространства имён переводов
+T = {
+    "ru": {
+        # app
+        "app.title": "HackicLab",
+        "app.tagline": "Интеллектуальный сборщик Hackintosh EFI",
+        # nav
+        "nav.scan": "Сканирование",
+        "nav.build": "Сборка EFI",
+        "nav.analyze": "Анализ файлов",
+        "nav.settings": "Настройки",
+        "nav.about": "О программе",
+        # scan
+        "scan.title": "Сканирование вашего железа",
+        "scan.button": "Сканировать железо",
+        "scan.running": "Сканирование…",
+        "scan.done": "Сканирование завершено",
+        "scan.cpu": "Процессор",
+        "scan.gpu": "Видеокарта",
+        "scan.audio": "Звук",
+        "scan.net": "Сеть",
+        "scan.storage": "Накопители",
+        "scan.platform": "Платформа",
+        "scan.board": "Материнская плата",
+        "scan.save": "Сохранить профиль",
+        "scan.saved": "Профиль сохранён",
+        # build
+        "build.title": "Сборка папки EFI",
+        "build.pick": "Выбрать папку назначения",
+        "build.options": "Параметры",
+        "build.usb_toolbox": "Включить USBToolBox",
+        "build.disable_sip": "Отключить SIP",
+        "build.wifi_mode": "Режим Intel WiFi",
+        "build.wifi_itlwm": "itlwm + HeliPort",
+        "build.wifi_airport": "AirportItlwm",
+        "build.button": "Собрать EFI",
+        "build.building": "Сборка…",
+        "build.done": "EFI собрана",
+        "build.log": "Журнал сборки",
+        # analyze
+        "analyze.title": "Анализ ваших файлов EFI",
+        "analyze.pick": "Папка с файлами",
+        "analyze.browse": "Выбрать папку…",
+        "analyze.hint": "Что это: выберите папку с вашими файлами Hackintosh (папку EFI целиком, папку OC/kext, Kexts или любую папку со скачанными .kext и .efi). HackicLab сопоставит эти файлы с вашим железом, найдёт недостающие кексты, OpenCore, несовместимости и подскажет, чего не хватает.",
+        "analyze.button": "Проанализировать",
+        "analyze.running": "Анализ…",
+        "analyze.done": "Анализ завершён",
+        "analyze.issues": "Найдено проблем",
+        "analyze.info": "Инфо",
+        "analyze.warning": "Предупреждения",
+        "analyze.error": "Ошибки",
+        "analyze.no_folder": "Сначала выберите папку с файлами",
+        "analyze.step1": "1. Нажмите «Выбрать папку…» и укажите папку с вашими файлами EFI/kext",
+        "analyze.step2": "2. Нажмите «Проанализировать» — вы увидите список проблем и рекомендации",
+        "analyze.steps_title": "Как пользоваться:",
+        # settings
+        "settings.title": "Настройки",
+        "settings.language": "Язык интерфейса",
+        "settings.theme": "Тема оформления",
+        "settings.theme_dark": "Тёмная",
+        "settings.theme_light": "Светлая",
+        "settings.theme_system": "Системная",
+        "settings.theme_custom": "Моя тема",
+        "settings.advanced": "Дополнительно",
+        "settings.autoscan": "Автосканирование железа при запуске",
+        "settings.show_welcome": "Показывать подсказки",
+        "settings.check_updates": "Проверять обновления при запуске",
+        "settings.keep_builds": "Сохранять журналы сборки",
+        "settings.download_concurrent": "Параллельных загрузок",
+        "settings.network": "Сеть",
+        "settings.profile_dir": "Папка профилей",
+        "settings.filter_statusbar": "Подсказки в строке состояния",
+        "settings.app_behavior": "Поведение приложения",
+        "settings.theme_descr": "Выберите оформление. «Моя тема» включает расширенные цвета оформления.",
+        "settings.premium": "HackicLab Premium",
+        "settings.premium_edition": "Выпуск",
+        "settings.premium_edition_free": "Бесплатный",
+        "settings.premium_edition_premium": "Premium",
+        "settings.premium_features": "Автозагрузка · полная сборка в один клик · облачные профили",
+        "settings.premium_key": "Ключ активации",
+        "settings.premium_activate": "Активировать",
+        "settings.premium_activated": "Предварительный выпуск активирован",
+        "settings.premium_invalid": "Неверный ключ",
+        # build
+        "build.usb_toolbox_desc": "USBToolBox — инструмент маппинга (привязки) USB-портов. Включается, если после установки вы планируете привязывать USB-порты под ваше железо. Для большинства современных ПК рекомендуется.",
+        "build.sip_desc": "SIP (System Integrity Protection) — защита целостности macOS. Отключение позволяет модифицировать системный раздел (нужно для OCLP и некоторых патчей). Не рекомендуется для повседневного использования.",
+        "build.wifi_mode_desc": "Режим драйвера Intel WiFi:\n• itlwm + HeliPort — стабильный интернет, нет нативной иконки Wi-Fi в меню-баре.\n• AirportItlwm — выглядит как нативный Wi-Fi Apple, но привязан к конкретной версии macOS.",
+        "build.dest_desc": "Актуально: выберите, куда сохранить собранную папку EFI. Например, пустую папку на флешке или на диске. Лучше указать пустую папку.",
+        "build.note_online": "При наличии интернета HackicLab автоматически скачает кексты и OpenCore под ваше железо.",
+        "build.macos": "Целевая версия macOS",
+        "build.macos_desc": "Выберите версию macOS, которую планируете устанавливать. От неё зависит выбор SMBIOS, SecureBootModel и совместимость кекстов. Несовместимые версии будут отмечены.",
+        "build.macos_maybe_incompat": "Версия может быть несовместима с вашим железом",
+        "build.macos_auto": "— Авто (максимум для железа) —",
+        # about
+        "about.title": "О HackicLab",
+        "about.version": "Версия",
+        "about.made": "Сделано с технологиями OpenCore-экосистемы",
+        "about.license": "Открытый исходный код, MIT",
+        "about.whatis": "Что это",
+        "about.whatis_text": "HackicLab — интеллектуальный инструмент сборки и проверки Hackintosh EFI. Он сканирует ваше железо, подбирает под него кексты и настройки OpenCore, а также проверяет уже скачанные вами файлы и подсказывает, что ещё нужно.",
+        "about.features_title": "Возможности",
+        "about.feature1": "• Автосканирование железа (CPU, GPU, аудио, сеть)",
+        "about.feature2": "• Подбор кекстов и SSDT под ваш профиль",
+        "about.feature3": "• Проверка ваших EFI-файлов и рекомендации",
+        "about.feature4": "• Сборка папки EFI (OpenCore + kext)",
+        "about.feature5": "• Смена темы и два языка интерфейса",
+        "about.tech_title": "Технологии",
+        "about.tech_text": "Ядро: Python + PySide6 (Qt). Подходы переиспользуются из открытой экосистемы OpenCore: hackmate, OpCore-Simplify, SSDTTime, USBToolBox, acidanthera.",
+        "about.disc": "Дисклеймер",
+        "about.disc_text": "Проект создан для изучения и легального использования. Устанавливайте macOS только на то оборудование, которое вам принадлежит, соблюдая условия лицензии Apple. Инструмент автоматизирует рутину; ответственность за совместимость лежит на пользователе.",
+        # common
+        "common.open": "Открыть",
+        "common.cancel": "Отмена",
+        "common.save": "Сохранить",
+        "common.close": "Закрыть",
+        "common.browse": "Обзор…",
+        "common.ok": "OK",
+        # status
+        "status.ready": "Готово",
+        "status.scanning": "Сканирование…",
+        "status.building": "Сборка…",
+        "status.analyzing": "Анализ…",
+        "status.saved": "Сохранено",
+    },
+    "en": {
+        "app.title": "HackicLab",
+        "app.tagline": "Intelligent Hackintosh EFI builder",
+        "nav.scan": "Scan",
+        "nav.build": "Build EFI",
+        "nav.analyze": "Analyze files",
+        "nav.settings": "Settings",
+        "nav.about": "About",
+        "scan.title": "Scan your hardware",
+        "scan.button": "Scan hardware",
+        "scan.running": "Scanning…",
+        "scan.done": "Scan complete",
+        "scan.cpu": "CPU",
+        "scan.gpu": "Graphics",
+        "scan.audio": "Audio",
+        "scan.net": "Network",
+        "scan.storage": "Storage",
+        "scan.platform": "Platform",
+        "scan.board": "Motherboard",
+        "scan.save": "Save profile",
+        "scan.saved": "Profile saved",
+        "build.title": "Build EFI folder",
+        "build.pick": "Choose destination folder",
+        "build.options": "Options",
+        "build.usb_toolbox": "Enable USBToolBox",
+        "build.disable_sip": "Disable SIP",
+        "build.wifi_mode": "Intel WiFi mode",
+        "build.wifi_itlwm": "itlwm + HeliPort",
+        "build.wifi_airport": "AirportItlwm",
+        "build.button": "Build EFI",
+        "build.building": "Building…",
+        "build.done": "EFI built",
+        "build.log": "Build log",
+"analyze.title": "Analyze your EFI files",
+        "analyze.pick": "Folder with files",
+        "analyze.browse": "Choose folder…",
+        "analyze.hint": "What is this: pick a folder with your Hackintosh files (a whole EFI folder, an OC/kext folder, Kexts, or any folder with downloaded .kext and .efi). HackicLab compares these files with your hardware, finds missing kexts, OpenCore, incompatibilities and tells you what's missing.",
+        "analyze.button": "Analyze",
+        "analyze.running": "Analyzing…",
+        "analyze.done": "Analysis complete",
+        "analyze.issues": "Issues found",
+        "analyze.info": "Info",
+        "analyze.warning": "Warnings",
+        "analyze.error": "Errors",
+        "analyze.no_folder": "First choose a folder with files",
+        "analyze.step1": "1. Click \"Choose folder…\" and pick the folder with your EFI/kext files",
+        "analyze.step2": "2. Click \"Analyze\" — you'll see the issues list and recommendations",
+        "analyze.steps_title": "How to use:",
+        # settings
+        "settings.title": "Settings",
+        "settings.language": "Interface language",
+        "settings.theme": "Theme",
+        "settings.theme_dark": "Dark",
+        "settings.theme_light": "Light",
+        "settings.theme_system": "System",
+        "settings.theme_custom": "My theme",
+        "settings.advanced": "Advanced",
+        "settings.autoscan": "Auto-scan hardware on launch",
+        "settings.show_welcome": "Show hints",
+        "settings.check_updates": "Check updates on launch",
+        "settings.keep_builds": "Keep build logs",
+        "settings.download_concurrent": "Concurrent downloads",
+        "settings.network": "Network",
+        "settings.profile_dir": "Profiles folder",
+        "settings.filter_statusbar": "Status bar hints",
+        "settings.app_behavior": "App behavior",
+        "settings.theme_descr": "Choose appearance. \"My theme\" enables extended accent colors.",
+        "settings.premium": "HackicLab Premium",
+        "settings.premium_edition": "Edition",
+        "settings.premium_edition_free": "Free",
+        "settings.premium_edition_premium": "Premium",
+        "settings.premium_features": "Auto-download · full one-click build · cloud profiles",
+        "settings.premium_key": "Activation key",
+        "settings.premium_activate": "Activate",
+        "settings.premium_activated": "Premium activated",
+        "settings.premium_invalid": "Invalid key",
+        # build
+        "build.usb_toolbox_desc": "USBToolBox is a USB port mapping tool. Enable it if you plan to map USB ports to your hardware after install. Recommended for most modern PCs.",
+        "build.sip_desc": "SIP (System Integrity Protection) is macOS integrity protection. Disabling allows modifying the system volume (needed for OCLP and some patches). Not recommended for daily use.",
+        "build.wifi_mode_desc": "Intel WiFi driver mode:\n• itlwm + HeliPort — stable internet, no native Wi-Fi menu-bar icon.\n• AirportItlwm — looks like native Apple Wi-Fi, but tied to a specific macOS version.",
+        "build.dest_desc": "Choose where to save the built EFI folder, e.g. an empty folder on a USB stick or disk. Prefer an empty folder.",
+        "build.note_online": "With internet, HackicLab will automatically download kexts and OpenCore for your hardware.",
+        "build.macos": "Target macOS version",
+        "build.macos_desc": "Choose the macOS version you plan to install. It affects SMBIOS selection, SecureBootModel and kext compatibility. Incompatible versions will be flagged.",
+        "build.macos_maybe_incompat": "Version may be incompatible with your hardware",
+        "build.macos_auto": "— Auto (max for hardware) —",
+        # about
+        "about.title": "About HackicLab",
+        "about.version": "Version",
+        "about.made": "Built on OpenCore ecosystem technologies",
+        "about.license": "Open source, MIT",
+        "about.whatis": "What is it",
+        "about.whatis_text": "HackicLab is an intelligent tool for building and verifying Hackintosh EFI. It scans your hardware, picks kexts and OpenCore settings for it, and also checks files you already downloaded and tells you what's still needed.",
+        "about.features_title": "Features",
+        "about.feature1": "• Automatic hardware scan (CPU, GPU, audio, network)",
+        "about.feature2": "• Kext and SSDT selection for your profile",
+        "about.feature3": "• Check your EFI files and recommendations",
+        "about.feature4": "• Build EFI folder (OpenCore + kext)",
+        "about.feature5": "• Theme switching and two interface languages",
+        "about.tech_title": "Technology",
+        "about.tech_text": "Core: Python + PySide6 (Qt). Approaches reused from the open OpenCore ecosystem: hackmate, OpCore-Simplify, SSDTTime, USBToolBox, acidanthera.",
+        "about.disc": "Disclaimer",
+        "about.disc_text": "Created for study and legal use. Install macOS only on hardware you own, following the Apple license. The tool automates routine; user is responsible for compatibility.",
+        "common.open": "Open",
+        "common.cancel": "Cancel",
+        "common.save": "Save",
+        "common.close": "Close",
+        "common.browse": "Browse…",
+        "common.ok": "OK",
+        "status.ready": "Ready",
+        "status.scanning": "Scanning…",
+        "status.building": "Building…",
+        "status.analyzing": "Analyzing…",
+        "status.saved": "Saved",
+    },
+}
+
+
+class Tr:
+    """Обёртка локализации. t("key") возвращает перевод на текущий язык."""
+
+    def __init__(self, lang: str = "ru"):
+        self.lang = lang if lang in T else "ru"
+
+    def set_lang(self, lang: str):
+        if lang in T:
+            self.lang = lang
+
+    def t(self, key: str) -> str:
+        return T[self.lang].get(key) or T["ru"].get(key) or key
+
+    @property
+    def current(self) -> str:
+        return self.lang
+
+
+# Глобальный синглтон для простоты доступа из GUI
+tr = Tr("ru")
