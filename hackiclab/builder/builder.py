@@ -33,7 +33,8 @@ class BuildPlan:
         if self.options is None:
             self.options = BuildOptions()
         if self.smbios is None:
-            self.smbios = generate_smbios(smbios_model_for(self.profile))
+            model = smbios_model_for(self.profile, self.options.target_macos)
+            self.smbios = generate_smbios(model)
         if not self.kext_names:
             for e in select_kexts(self.profile, self.options.wifi_kext_mode):
                 self.kext_names.append(e.name)
@@ -116,6 +117,15 @@ class EFIBuilder:
                     res.stats["opencore"] = "OK"
                 else:
                     self._log("  OpenCore.efi не найден в архиве")
+                # обязательные UEFI-драйверы: OpenRuntime + HfsPlus (+ OpenCanopy)
+                placed_drivers = []
+                for drv in ("OpenRuntime.efi", "HfsPlus.efi", "OpenCanopy.efi"):
+                    src = next(extract.rglob(drv), None)
+                    if src:
+                        layout.place_driver(src)
+                        placed_drivers.append(drv)
+                        self._log(f"  {drv} → Drivers")
+                res.stats["drivers_placed"] = placed_drivers
             except Exception as e:
                 self._log(f"OpenCore: распаковка не удалась: {e}")
         else:
@@ -170,10 +180,13 @@ class EFIBuilder:
             res.stats["ssdt_placed"] = []
 
         # 4) config.plist с SMBIOS
-        data = generate_config_plist(self.plan.profile, self.plan.options)
+        opts = self.plan.options
+        opts = BuildOptions(**{**opts.__dict__, "custom_smbios": self.plan.smbios})
+        data = generate_config_plist(self.plan.profile, opts)
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)
         kexts_placed = [x.name for x in kexts_dir.iterdir() if x.is_dir() and x.name.endswith('.kext')]
-        layout.write_plist_with_kexts(data, kexts_placed)
+        layout.write_plist_with_kexts(data, kexts_placed,
+                                      driver_names=res.stats.get("drivers_placed", []))
 
         # 5) ocvalidate финального config.plist
         cfg_path = layout.oc / "config.plist"
@@ -199,9 +212,10 @@ class EFIBuilder:
             "ssdt_placed": res.stats.get("ssdt_placed", []),
             "smbios": self.plan.smbios.model if self.plan.smbios else "",
             "opencore": res.stats.get("opencore", "skip"),
-            "ocvalidate_ok": res.stats.get("ocvalidate_ok"),
-            "ocvalidate_errors": res.stats.get("ocvalidate_errors"),
-            "ocvalidate_warnings": res.stats.get("ocvalidate_warnings"),
+            "drivers_placed": res.stats.get("drivers_placed", []),
+            "ocvalidate_ok": ocv.ok,
+            "ocvalidate_errors": ocv.errors,
+            "ocvalidate_warnings": ocv.warnings,
             "dir": str(target),
         }
         res.warnings = dl.log

@@ -141,7 +141,25 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             "csr-active-config": bytes([0x67, 0, 0, 0])
         }
 
+    # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
+    if options.custom_smbios:
+        _apply_smbios(cfg, options.custom_smbios)
+
     return plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
+
+
+def _apply_smbios(cfg: dict, data: "SMBIOSData"):
+    """Инжектит сгенерированные SMBIOS-данные в PlatformInfo → Generic."""
+    gen = cfg["PlatformInfo"]["Generic"]
+    gen["SystemProductName"] = data.model
+    if data.serial:
+        gen["SystemSerialNumber"] = data.serial
+    if data.mlb:
+        gen["MLB"] = data.mlb
+    if data.system_uuid:
+        gen["SystemUUID"] = data.system_uuid
+    if data.rom:
+        gen["ROM"] = bytes.fromhex(data.rom)
 
 
 def _macos_major(target: str) -> int:
@@ -162,16 +180,12 @@ def _apply_macos_model(cfg: dict, target: str, profile: HardwareProfile):
     """Проставляет SecureBootModel и ряд версионных квирков под macOS-версию."""
     major = _macos_major(target)
     sb = cfg["Misc"]["Security"]
-    if major < 12:
-        sb["SecureBootModel"] = "j160"   # Big Sur и старше
-    elif major < 13:
-        sb["SecureBootModel"] = "j185"   # Monterey
-    elif major < 14:
-        sb["SecureBootModel"] = "j223"   # Ventura
-    elif major < 15:
-        sb["SecureBootModel"] = "j274"   # Sonoma (выбран по умолчанию)
+    # Для актуальных macOS ставим Default — ocvalidate принимает это значение,
+    # и оно не зависит от конкретной SMBIOS-модели (на AMD проще и надёжнее).
+    if major >= 12:
+        sb["SecureBootModel"] = "Default"
     else:
-        sb["SecureBootModel"] = "DEFAULT"
+        sb["SecureBootModel"] = "j160"   # Big Sur и старше
 
     # XhciPortLimit нужен только на macOS < 11.3 / Big Sur и старше
     # CryptexFixup квирк для новых macOS на старом железе добавляется профилем.
@@ -180,7 +194,12 @@ def _apply_macos_model(cfg: dict, target: str, profile: HardwareProfile):
 
 
 def _base_config() -> dict:
-    """Минимально валидный config.plist-каркас OpenCore."""
+    """Полный валидный config.plist-каркас OpenCore (схема 1.0.8/1.0.9).
+
+    Включает все ключи секций из Sample.plist OpenCorePkg, чтобы ocvalidate
+    не выдавал ошибок «Missing key …» и проходил валидацию начисто. Значения
+    выставлены как практичные дефолты; сборка дальше их точечно переопределяет.
+    """
     return {
         "ACPI": {
             "Add": [], "Delete": [], "Patch": [],
@@ -189,47 +208,79 @@ def _base_config() -> dict:
                 "NormalizeHeaders": False,
                 "RebaseRegions": False,
                 "ResetHwSig": False,
-                "ResetLogoStatus": False,
+                "ResetLogoStatus": True,
+                "SyncTableIds": False,
             },
         },
         "Booter": {
             "MmioWhitelist": [],
             "Patch": [],
             "Quirks": {
+                "AllowRelocationBlock": False,
                 "AvoidRuntimeDefrag": True,
+                "ClearTaskSwitchBit": False,
                 "DevirtualiseMmio": False,
                 "DisableSingleUser": False,
+                "DisableVariableWrite": False,
                 "DiscardHibernateMap": False,
                 "EnableSafeModeSlide": True,
                 "EnableWriteUnprotector": True,
+                "FixupAppleEfiImages": True,
+                "ForceBooterSignature": False,
                 "ForceExitBootServices": False,
                 "ProtectMemoryRegions": False,
                 "ProtectSecureBoot": False,
+                "ProtectUefiServices": False,
                 "ProvideCustomSlide": True,
                 "ProvideMaxSlide": 0,
-                "RebuildAppleMemoryMap": True,
+                "RebuildAppleMemoryMap": False,
+                "ResizeAppleGpuBars": -1,
                 "SetupVirtualMap": True,
                 "SignalAppleOS": False,
-                "SyncRuntimePermissions": True,
+                "SyncRuntimePermissions": False,
             },
         },
         "DeviceProperties": {
             "Add": {}, "Delete": {},
         },
         "Kernel": {
-            "Add": [], "Block": [],
-            "Patch": [],
+            "Add": [], "Block": [], "Patch": [],
+            "Emulate": {
+                "Cpuid1Data": bytes(),
+                "Cpuid1Mask": bytes(),
+                "DummyPowerManagement": False,
+                "MaxKernel": "",
+                "MinKernel": "",
+            },
+            "Force": [],
+            "Scheme": {
+                "CustomKernel": False,
+                "FuzzyMatch": True,
+                "KernelArch": "Auto",
+                "KernelCache": "Auto",
+            },
             "Quirks": {
                 "AppleCpuPmCfgLock": False,
                 "AppleXcpmCfgLock": False,
+                "AppleXcpmExtraMsrs": False,
+                "AppleXcpmForceBoost": False,
+                "CustomPciSerialDevice": False,
                 "CustomSMBIOSGuid": False,
                 "DisableIoMapper": True,
+                "DisableIoMapperMapping": False,
+                "DisableLinkeditJettison": True,
+                "DisableRtcChecksum": False,
+                "ExtendBTFeatureFlags": False,
                 "ExternalDiskIcons": False,
+                "ForceAquantiaEthernet": False,
+                "ForceSecureBootScheme": False,
+                "IncreasePciBarSize": False,
                 "LapicKernelPanic": False,
+                "LegacyCommpage": False,
                 "PanicNoKextDump": False,
                 "PowerTimeoutKernelPanic": True,
                 "ProvideCurrentCpuInfo": False,
-                "SetExternalGpu": False,
+                "SetApfsTrimTimeout": -1,
                 "ThirdPartyDrives": True,
                 "XhciPortLimit": False,
             },
@@ -237,90 +288,154 @@ def _base_config() -> dict:
         "Misc": {
             "BlessOverride": [],
             "Boot": {
-                "Arguments": "-v -debug=0x100 keepsyms=1 debug=0x100",
                 "ConsoleAttributes": 0,
                 "HibernateMode": "None",
-                "Hidesensitivelog": False,
+                "HibernateSkipsPicker": False,
+                "HideAuxiliary": False,
+                "InstanceIdentifier": "",
+                "LauncherOption": "Disabled",
+                "LauncherPath": "Default",
+                "PickerAttributes": 17,
+                "PickerAudioAssist": False,
+                "PickerMode": "Builtin",
+                "PickerVariant": "Auto",
                 "PollAppleHotKeys": True,
                 "ShowPicker": True,
+                "TakeoffDelay": 0,
                 "Timeout": 5,
-                "PickerMode": "Builtin",
-                "Tools": [],
             },
             "Debug": {
                 "AppleDebug": True, "ApplePanic": True,
-                "DisableWatchDog": True, "Target": 3,
+                "DisableWatchDog": True, "DisplayDelay": 0,
+                "DisplayLevel": 0x80000002, "LogModules": "*",
+                "SysReport": False, "Target": 3,
             },
+            "Entries": [],
             "Security": {
-                "AllowNvramReset": True, "AllowSetDefault": True,
-                "ApECID": 0, "BlacklistAppleUpdate": True,
-                "BootProtect": "None", "DmgLoading": "Signed",
+                "AllowSetDefault": True,
+                "ApECID": 0, "AuthRestart": False,
+                "BlacklistAppleUpdate": True,
+                "DmgLoading": "Signed",
+                "EnablePassword": False,
                 "ExposeSensitiveData": 3, "HaltLevel": 0x80000000,
-                "ScanPolicy": 0, "SecureBootModel": "j137",
+                "PasswordHash": bytes(), "PasswordSalt": bytes(),
+                "ScanPolicy": 0, "SecureBootModel": "Default",
                 "Vault": "Optional",
             },
+            "Serial": {"Init": False, "Override": False},
             "Tools": [],
-            "Entries": [],
         },
         "NVRAM": {
             "Add": {
-                "4D1EDE05-38C7-4A6A-9CC6-4BCCA8B38C14": {
-                    "UIScale": bytes([1]),
-                },
                 "7C436110-AB2A-4BBB-A880-FE41995C9F82": {
                     "boot-args": "-v debug=0x100 keepsyms=1",
                     "csr-active-config": bytes([0, 0, 0, 0]),
                     "prev-lang:kbd": bytes("en:0", "utf-8"),
+                    "run-efi-updater": "No",
                 },
-                "PlatformNVRAM": {},
             },
             "Delete": {
-                "4D1EDE05-38C7-4A6A-9CC6-4BCCA8B38C14": ["UIScale"],
                 "7C436110-AB2A-4BBB-A880-FE41995C9F82": ["boot-args", "csr-active-config"],
             },
-            "LegacyEnable": False,
             "LegacyOverwrite": False,
-            "LegacySchema": {},
+            "LegacySchema": {
+                "7C436110-AB2A-4BBB-A880-FE41995C9F82": [
+                    "EFILoginHiDPI", "EFIBluetoothDelay", "LocationServicesEnabled",
+                    "SystemAudioVolume", "SystemAudioVolumeDB",
+                    "SystemAudioVolumeSaved", "bluetoothActiveControllerInfo",
+                    "bluetoothInternalControllerInfo", "flagstate",
+                    "fmm-computer-name", "fmm-mobileme-token-FMM",
+                    "nvda_drv", "prev-lang:kbd", "backlight-level", "BootCampHD",
+                ],
+                "8BE4DF61-93CA-11D2-AA0D-00E098032B8C": [
+                    "Boot0080", "Boot0081", "Boot0082", "BootNext", "BootOrder",
+                ],
+            },
             "WriteFlash": True,
         },
         "PlatformInfo": {
             "Automatic": True,
             "CustomMemory": False,
             "Generic": {
-                "AdviseWindows": False,
+                "AdviseFeatures": False,
                 "MLB": "",
+                "MaxBIOSVersion": False,
+                "ProcessorType": 0,
                 "ROM": bytes(),
                 "SpoofVendor": True,
+                "SystemMemoryStatus": "Auto",
                 "SystemProductName": "",
                 "SystemSerialNumber": "",
                 "SystemUUID": "",
             },
-            "SMBIOS": {},
             "UpdateDataHub": True,
             "UpdateNVRAM": True,
             "UpdateSMBIOS": True,
             "UpdateSMBIOSMode": "Create",
+            "UseRawUuidEncoding": False,
         },
         "UEFI": {
-            "APFS": {"EnableJumpdrive": True, "GlobalConnect": True, "HideVerbose": True},
-            "AppleInput": {
-                "AutoBoot": False, "KeyInitialisation": "Auto",
-                "KeySupport": False, "PointerDither": False,
-                "PointerSupport": False, "PointerSupportMode": "",
+            "APFS": {
+                "EnableJumpstart": True, "GlobalConnect": False,
+                "HideVerbose": True, "JumpstartHotPlug": False,
+                "MinDate": 0, "MinVersion": 0,
             },
-            "Audio": {"AudioCodec": 0, "AudioDevice": "", "AudioSupport": False},
+            "AppleInput": {
+                "AppleEvent": "Builtin", "CustomDelays": False,
+                "GraphicsInputMirroring": True, "KeyInitialDelay": 50,
+                "KeySubsequentDelay": 5, "PointerDwellClickTimeout": 0,
+                "PointerDwellDoubleClickTimeout": 0, "PointerDwellRadius": 0,
+                "PointerPollMask": -1, "PointerPollMax": 80,
+                "PointerPollMin": 10, "PointerSpeedDiv": 1, "PointerSpeedMul": 1,
+            },
+            "Audio": {
+                "AudioCodec": 0, "AudioDevice": "", "AudioOutMask": 1,
+                "AudioSupport": False, "DisconnectHda": False,
+                "MaximumGain": -15, "MinimumAssistGain": -30,
+                "MinimumAudibleGain": -55, "PlayChime": "Disabled",
+                "ResetTrafficClass": False, "SetupDelay": 0,
+            },
             "ConnectDrivers": True,
             "Drivers": [],
-            "Input": {"KeyboardFilter": 0, "KeyForgetThreshold": 5, "KeySupport": False, "KeySupportMode": "Auto", "PointerSupport": False},
-            "Output": {"DirectGopRendering": False, "ForceResolution": False, "ProvideConsoleGop": True, "ReconnectOnResChange": False},
-            "ProtocolOverrides": {},
-            "Quirks": {
-                "AppleSmcIo": True, "DisableSecurityPolicy": False,
-                "EnableVectorAcceleration": False, "EnableVmx": False,
-                "ExitBootServicesDelay": 0, "ForceBooterSignature": False,
-                "ForceOcWriteFlash": True, "IgnoreInvalidFlexRatio": False,
-                "ReleaseUsbOwnership": True, "RequestBootVarRouting": True,
-                "ResizeGpuBars": -1, "UnblockFsConnect": False,
+            "Input": {
+                "KeyFiltering": False, "KeyForgetThreshold": 5,
+                "KeySupport": False, "KeySupportMode": "Auto",
+                "KeySwap": False, "PointerSupport": False,
+                "PointerSupportMode": "ASUS", "TimerResolution": 50000,
             },
+            "Output": {
+                "ClearScreenOnModeSwitch": False, "ConsoleFont": "",
+                "ConsoleMode": "", "DirectGopRendering": False,
+                "ForceResolution": False, "GopBurstMode": False,
+                "GopPassThrough": "Disabled", "IgnoreTextInGraphics": False,
+                "InitialMode": "Auto", "ProvideConsoleGop": True,
+                "ReconnectGraphicsOnConnect": False, "ReconnectOnResChange": False,
+                "ReplaceTabWithSpace": False, "Resolution": "Max",
+                "SanitiseClearScreen": False, "TextRenderer": "BuiltinGraphics",
+                "UIScale": 0, "UgaPassThrough": False,
+            },
+            "ProtocolOverrides": {
+                "AppleAudio": False, "AppleBootPolicy": False,
+                "AppleDebugLog": False, "AppleEg2Info": False,
+                "AppleFramebufferInfo": False, "AppleImageConversion": False,
+                "AppleImg4Verification": False, "AppleKeyMap": False,
+                "AppleRtcRam": False, "AppleSecureBoot": False,
+                "AppleSmcIo": False, "AppleUserInterfaceTheme": False,
+                "DataHub": False, "DeviceProperties": False,
+                "FirmwareVolume": True, "HashServices": False,
+                "OSInfo": False, "PciIo": False, "UnicodeCollation": False,
+            },
+            "Quirks": {
+                "ActivateHpetSupport": False, "DisableSecurityPolicy": False,
+                "EnableVectorAcceleration": True, "EnableVmx": False,
+                "ExitBootServicesDelay": 0, "ForceOcWriteFlash": False,
+                "ForgeUefiSupport": False, "IgnoreInvalidFlexRatio": False,
+                "ReleaseUsbOwnership": False, "ReloadOptionRoms": False,
+                "RequestBootVarRouting": True, "ResizeGpuBars": -1,
+                "ResizeUsePciRbIo": False, "ShimRetainProtocol": False,
+                "TscSyncTimeout": 0, "UnblockFsConnect": False,
+            },
+            "ReservedMemory": [],
+            "Unload": [],
         },
     }

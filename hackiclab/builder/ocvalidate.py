@@ -8,6 +8,7 @@ ocvalidate проверяет config.plist на соответствие схе�
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -21,10 +22,27 @@ class OCVResult:
     warnings: list = field(default_factory=list)
     errors: list = field(default_factory=list)
     full_output: str = ""
+    # структурированные категории
+    missing_keys: list = field(default_factory=list)      # "Missing key …" (схема неполная)
+    schema_errors: list = field(default_factory=list)     # ошибки OCS: типа/структуры/значений
+    version_note: str = ""                                # "ocvalidate X.Y.Z (compatible…)" доп.
+    tool_version: str = ""                                # версия ocvalidate, если распознана
+    tool_missing: bool = False                            # ocvalidate не найден
 
     @property
     def issues(self) -> list:
         return self.warnings + self.errors
+
+    def categorized(self) -> list:
+        """Возвращает список (категория, строка) для детального свода."""
+        out = []
+        for m in self.missing_keys:
+            out.append(("missing", m))
+        for e in self.schema_errors:
+            out.append(("error", e))
+        for w in self.warnings:
+            out.append(("warning", w))
+        return out
 
 
 def find_ocvalidate(in_open_core_root: Optional[Path] = None) -> Optional[Path]:
@@ -53,15 +71,19 @@ def find_ocvalidate(in_open_core_root: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+_VERSION_RE = re.compile(r"ocvalidate\s+([0-9]+\.[0-9]+\.[0-9]+)")
+
+
 def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVResult:
-    """Запускает ocvalidate config.plist и разбирает вывод."""
+    """Запускает ocvalidate config.plist и разбирает вывод по категориям."""
     if not config_path.exists():
         return OCVResult(ok=False, errors=[f"config.plist не найден: {config_path}"])
     # Если утилита не передана/не найдена — не блокируем, помечаем статистикой
     tool = ocvalidate or find_ocvalidate()
     if not tool:
         return OCVResult(ok=True, full_output="<ocvalidate не найден — пропущено>",
-                         warnings=["ocvalidate не найден — валидация пропущена"])
+                         warnings=["ocvalidate не найден — валидация пропущена"],
+                         tool_missing=True)
     try:
         r = subprocess.run([str(tool), str(config_path)],
                            capture_output=True, text=True, timeout=60)
@@ -71,28 +93,45 @@ def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVR
     out = out.strip()
 
     lines = out.splitlines()
-    warnings = []
-    errors = []
+    warnings: list = []
+    errors: list = []
+    missing: list = []
+    schema: list = []
+    version_note = ""
+    mver = _VERSION_RE.search(out)
+    tool_version = mver.group(1) if mver else ""
+
     for ln in lines:
         s = ln.strip()
         if not s:
             continue
-        # вынос специальных retcode-фраз
         if "NOTE:" in s or "compatible with OpenCore" in s:
+            version_note = s
             continue
         low = s.lower()
-        if "warning:" in low:
+        if low.startswith("missing key") or low.startswith("osbs:"):
+            missing.append(s)
+        elif low.startswith("ocvalidate") and "compatible" in low:
+            version_note = s
+        elif s.startswith("OCS:"):
+            schema.append(s)
+            errors.append(s)
+        elif "warning:" in low:
             warnings.append(s)
         elif "error:" in low:
-            errors.append(s)
-        elif s.startswith("OCS:"):
-            errors.append(s)
-        elif low.startswith("missing key"):
+            schema.append(s)
             errors.append(s)
 
+    # ocvalidate: код возврата 0 == схема корректна; ошибки «Missing key» считаем
+    # несовершенством схемы, а не блокирующими дефектами конфига.
+    blocking = [e for e in errors if e not in missing]
     return OCVResult(
-        ok=(r.returncode == 0 and not errors),
+        ok=(r.returncode == 0 and not blocking),
         warnings=warnings,
         errors=errors,
         full_output=out,
+        missing_keys=missing,
+        schema_errors=[e for e in schema if e not in missing],
+        version_note=version_note,
+        tool_version=tool_version,
     )

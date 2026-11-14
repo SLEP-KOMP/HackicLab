@@ -108,11 +108,88 @@ SMBIOS_MAP: dict[tuple, str] = {
 }
 
 
-def smbios_model_for(profile: HardwareProfile) -> str:
+# Порядок версий macOS (от старых к новым) для сравнения совместимости SMBIOS.
+_MACOS_ORDER = [
+    "High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
+    "Ventura", "Sonoma", "Sequoia", "Tahoe",
+]
+
+
+def _macos_idx(target: str) -> int:
+    t = (target or "").lower()
+    for i, name in enumerate(_MACOS_ORDER):
+        if name.lower() in t:
+            return i
+    # числовые версии
+    if "10.13" in t: return 0
+    if "10.14" in t: return 1
+    if "10.15" in t: return 2
+    if "11" in t: return 3
+    if "12" in t: return 4
+    if "13" in t: return 5
+    if "14" in t: return 6
+    if "15" in t: return 7
+    if "26" in t: return 8
+    return len(_MACOS_ORDER) - 1  # неизвестно/авто — последняя (актуальная)
+
+
+# SMBIOS-модели для AMD desktop с максимальной версией macOS, на которой
+# они работают «чисто» (без хаков). MacPro7,1 поддерживается во всех версиях,
+# поэтому для актуальных версий это выбор по умолчанию.
+_AMD_DESKTOP_SMBIOS = [
+    ("iMacPro1,1", 7),      # Sonoma — крайняя «из коробки» без патча
+    ("MacPro7,1", 8),       # Sequoia/Tahoe — топовый выбор для AMD
+]
+# Intel desktop: привязаны к поколению, но если выбранная macOS новее, чем
+# поддерживает ближайшая модель — берём более новую модель того же форм-фактора.
+_INTEL_DESKTOP_BY_GEN = {
+    2: "iMac13,1", 3: "iMac14,2", 4: "iMac15,1",
+    5: "iMac17,1", 6: "iMac17,1", 7: "iMac18,3",
+    8: "iMac19,1", 9: "iMac19,1", 10: "iMac20,1",
+    11: "MacPro7,1", 12: "MacPro7,1", 13: "MacPro7,1",
+    14: "MacPro7,1", 15: "MacPro7,1",
+}
+# Для Intel: какой максимальной версии «чисто» хватает каждой модели.
+_INTEL_DESKTOP_MAX = {
+    "iMac13,1": 4, "iMac14,2": 4, "iMac15,1": 4,
+    "iMac17,1": 6, "iMac18,3": 6, "iMac19,1": 7,
+    "iMac20,1": 7, "MacPro7,1": 8,
+}
+
+
+def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
+    """Выбирает SMBIOS-модель по железу и (опционально) по версии macOS.
+
+    Версия влияет на доступную модель: если выбранная macOS слишком новая для
+    базовой модели поколения, подбирается более новая модель того же
+    форм-фактора (ноутбук/десктоп), поддерживающая нужную версию.
+    """
+    need = _macos_idx(macos_target)
+
     if profile.cpu.vendor == "amd":
-        return "MacPro7,1" if profile.platform == "desktop" else "MacBookPro15,2"
-    key = (profile.cpu.generation, profile.platform)
-    return SMBIOS_MAP.get(key, "MacBookPro15,2")
+        if profile.platform == "laptop":
+            return "MacBookPro15,2"
+        # desktop: выбираем модель с max-версией >= целевой, иначе последнюю
+        best = _AMD_DESKTOP_SMBIOS[0][0]
+        for model, maxv in _AMD_DESKTOP_SMBIOS:
+            if maxv >= need:
+                best = model
+                break
+            best = model
+        return best
+
+    # Intel
+    base = _INTEL_DESKTOP_BY_GEN.get(profile.cpu.generation)
+    if profile.platform == "laptop":
+        return SMBIOS_MAP.get((profile.cpu.generation, "laptop"), "MacBookPro15,2")
+    if base is None:
+        return "MacPro7,1"
+    # если целевая версия новее, чем держит базовая модель — двигаемся вверх
+    cur = base
+    for model, maxv in sorted(_INTEL_DESKTOP_MAX.items(), key=lambda x: x[1]):
+        if _INTEL_DESKTOP_MAX.get(cur, 0) < need and maxv >= need:
+            cur = model
+    return cur
 
 
 def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> list[KextEntry]:
@@ -169,16 +246,25 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     # WiFi
     w = (profile.net.wifi_chipset or "").lower()
+    native_apple = profile.net.bt_native_apple
     if w == "intel":
         add("itlwm" if wifi_kext_mode == "itlwm" else "AirportItlwm")
     elif w == "broadcom":
-        add("AirportBrcmFixup")
+        if native_apple:
+            # BCM94360/BCM943602 (нативный Apple AirPort): работает из коробки,
+            # никаких патчей не нужно
+            pass
+        else:
+            add("AirportBrcmFixup")
     elif w == "atheros":
         add("ATH9KFixup")
 
     # Bluetooth
     if profile.net.has_bt:
-        if w == "intel":
+        if native_apple:
+            # нативный Apple BT (VID 05AC) — драйвера не требуются
+            pass
+        elif w == "intel":
             add("IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
         elif w == "broadcom":
             add("BlueToolFixup", "BrcmPatchRAM3", "BrcmFirmwareData")

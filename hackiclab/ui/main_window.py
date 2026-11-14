@@ -135,6 +135,36 @@ class USBWriteWorker(QThread):
         self.signal.emit(msg)
 
 
+class ValidateWorker(QThread):
+    """Прогон ocvalidate в фоне."""
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, config_path: Path):
+        super().__init__()
+        self.config_path = config_path
+
+    def run(self):
+        try:
+            from ..builder.ocvalidate import run_ocvalidate, find_ocvalidate
+            tool = find_ocvalidate()
+            res = run_ocvalidate(self.config_path, ocvalidate=tool)
+            res_dict = {
+                "ok": res.ok,
+                "warnings": res.warnings,
+                "errors": res.errors,
+                "missing_keys": res.missing_keys,
+                "schema_errors": res.schema_errors,
+                "version_note": res.version_note,
+                "tool_version": res.tool_version,
+                "tool_missing": res.tool_missing,
+                "full_output": res.full_output,
+            }
+            self.done.emit(res_dict)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 class AnalyzeWorker(QThread):
     """Анализ файлов в фоне."""
     done = Signal(object)
@@ -211,6 +241,7 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("nav.scan", "🖥"),
             ("nav.build", "⚙"),
+            ("nav.validate", "✔"),
             ("nav.usb", "💾"),
             ("nav.analyze", "🔍"),
             ("nav.settings", "⚙"),
@@ -244,12 +275,14 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.page_scan = self._build_scan()
         self.page_build = self._build_build()
+        self.page_validate = self._build_validate()
         self.page_usb = self._build_usb()
         self.page_analyze = self._build_analyze()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
         self.stack.addWidget(self.page_scan)
         self.stack.addWidget(self.page_build)
+        self.stack.addWidget(self.page_validate)
         self.stack.addWidget(self.page_usb)
         self.stack.addWidget(self.page_analyze)
         self.stack.addWidget(self.page_settings)
@@ -365,6 +398,171 @@ class MainWindow(QMainWindow):
         self.build_log = QPlainTextEdit(); self.build_log.setReadOnly(True); self.build_log.setMinimumHeight(200)
         v.addWidget(self.build_log, 1)
         return page
+
+    def _build_validate(self):
+        """Вкладка «Валидация»: детальный свод ocvalidate + состояние Wi-Fi/BT."""
+        page = QWidget()
+        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
+        v.addWidget(_h1(page, tr.t("validate.title")))
+        sub = _muted(page, tr.t("validate.subtitle")); sub.setWordWrap(True)
+        v.addWidget(sub)
+
+        # --- источник для валидации ---
+        src = self._card(page)
+        sv = QVBoxLayout(src)
+        last_row = QHBoxLayout()
+        last_row.addWidget(_h2(page, tr.t("validate.last_build")))
+        self.val_last_label = QLabel(tr.t("validate.none")); self.val_last_label.setObjectName("muted")
+        self.val_last_label.setWordWrap(True)
+        last_row.addWidget(self.val_last_label, 1)
+        sv.addLayout(last_row)
+        # ручной выбор config.plist
+        pick_row = QHBoxLayout()
+        self.val_config_path = Path("")
+        self.val_path_label = QLabel(tr.t("validate.none")); self.val_path_label.setObjectName("muted")
+        self.val_path_label.setWordWrap(True)
+        pick_row.addWidget(self.val_path_label, 1)
+        pick_btn = QPushButton(tr.t("validate.browse")); pick_btn.setObjectName("ghost")
+        pick_btn.clicked.connect(self._pick_config)
+        pick_row.addWidget(pick_btn)
+        sv.addLayout(pick_row)
+        b = QPushButton(tr.t("validate.run"))
+        b.clicked.connect(self._do_validate)
+        sv.addWidget(b, alignment=Qt.AlignRight)
+        v.addWidget(src)
+
+        # --- жёсткое предупреждение о железе (Wi-Fi/BT) ---
+        self.val_hw_card = self._card(page)
+        self.val_hw_card.setVisible(False)
+        hv = QVBoxLayout(self.val_hw_card)
+        self.val_hw_box = QVBoxLayout()
+        hv.addLayout(self.val_hw_box)
+        v.addWidget(self.val_hw_card)
+
+        # --- беджи результата ---
+        badge_row = QHBoxLayout()
+        self.val_status = _h2(page, "—")
+        badge_row.addWidget(self.val_status)
+        badge_row.addStretch()
+        v.addLayout(badge_row)
+        self.val_meta = _muted(page, ""); self.val_meta.setWordWrap(True)
+        v.addWidget(self.val_meta)
+
+        self.val_progress = QProgressBar(); self.val_progress.setMaximum(0); self.val_progress.setVisible(False)
+        v.addWidget(self.val_progress)
+
+        # --- детальный свод ocvalidate по категориям ---
+        splitter = QSplitter(Qt.Vertical)
+        self.val_missing = QPlainTextEdit(); self.val_missing.setReadOnly(True)
+        self.val_missing.setPlaceholderText(tr.t("validate.missing_title"))
+        self.val_schema = QPlainTextEdit(); self.val_schema.setReadOnly(True)
+        self.val_schema.setPlaceholderText(tr.t("validate.schema_title"))
+        self.val_warn = QPlainTextEdit(); self.val_warn.setReadOnly(True)
+        self.val_warn.setPlaceholderText(tr.t("validate.warnings_title"))
+        splitter.addWidget(self._labelled(self, tr.t("validate.missing_title"), self.val_missing))
+        splitter.addWidget(self._labelled(self, tr.t("validate.schema_title"), self.val_schema))
+        splitter.addWidget(self._labelled(self, tr.t("validate.warnings_title"), self.val_warn))
+        splitter.setSizes([200, 160, 120])
+        v.addWidget(splitter, 1)
+        return page
+
+    def _labelled(self, parent, title, widget):
+        w = QWidget(parent)
+        ly = QVBoxLayout(w); ly.setContentsMargins(0, 0, 0, 0); ly.setSpacing(3)
+        ly.addWidget(_h2(parent, title))
+        ly.addWidget(widget, 1)
+        return w
+
+    def _pick_config(self):
+        d, _ = QFileDialog.getOpenFileName(self, tr.t("validate.pick_config"), "",
+                                           "config.plist (*.plist);;All files (*)")
+        if d:
+            self.val_config_path = Path(d)
+            self.val_path_label.setText(d)
+
+    def _do_validate(self):
+        """Запускает ocvalidate против config.plist."""
+        cfg = Path("")
+        if self.val_config_path and self.val_config_path.exists():
+            cfg = self.val_config_path
+        elif self.profile and getattr(self, "last_build_dir", None):
+            cand = self.last_build_dir / "EFI" / "OC" / "config.plist"
+            if cand.exists():
+                cfg = cand
+        if not cfg.exists():
+            if self.profile is None:
+                QMessageBox.information(self, tr.t("validate.title"), tr.t("validate.scan_first"))
+            else:
+                self.val_status.setText(tr.t("validate.no_result"))
+            return
+        self.val_config_path = cfg
+        self.val_progress.setVisible(True)
+        self.val_status.setText("…")
+        self._worker_val = ValidateWorker(cfg)
+        self._worker_val.done.connect(self._validate_done)
+        self._worker_val.failed.connect(self._validate_failed)
+        self._worker_val.start()
+
+    def _validate_done(self, res):
+        self.val_progress.setVisible(False)
+        if res["tool_missing"]:
+            self.val_status.setText(tr.t("validate.no_ocvalidate"))
+            return
+        missing = res.get("missing_keys", [])
+        schema = res.get("schema_errors", [])
+        warns = res.get("warnings", [])
+        self.val_missing.setPlainText("\n".join(missing) if missing else tr.t("validate.empty_results"))
+        self.val_schema.setPlainText("\n".join(schema) if schema else tr.t("validate.empty_results"))
+        self.val_warn.setPlainText("\n".join(warns) if warns else tr.t("validate.empty_results"))
+        tv = res.get("tool_version", "")
+        self.val_meta.setText(f"{tr.t('validate.tool_version')}: {tv or '—'}")
+        if res.get("ok"):
+            self.val_status.setText("✔ " + tr.t("validate.valid"))
+            self.val_status.setStyleSheet("color:#a6e3a1;")
+        elif not schema and missing:
+            self.val_status.setText("⚠ " + tr.t("validate.badge_missing_only"))
+            self.val_status.setStyleSheet("color:#f9e2af;")
+        else:
+            self.val_status.setText("✖ " + tr.t("validate.invalid"))
+            self.val_status.setStyleSheet("color:#f38ba8;")
+        self.statusBar().showMessage(f"ocvalidate: {len(schema)} err / {len(warns)} warn", 6000)
+
+    def _validate_failed(self, err):
+        self.val_progress.setVisible(False)
+        self.val_status.setText(tr.t("validate.invalid"))
+        QMessageBox.critical(self, tr.t("validate.title"), str(err))
+
+    def _refresh_validate_hw(self):
+        """Показывает на вкладке валидации состояние Wi-Fi/Bluetooth железа."""
+        if not self.profile:
+            self.val_hw_card.setVisible(False)
+            return
+        p = self.profile
+        # чистим
+        while self.val_hw_box.count():
+            it = self.val_hw_box.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        w = (p.net.wifi_chipset or "")
+        if w == "mediatek":
+            self.val_hw_card.setVisible(True)
+            t = _h2(self.val_hw_card, "✖ " + tr.t("validate.wifi_mediatek_title"))
+            t.setStyleSheet("color:#f38ba8;")
+            self.val_hw_box.addWidget(t)
+            d = _val(self.val_hw_card, tr.t("validate.wifi_mediatek_desc")); d.setWordWrap(True)
+            self.val_hw_box.addWidget(d)
+            b = _val(self.val_hw_card, "⚠ " + tr.t("validate.bt_unsupported"))
+            b.setStyleSheet("color:#f9e2af;")
+            self.val_hw_box.addWidget(b)
+        elif w == "" :
+            self.val_hw_card.setVisible(False)
+        else:
+            self.val_hw_card.setVisible(True)
+            t = _h2(self.val_hw_card, "✔ " + tr.t("validate.wifi_ok"))
+            t.setStyleSheet("color:#a6e3a1;")
+            self.val_hw_box.addWidget(t)
+            if w == "broadcom" and p.net.has_bt:
+                self.val_hw_box.addWidget(_val(self.val_hw_card, tr.t("validate.bt_broadcom")))
 
     def _build_usb(self):
         """Мастер записи EFI на флешку (аналог Build Mode в hackmate, современнее)."""
@@ -867,12 +1065,13 @@ class MainWindow(QMainWindow):
 
     def _retranslate(self):
         self.nav.clear()
-        icons = ["🖥", "⚙", "💾", "🔍", "⚙", "ℹ"]
+        icons = ["🖥", "⚙", "✔", "💾", "🔍", "⚙", "ℹ"]
         for i, key in enumerate(self._nav_keys):
             self.nav.addItem(QListWidgetItem(f"{icons[i]}  {tr.t(key)}"))
         self.nav.setCurrentRow(self.stack.currentIndex())
         # обновим заголовки страниц
         self._refresh_dynamic()
+        self._refresh_validate_hw()
 
     def _refresh_dynamic(self):
         if self.profile is None:
@@ -894,6 +1093,7 @@ class MainWindow(QMainWindow):
     def _scan_done(self, profile):
         self.scan_progress.setVisible(False)
         self.profile = profile
+        self._refresh_validate_hw()
         while self.hw_grid.count():
             it = self.hw_grid.takeAt(0)
             if it.widget():
@@ -982,6 +1182,9 @@ class MainWindow(QMainWindow):
 
     def _build_done(self, res):
         self.build_progress.setVisible(False)
+        self.last_build_dir = Path(res.root) if res and res.root else None
+        if self.last_build_dir:
+            self.val_last_label.setText(str(self.last_build_dir))
         log = f"target: {res.root}\n" + "\n".join(res.log)
         if res.stats:
             log += f"\n\n--- Итог ---"

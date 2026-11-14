@@ -271,9 +271,13 @@ class WindowsScanner:
         elif "realtek" in el: p.net.eth_chipset = "realtek"
         elif "intel" in el: p.net.eth_chipset = "intel"
 
+        # WiFi: берём ТОЛЬКО активный физический адаптер (Status = Up).
+        # Win32_NetworkAdapter перечисляет и отключённые, поэтому фильтр по статусу
+        # критичен — иначе можно взять неактивный MediaTek вместо активного Broadcom.
         wifi = ps.run("""
             $nic = Get-CimInstance Win32_NetworkAdapter | Where-Object {
-                $_.Name -match 'Wi-Fi|Wireless|WiFi|802.11'
+                $_.NetEnabled -eq $true -and $_.PhysicalAdapter -eq $true -and
+                $_.Name -match 'Wi-Fi|Wireless|WiFi|802.11|WLAN|ac'
             } | Select-Object -First 1
             $nic.Name
         """)
@@ -286,17 +290,33 @@ class WindowsScanner:
         elif "realtek" in wl: p.net.wifi_chipset = "realtek"
         elif "mediatek" in wl: p.net.wifi_chipset = "mediatek"
         else:
-            # fallback: intel wifi по известным DEV-вентам
+            # fallback: intel wifi по известным DEV-вентам (только активные)
             ids = "0070|0074|4070|2723|2725|0094"
             fallback = ps.run(
-                f"(Get-PnpDevice -PresentOnly | Where-Object {{ $_.InstanceId -match 'PCI\\\\VEN_8086&DEV_({ids})' }} | Select-Object -First 1).InstanceId"
+                f"(Get-PnpDevice -PresentOnly -Status OK | Where-Object {{ $_.InstanceId -match 'PCI\\\\VEN_8086&DEV_({ids})' }} | Select-Object -First 1).InstanceId"
             )
             if fallback.strip():
                 p.net.wifi_chipset = "intel"
                 p.net.wifi_name = p.net.wifi_name or "Intel WiFi (без драйвера)"
 
-        # Bluetooth
-        bt = ps.run("(Get-PnpDevice | Where-Object { $_.Class -eq 'Bluetooth' } | Measure-Object).Count")
+        # Bluetooth: активный физический адаптер + детект нативного Apple BT
+        bt_native = ps.run("""
+            $c = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+                $_.Class -eq 'Bluetooth' -and $_.Status -eq 'OK' -and
+                $_.InstanceId -match 'VID_05AC'
+            } | Select-Object -First 1
+            if ($c) { 'yes' } else { 'no' }
+        """)
+        try:
+            p.net.bt_native_apple = bt_native.strip().lower() == "yes"
+        except Exception:
+            p.net.bt_native_apple = False
+        bt = ps.run("""
+            $c = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+                $_.Class -eq 'Bluetooth' -and $_.Status -eq 'OK'
+            } | Measure-Object
+            $c.Count
+        """)
         try:
             p.net.has_bt = int(bt.strip() or 0) > 0
         except Exception:

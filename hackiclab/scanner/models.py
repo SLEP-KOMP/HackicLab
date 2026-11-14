@@ -93,6 +93,9 @@ class NetInfo:
     # Bluetooth
     bt_chipset: str = ""
     has_bt: bool = False
+    # True если найден нативный Apple Bluetooth-модуль (VID 05AC) — как у карт
+    # BCM94360CD/BCM943602CS: ему не нужны BrcmPatchRAM/BrcmFirmwareData.
+    bt_native_apple: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -106,6 +109,7 @@ class NetInfo:
             "wifi_pci_function": self.wifi_pci_function,
             "bt_chipset": self.bt_chipset,
             "has_bt": self.has_bt,
+            "bt_native_apple": self.bt_native_apple,
         }
 
 
