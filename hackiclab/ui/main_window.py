@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QStackedWidget, QListWidget, QListWidgetItem,
     QFileDialog, QMessageBox, QProgressBar, QTextEdit, QGroupBox,
     QCheckBox, QComboBox, QPlainTextEdit, QSplitter, QFrame, QLineEdit,
-    QSpinBox,
+    QSpinBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QFont, QIcon, QColor
@@ -256,6 +256,19 @@ class OCLogWorker(QThread):
             self.failed.emit(str(e))
 
 
+class UsbListWorker(QThread):
+    """Список USB-флешек в фоне: PowerShell не должен блокировать интерфейс."""
+    done = Signal(list)
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            from ..builder.usb_writer import get_usb_devices
+            self.done.emit(get_usb_devices())
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 def _macos_newer(a: str, b: str) -> bool:
     """Версия a новее b? (по имени macOS). Для подсказки о несовместимости."""
     order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
@@ -276,7 +289,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("HackicLab")
-        self.resize(1180, 760)
+        self.setMinimumSize(880, 560)
+        self._fit_to_screen()
         self.profile: HardwareProfile | None = None
         self._theme = "dark"
         self._build()
@@ -289,6 +303,19 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app:
             app.setStyleSheet(qss)
+
+    def _fit_to_screen(self):
+        """Подгоняет стартовое окно под экран: важно для ноутбуков и масштаба Windows."""
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1180, 760)
+            return
+        avail = screen.availableGeometry()
+        w = max(880, min(1180, avail.width() - 60))
+        h = max(560, min(760, avail.height() - 60))
+        self.resize(w, h)
+        self.move(avail.x() + (avail.width() - w) // 2,
+                  avail.y() + (avail.height() - h) // 2)
 
     # ---- layout ----
     def _build(self):
@@ -355,19 +382,26 @@ class MainWindow(QMainWindow):
         self.page_analyze = self._build_analyze()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
-        self.stack.addWidget(self.page_scan)
-        self.stack.addWidget(self.page_build)
-        self.stack.addWidget(self.page_validate)
-        self.stack.addWidget(self.page_usb)
-        self.stack.addWidget(self.page_ports)
-        self.stack.addWidget(self.page_analyze)
-        self.stack.addWidget(self.page_settings)
-        self.stack.addWidget(self.page_about)
+        for page in (self.page_scan, self.page_build, self.page_validate,
+                     self.page_usb, self.page_ports, self.page_analyze,
+                     self.page_settings, self.page_about):
+            self.stack.addWidget(self._scroll_page(page))
         root.addWidget(self.stack, 1)
 
     # ---- pages ----
     def _card(self, parent):
         w = QFrame(parent); w.setObjectName("card"); return w
+
+    def _scroll_page(self, page: QWidget) -> QScrollArea:
+        """Оборачивает страницу в прокрутку: контент не обрезается при малом окне."""
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        area.viewport().setAutoFillBackground(False)
+        area.setWidget(page)
+        return area
 
     def _build_scan(self):
         page = QWidget()
@@ -813,14 +847,15 @@ class MainWindow(QMainWindow):
         uv = QVBoxLayout(usb_card)
         row1 = QHBoxLayout()
         row1.addWidget(_h2(page, tr.t("usb.choose")))
-        refresh_btn = QPushButton(tr.t("usb.refresh")); refresh_btn.setObjectName("ghost")
-        refresh_btn.clicked.connect(self._usb_refresh)
-        row1.addWidget(refresh_btn)
+        self.usb_refresh_btn = QPushButton(tr.t("usb.refresh")); self.usb_refresh_btn.setObjectName("ghost")
+        self.usb_refresh_btn.clicked.connect(self._usb_refresh)
+        row1.addWidget(self.usb_refresh_btn)
         row1.addStretch()
         uv.addLayout(row1)
 
         self.usb_combo = QComboBox()
         self.usb_combo.setMinimumHeight(40)
+        self.usb_combo.currentIndexChanged.connect(self._usb_select)
         uv.addWidget(self.usb_combo)
         self.usb_empty = _muted(page, tr.t("usb.no_devices")); self.usb_empty.setWordWrap(True)
         uv.addWidget(self.usb_empty)
@@ -939,28 +974,47 @@ class MainWindow(QMainWindow):
         return page
 
     def _usb_refresh(self):
-        """Обновляет список USB-флешек."""
-        from ..builder.usb_writer import get_usb_devices
+        """Обновляет список USB-флешек в фоне (PowerShell не блокирует окно)."""
+        if getattr(self, "usb_list_worker", None) and self.usb_list_worker.isRunning():
+            return
+        self.usb_refresh_btn.setEnabled(False)
+        self.usb_empty.setText(tr.t("usb.refreshing"))
+        self.usb_empty.setVisible(True)
+        self.usb_list_worker = UsbListWorker(self)
+        self.usb_list_worker.done.connect(self._usb_fill)
+        self.usb_list_worker.failed.connect(self._usb_failed)
+        self.usb_list_worker.finished.connect(
+            lambda: self.usb_refresh_btn.setEnabled(True))
+        self.usb_list_worker.start()
+
+    def _usb_fill(self, devices: list):
+        self.usb_devices = devices or []
+        self.usb_combo.blockSignals(True)
         self.usb_combo.clear()
-        try:
-            self.usb_devices = get_usb_devices()
-        except Exception:
-            self.usb_devices = []
         if not self.usb_devices:
             self.usb_empty.setText(tr.t("usb.no_devices"))
             self.usb_empty.setVisible(True)
             self.usb_selected_desc.setText("")
             self.usb_combo.setEnabled(False)
+            self.usb_combo.blockSignals(False)
             return
         self.usb_empty.setVisible(False)
         self.usb_combo.setEnabled(True)
         for d in self.usb_devices:
             label = f"{d.device}   {d.size}   {d.label or ''}".strip()
             self.usb_combo.addItem(label, d.device)
-        self.usb_combo.currentIndexChanged.connect(self._usb_select)
+        self.usb_combo.blockSignals(False)
         self._usb_select()
         self.statusBar().showMessage(
             f"{tr.t('usb.detected')}: {len(self.usb_devices)}", 3000)
+
+    def _usb_failed(self, err: str):
+        self.usb_devices = []
+        self.usb_combo.clear()
+        self.usb_combo.setEnabled(False)
+        self.usb_empty.setText(f"{tr.t('usb.no_devices')}: {err}")
+        self.usb_empty.setVisible(True)
+        self.usb_selected_desc.setText("")
 
     def _history_refresh(self):
         """Показывает последние сборки из истории."""
@@ -1059,6 +1113,22 @@ class MainWindow(QMainWindow):
         device = self.usb_combo.itemData(idx)
         self._usb_confirm(device)
 
+    def _confirm_phrase(self, device: str) -> str:
+        """Фраза подтверждения по букве диска: «WRITE D:»."""
+        dev = (device or "").strip().upper()
+        if len(dev) == 2 and dev.endswith(":"):
+            return f"WRITE {dev}"
+        try:
+            from ..builder.usb_writer import _find_free_drive_letter
+            letter = (_find_free_drive_letter() or "").strip().upper()
+            if letter:
+                if not letter.endswith(":"):
+                    letter += ":"
+                return f"WRITE {letter}"
+        except Exception:
+            pass
+        return f"WRITE {dev}"
+
     def _usb_confirm(self, device: str):
         """Экран/диалог подтверждения: ввод фразы WRITE <device>."""
         from PySide6.QtWidgets import QDialog, QLineEdit, QDialogButtonBox, QPushButton, QLabel
@@ -1087,7 +1157,7 @@ class MainWindow(QMainWindow):
         else:
             dlgv.addWidget(_muted(dlg, tr.t("usb.warn_formatted")))
 
-        phrase = f"WRITE {device}"
+        phrase = self._confirm_phrase(device)
         dlgv.addWidget(_val(dlg, f"{tr.t('usb.confirm_phrase')}:  {phrase}"))
         inp = QLineEdit(dlg)
         inp.setPlaceholderText(phrase)
@@ -1104,7 +1174,7 @@ class MainWindow(QMainWindow):
         dlgv.addWidget(btns)
 
         def _try_accept():
-            if inp.text().strip() == phrase:
+            if inp.text().strip().upper() == phrase.upper():
                 dlg.accept()
             else:
                 self._usb_mismatch.setText(f"{tr.t('usb.confirm_mismatch')} {phrase}")
@@ -1826,6 +1896,8 @@ class MainWindow(QMainWindow):
 
 
 def run_app() -> int:
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(DARK_QSS)
