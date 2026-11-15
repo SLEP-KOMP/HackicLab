@@ -23,63 +23,89 @@ from ..scanner.models import HardwareProfile
 IASL_REPO = "open-acpica/acpica"
 
 
-def _iasl_asset_name(tag: str) -> str:
-    """Имя zip c iasl для Windows по тегу (вида 20260930)."""
-    nums = "".join(ch for ch in tag if ch.isdigit())
-    return f"iasl-win-{nums}.zip"
+def _windows_iasl_zip_urls() -> list[str]:
+    """Прямые ссылки на Windows-архив iasl со страницы релизов acpica.
+
+    В релизах open-acpica/acpica Windows-сборки лежат как user-attachments,
+    а не как release assets, поэтому ищем их в HTML страницы релизов.
+    """
+    from ..builder.fetcher import download_bytes
+    try:
+        html = download_bytes(
+            f"https://github.com/{IASL_REPO}/releases",
+            headers={"User-Agent": "HackicLab/0.1"},
+            timeout=90,
+        ).decode("utf-8", "replace")
+    except Exception:
+        return []
+    urls: list[str] = []
+    for url in re.findall(r'href="(https://github\.com/user-attachments/files/[^"]+)"', html):
+        low = url.lower()
+        if "iasl-win-" in low and low.endswith(".zip") and url not in urls:
+            urls.append(url)
+    return urls
+
+
+# Стабильный фолбэк: Windows-сборка iasl из репозитория corpnewt.
+IASL_LEGACY_ZIP = "https://raw.githubusercontent.com/corpnewt/iasl-legacy/main/iasl-legacy-windows.zip"
+
+
+def _is_pe_binary(path: Path) -> bool:
+    try:
+        return path.exists() and path.read_bytes()[:2] == b"MZ"
+    except Exception:
+        return False
+
+
+def _extract_iasl_from_zip(data: bytes) -> Optional[bytes]:
+    """Достаёт PE-исполняемый iasl из архива (None, если нет)."""
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for member in z.namelist():
+                low = member.lower()
+                if not low.endswith(".exe") or "iasl" not in low:
+                    continue
+                payload = z.read(member)
+                if payload[:2] == b"MZ":
+                    return payload
+    except Exception:
+        return None
+    return None
 
 
 def _download_iasl() -> Optional[Path]:
     """Скачивает iasl для Windows и кладёт в кэш-тулзы.
 
-    В релизах open-acpica/acpica есть ассет `iasl` (не всегда zip) и
-    `acpibin`. Пробует оба; если ассет — zip, распаковывает, иначе использует как бинарник.
+    Windows-сборки acpica публикуются как user-attachments на странице
+    релизов; если их не нашли — берём стабильный legacy-архив corpnewt.
+    Принимаем только PE (MZ): ELF в кэше «молча» ломает компиляцию.
     """
-    from ..builder.fetcher import GitHubFetcher, download_bytes
+    from ..builder.fetcher import download_bytes
     from ..builder.cache_manager import cache_dir
     dest = cache_dir() / "tools"
     dest.mkdir(parents=True, exist_ok=True)
     exe = dest / "iasl.exe"
-    if exe.exists():
+    if _is_pe_binary(exe):
         return exe
-    import zipfile
     try:
-        tag = GitHubFetcher.latest_tag(IASL_REPO)
+        exe.unlink(missing_ok=True)
     except Exception:
-        tag = ""
-    if not tag:
-        return None
-    # Кэшированный бинарник должен быть PE (Windows), не ELF.
-    if exe.exists():
+        pass
+
+    urls = _windows_iasl_zip_urls()
+    urls.append(IASL_LEGACY_ZIP)
+    for url in urls:
         try:
-            head = exe.read_bytes()[:2]
-            if head == b"MZ":
-                return exe
-            exe.unlink()  # битый/не тот формат — удаляем
-        except Exception:
-            pass
-    base = f"https://github.com/{IASL_REPO}/releases/download/{tag}/"
-    candidates = [f"acpibin", "iasl", f"iasl-win-{''.join(c for c in tag if c.isdigit())}.zip"]
-    for name in candidates:
-        try:
-            data = download_bytes(base + name, headers={"User-Agent": "HackicLab/0.1"}, timeout=90)
+            data = download_bytes(url, headers={"User-Agent": "HackicLab/0.1"}, timeout=120)
         except Exception:
             continue
-        zf = dest / name
-        zf.write_bytes(data)
-        # zip?
-        if data[:2] == b"PK":
-            with zipfile.ZipFile(str(zf)) as z:
-                for m in z.namelist():
-                    bn = m.lower()
-                    if bn.endswith("iasl.exe") or bn.endswith("/iasl"):
-                        with z.open(m) as src, open(str(exe), "wb") as out:
-                            out.write(src.read())
-                        break
-        else:
-            # бинарник напрямую
-            exe.write_bytes(data)
-        if exe.exists():
+        if data[:2] != b"PK":
+            continue
+        payload = _extract_iasl_from_zip(data)
+        if payload:
+            exe.write_bytes(payload)
             return exe
     return None
 
@@ -197,18 +223,20 @@ def find_iasl(ensure: bool = False) -> Optional[Path]:
     """
     candidates = Path("iasl.exe"), Path("iasl")
     for c in candidates:
-        if c.exists():
+        if _is_pe_binary(c):
             return c
     import shutil
     p = shutil.which("iasl")
     if p:
         return Path(p)
-    # кэш-тулзы приложения
+    # кэш-тулзы приложения: ELF из старых загрузок не годится
     try:
         from ..builder.cache_manager import cache_dir
         cached = cache_dir() / "tools" / "iasl.exe"
         if cached.exists():
-            return cached
+            if _is_pe_binary(cached):
+                return cached
+            cached.unlink(missing_ok=True)
     except Exception:
         pass
     if ensure:

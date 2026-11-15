@@ -201,6 +201,61 @@ class AuditWorker(QThread):
             self.failed.emit(str(e))
 
 
+class UsbMapWorker(QThread):
+    """Карта USB-портов: DSDT -> usbdump.exe -> plist."""
+    done = Signal(object, str)
+    failed = Signal(str)
+
+    def run(self):
+        import tempfile
+        lines: list[str] = []
+
+        def log(msg, level="info"):
+            lines.append(f"[{level}] {msg}")
+
+        try:
+            from ..builder.usb_map import generate_auto_map
+            tmp = Path(tempfile.mkdtemp(prefix="hackiclab_usbmap_"))
+            plist = generate_auto_map(tmp, log=log)
+            self.done.emit(plist, "\n".join(lines))
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class DiskMapWorker(QThread):
+    """Скан дисков и загрузчиков в фоне (PowerShell, только чтение)."""
+    done = Signal(str, list)
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            from ..scanner.diskmap import (
+                scan_disks, scan_all_bootloaders, check_conflicts, build_disk_tree)
+            disks = scan_disks()
+            bootloaders = scan_all_bootloaders(disks)
+            self.done.emit(build_disk_tree(disks, bootloaders),
+                           check_conflicts(disks, bootloaders))
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class OCLogWorker(QThread):
+    """Разбор лога OpenCore в фоне."""
+    done = Signal(list)
+    failed = Signal(str)
+
+    def __init__(self, path: Path):
+        super().__init__()
+        self.path = Path(path)
+
+    def run(self):
+        try:
+            from ..analyzer.oc_log import parse_log_file
+            self.done.emit(parse_log_file(self.path))
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 def _macos_newer(a: str, b: str) -> bool:
     """Версия a новее b? (по имени macOS). Для подсказки о несовместимости."""
     order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
@@ -260,7 +315,8 @@ class MainWindow(QMainWindow):
             ("nav.scan", "🖥"),
             ("nav.build", "⚙"),
             ("nav.validate", "✔"),
-            ("nav.usb", "💾"),
+            ("usb.nav", "💾"),
+            ("usbmap.nav", "🔌"),
             ("nav.analyze", "🔍"),
             ("nav.settings", "⚙"),
             ("nav.about", "ℹ"),
@@ -295,6 +351,7 @@ class MainWindow(QMainWindow):
         self.page_build = self._build_build()
         self.page_validate = self._build_validate()
         self.page_usb = self._build_usb()
+        self.page_ports = self._build_ports()
         self.page_analyze = self._build_analyze()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
@@ -302,6 +359,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.page_build)
         self.stack.addWidget(self.page_validate)
         self.stack.addWidget(self.page_usb)
+        self.stack.addWidget(self.page_ports)
         self.stack.addWidget(self.page_analyze)
         self.stack.addWidget(self.page_settings)
         self.stack.addWidget(self.page_about)
@@ -1115,6 +1173,137 @@ class MainWindow(QMainWindow):
         dlgv.addWidget(btn, alignment=Qt.AlignRight)
         dlg.exec()
 
+    def _build_ports(self):
+        """Вкладка «Порты и диски»: карта USB-портов и карта дисков."""
+        page = QWidget()
+        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
+        v.addWidget(_h1(page, tr.t("usbmap.title")))
+
+        ports_card = self._card(page)
+        pv = QVBoxLayout(ports_card)
+        pv.addWidget(_h2(page, tr.t("usbmap.ports_title")))
+        pdesc = _muted(page, tr.t("usbmap.ports_desc")); pdesc.setWordWrap(True)
+        pv.addWidget(pdesc)
+        prow = QHBoxLayout()
+        self.ports_run_btn = QPushButton(tr.t("usbmap.run"))
+        self.ports_run_btn.clicked.connect(self._do_usbmap)
+        self.ports_save_btn = QPushButton(tr.t("usbmap.save"))
+        self.ports_save_btn.setObjectName("ghost")
+        self.ports_save_btn.setEnabled(False)
+        self.ports_save_btn.clicked.connect(self._save_usbmap)
+        prow.addWidget(self.ports_run_btn)
+        prow.addWidget(self.ports_save_btn)
+        prow.addStretch()
+        pv.addLayout(prow)
+        self.usbmap_status = _muted(page, tr.t("usbmap.dsdt_note"))
+        self.usbmap_status.setWordWrap(True)
+        pv.addWidget(self.usbmap_status)
+        self.usbmap_log = QPlainTextEdit(); self.usbmap_log.setReadOnly(True)
+        self.usbmap_log.setMaximumHeight(110)
+        pv.addWidget(self.usbmap_log)
+        v.addWidget(ports_card)
+
+        disk_card = self._card(page)
+        dv = QVBoxLayout(disk_card)
+        dv.addWidget(_h2(page, tr.t("diskmap.title")))
+        ddesc = _muted(page, tr.t("diskmap.desc")); ddesc.setWordWrap(True)
+        dv.addWidget(ddesc)
+        drow = QHBoxLayout()
+        self.disk_scan_btn = QPushButton(tr.t("diskmap.scan"))
+        self.disk_scan_btn.clicked.connect(self._do_diskmap)
+        drow.addWidget(self.disk_scan_btn)
+        drow.addStretch()
+        dv.addLayout(drow)
+        self.disk_warn = _muted(page, ""); self.disk_warn.setWordWrap(True)
+        dv.addWidget(self.disk_warn)
+        self.disk_tree = QPlainTextEdit(); self.disk_tree.setReadOnly(True)
+        dv.addWidget(self.disk_tree, 1)
+        v.addWidget(disk_card, 1)
+        return page
+
+    def _do_usbmap(self):
+        if getattr(self, "ports_worker", None) and self.ports_worker.isRunning():
+            return
+        self.ports_run_btn.setEnabled(False)
+        self.ports_save_btn.setEnabled(False)
+        self.usbmap_status.setText(tr.t("usbmap.running"))
+        self.usbmap_log.setPlainText("")
+        self.ports_worker = UsbMapWorker(self)
+        self.ports_worker.done.connect(self._usbmap_done)
+        self.ports_worker.failed.connect(self._usbmap_failed)
+        self.ports_worker.finished.connect(lambda: self.ports_run_btn.setEnabled(True))
+        self.ports_worker.start()
+
+    def _usbmap_done(self, plist, log_text: str):
+        self._usbmap_plist = plist
+        if log_text:
+            self.usbmap_log.setPlainText(log_text)
+        if not plist:
+            self.usbmap_status.setText(tr.t("usbmap.none"))
+            self.ports_save_btn.setEnabled(False)
+            return
+        from ..builder.usb_map import summarise
+        s = summarise(plist)
+        self.usbmap_status.setText(tr.t("usbmap.found").format(
+            ports=s["ports"], controllers=s["controllers"]))
+        self.ports_save_btn.setEnabled(True)
+
+    def _usbmap_failed(self, err: str):
+        self.usbmap_status.setText(str(err))
+
+    def _save_usbmap(self):
+        plist = getattr(self, "_usbmap_plist", None)
+        if not plist:
+            QMessageBox.information(self, tr.t("usbmap.ports_title"),
+                                    tr.t("usbmap.need_map"))
+            return
+        d = QFileDialog.getExistingDirectory(self, tr.t("usbmap.save"))
+        if not d:
+            return
+        try:
+            from ..builder.usb_map import write_map_kext
+            base = Path(d)
+            if (base / "OC").is_dir():
+                kexts = base / "OC" / "Kexts"
+            elif base.name.lower() == "oc":
+                kexts = base / "Kexts"
+            else:
+                kexts = base
+            out = write_map_kext(plist, kexts)
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("usbmap.ports_title"), str(e))
+            return
+        self.usbmap_status.setText(tr.t("usbmap.saved").format(path=out))
+
+    def _do_diskmap(self):
+        if getattr(self, "disk_worker", None) and self.disk_worker.isRunning():
+            return
+        self.disk_scan_btn.setEnabled(False)
+        self.disk_warn.setText(tr.t("diskmap.running"))
+        self.disk_worker = DiskMapWorker(self)
+        self.disk_worker.done.connect(self._diskmap_done)
+        self.disk_worker.failed.connect(self._diskmap_failed)
+        self.disk_worker.finished.connect(lambda: self.disk_scan_btn.setEnabled(True))
+        self.disk_worker.start()
+
+    def _diskmap_done(self, tree: str, warnings: list):
+        self.disk_tree.setPlainText(tree or tr.t("diskmap.empty"))
+        if not warnings:
+            self.disk_warn.setText(tr.t("diskmap.none_warn"))
+            return
+        lines = []
+        for w in warnings:
+            key = w.get("key", "")
+            try:
+                text = tr.t(key).format(**{k: val for k, val in w.items() if k != "key"})
+            except Exception:
+                text = key
+            lines.append("⚠ " + text)
+        self.disk_warn.setText("\n".join(lines))
+
+    def _diskmap_failed(self, err: str):
+        self.disk_warn.setText(str(err))
+
     def _build_analyze(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
@@ -1148,6 +1337,25 @@ class MainWindow(QMainWindow):
         run.clicked.connect(self._do_analyze)
         v.addWidget(run, alignment=Qt.AlignLeft)
 
+        # Проверка лога OpenCore
+        gb_log = QGroupBox(tr.t("oclog.title"))
+        lv = QVBoxLayout(gb_log)
+        log_row = QHBoxLayout()
+        self.oclog_btn = QPushButton(tr.t("oclog.check"))
+        self.oclog_btn.setObjectName("ghost")
+        self.oclog_btn.clicked.connect(self._do_oclog)
+        self.oclog_enable_btn = QPushButton(tr.t("oclog.enable"))
+        self.oclog_enable_btn.setObjectName("ghost")
+        self.oclog_enable_btn.clicked.connect(self._enable_oclog)
+        log_row.addWidget(self.oclog_btn)
+        log_row.addWidget(self.oclog_enable_btn)
+        log_row.addStretch()
+        lv.addLayout(log_row)
+        self.oclog_out = QPlainTextEdit(); self.oclog_out.setReadOnly(True)
+        self.oclog_out.setMaximumHeight(130)
+        lv.addWidget(self.oclog_out)
+        v.addWidget(gb_log)
+
         self.an_progress = QProgressBar(); self.an_progress.setMaximum(0); self.an_progress.setVisible(False)
         v.addWidget(self.an_progress)
 
@@ -1160,6 +1368,44 @@ class MainWindow(QMainWindow):
         self.issue_list.currentItemChanged.connect(self._on_issue)
         v.addWidget(splitter, 1)
         return page
+
+    def _do_oclog(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr.t("oclog.check"), "",
+            "OpenCore log (*.txt);;All files (*)")
+        if not path:
+            return
+        self.oclog_btn.setEnabled(False)
+        self.oclog_out.setPlainText(tr.t("oclog.running"))
+        self.oclog_worker = OCLogWorker(Path(path))
+        self.oclog_worker.done.connect(self._oclog_done)
+        self.oclog_worker.failed.connect(self._oclog_failed)
+        self.oclog_worker.finished.connect(lambda: self.oclog_btn.setEnabled(True))
+        self.oclog_worker.start()
+
+    def _oclog_done(self, findings: list):
+        marks = {"error": "✖", "warn": "⚠", "info": "ℹ"}
+        lines = []
+        for f in findings:
+            lines.append(f"{marks.get(f.severity, '•')} {tr.t(f.key)}")
+            if f.detail:
+                for raw in f.detail.splitlines()[:6]:
+                    lines.append("    " + raw)
+        self.oclog_out.setPlainText("\n".join(lines))
+
+    def _oclog_failed(self, err: str):
+        self.oclog_out.setPlainText(tr.t("oclog.read_error") + "\n" + str(err))
+
+    def _enable_oclog(self):
+        cfg = self._resolve_config()
+        if not cfg.is_file():
+            QMessageBox.information(self, tr.t("oclog.title"), tr.t("oclog.need_config"))
+            return
+        from ..analyzer.oc_log import enable_logging
+        ok = enable_logging(cfg)
+        QMessageBox.information(
+            self, tr.t("oclog.title"),
+            tr.t("oclog.enabled") if ok else tr.t("oclog.enable_failed"))
 
     def _build_settings(self):
         page = QWidget()
@@ -1328,7 +1574,7 @@ class MainWindow(QMainWindow):
 
     def _retranslate(self):
         self.nav.clear()
-        icons = ["🖥", "⚙", "✔", "💾", "🔍", "⚙", "ℹ"]
+        icons = ["🖥", "⚙", "✔", "💾", "🔌", "🔍", "⚙", "ℹ"]
         for i, key in enumerate(self._nav_keys):
             self.nav.addItem(QListWidgetItem(f"{icons[i]}  {tr.t(key)}"))
         self.nav.setCurrentRow(self.stack.currentIndex())
