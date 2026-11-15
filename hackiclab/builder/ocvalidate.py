@@ -65,9 +65,41 @@ def find_ocvalidate(in_open_core_root: Optional[Path] = None) -> Optional[Path]:
         for p in candidates:
             if p.is_file():
                 return p
+    try:
+        from .cache_manager import cache_dir
+        cached = cache_dir() / "tools" / "ocvalidate.exe"
+        if cached.is_file():
+            return cached
+    except Exception:
+        pass
     p = shutil.which("ocvalidate")
     if p:
         return Path(p)
+    return None
+
+def ensure_ocvalidate() -> Optional[Path]:
+    """Находит ocvalidate; при отсутствии скачивает OpenCorePkg и берёт .exe."""
+    tool = find_ocvalidate()
+    if tool:
+        return tool
+    try:
+        import zipfile
+        from .cache_manager import cache_dir
+        from .downloader import Downloader
+
+        cache = cache_dir()
+        zip_path = Downloader().download_open_core(cache / "opencore")
+        if not zip_path or not Path(zip_path).is_file():
+            return None
+        with zipfile.ZipFile(str(zip_path)) as z:
+            for name in z.namelist():
+                if name.lower().endswith("ocvalidate.exe"):
+                    out = cache / "tools" / "ocvalidate.exe"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_bytes(z.read(name))
+                    return out
+    except Exception:
+        return None
     return None
 
 
@@ -79,7 +111,7 @@ def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVR
     if not config_path.exists():
         return OCVResult(ok=False, errors=[f"config.plist не найден: {config_path}"])
     # Если утилита не передана/не найдена — не блокируем, помечаем статистикой
-    tool = ocvalidate or find_ocvalidate()
+    tool = ocvalidate or ensure_ocvalidate()
     if not tool:
         return OCVResult(ok=True, full_output="<ocvalidate не найден — пропущено>",
                          warnings=["ocvalidate не найден — валидация пропущена"],

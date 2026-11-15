@@ -140,6 +140,16 @@ class EFIBuilder:
                            for d in placed_drivers):
                     layout.warnings.append(
                         "HFS+ driver (OpenHfsPlus.efi) не найден в архиве OpenCore")
+                # сохраняем ocvalidate в кэш, иначе после очистки .downloads
+                # валидация не сможет найти утилиту
+                ocv_exe = next((p for p in extract.rglob("ocvalidate.exe")
+                                if p.is_file()), None)
+                if ocv_exe:
+                    from .cache_manager import cache_dir
+                    tools = cache_dir() / "tools"
+                    tools.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(ocv_exe), str(tools / "ocvalidate.exe"))
+                    self._log("  ocvalidate → кэш инструментов")
             except Exception as e:
                 self._log(f"OpenCore: распаковка не удалась: {e}")
         else:

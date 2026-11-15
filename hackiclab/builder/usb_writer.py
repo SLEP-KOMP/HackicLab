@@ -230,11 +230,25 @@ def _run_diskpart(script_text: str) -> tuple[int, str]:
             pass
 
 
+def is_admin() -> bool:
+    """Запущен ли процесс с правами администратора (Windows)."""
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
 def format_usb(device: str, drive_letter: str = "") -> str:
     """Форматирует USB как FAT32 + GPT + ESP, возвращает букву диска.
 
     Опция drive_letter — занять конкретную букву (если задана); иначе найдёт свободную.
     """
+    if not is_admin():
+        raise RuntimeError(
+            "Для форматирования флешки нужны права администратора. "
+            "Перезапустите HackicLab от имени администратора."
+        )
     import time as _time
     letter = device.rstrip(":\\").upper()
     disk_num = _resolve_disk_number(letter)
@@ -401,7 +415,8 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
 def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                      recovery_macos: str = "", log=None,
                      backup: bool = True,
-                     backup_root: Optional[Path] = None) -> USBWriteResult:
+                     backup_root: Optional[Path] = None,
+                     drive_letter: str = "") -> USBWriteResult:
     """Полный цикл: (опц.) форматирование + запись EFI + возврат буквы.
 
     Если задан recovery_macos (напр. "macOS Sonoma") — дополнительно скачивает
@@ -430,7 +445,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
         else:
             if log:
                 log("Форматирую флешку (GPT + FAT32 + ESP)…")
-            target_letter = format_usb(device)
+            target_letter = format_usb(device, drive_letter=drive_letter)
             if log:
                 log(f"Флешка отформатирована: {target_letter}")
 

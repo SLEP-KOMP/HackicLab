@@ -114,12 +114,13 @@ class USBWriteWorker(QThread):
     signal = Signal(str)
 
     def __init__(self, source_efi: Path, device: str, skip_format: bool,
-                 recovery_macos: str = ""):
+                 recovery_macos: str = "", drive_letter: str = ""):
         super().__init__()
         self.source_efi = source_efi
         self.device = device
         self.skip_format = skip_format
         self.recovery_macos = recovery_macos
+        self.drive_letter = drive_letter
 
     def run(self):
         try:
@@ -127,6 +128,7 @@ class USBWriteWorker(QThread):
             res = write_efi_to_usb(self.source_efi, self.device,
                                    skip_format=self.skip_format,
                                    recovery_macos=self.recovery_macos,
+                                   drive_letter=self.drive_letter,
                                    log=self._log)
             self.done.emit(res)
         except Exception as e:
@@ -647,16 +649,12 @@ class MainWindow(QMainWindow):
         # --- детальный свод ocvalidate по категориям ---
         splitter = QSplitter(Qt.Vertical)
         self.val_missing = QPlainTextEdit(); self.val_missing.setReadOnly(True)
-        self.val_missing.setPlaceholderText(tr.t("validate.missing_title"))
         self.val_schema = QPlainTextEdit(); self.val_schema.setReadOnly(True)
-        self.val_schema.setPlaceholderText(tr.t("validate.schema_title"))
         self.val_warn = QPlainTextEdit(); self.val_warn.setReadOnly(True)
-        self.val_warn.setPlaceholderText(tr.t("validate.warnings_title"))
         splitter.addWidget(self._labelled(self, tr.t("validate.missing_title"), self.val_missing))
         splitter.addWidget(self._labelled(self, tr.t("validate.schema_title"), self.val_schema))
         splitter.addWidget(self._labelled(self, tr.t("validate.warnings_title"), self.val_warn))
         self.val_audit = QPlainTextEdit(); self.val_audit.setReadOnly(True)
-        self.val_audit.setPlaceholderText(tr.t("validate.audit_title"))
         splitter.addWidget(self._labelled(self, tr.t("validate.audit_title"), self.val_audit))
         splitter.setSizes([180, 140, 110, 150])
         v.addWidget(splitter, 1)
@@ -1133,8 +1131,11 @@ class MainWindow(QMainWindow):
         device = self.usb_combo.itemData(idx)
         self._usb_confirm(device)
 
-    def _confirm_phrase(self, device: str, disk_number: str = "") -> str:
-        """Фраза подтверждения по реальной букве диска: «WRITE F:»."""
+    def _confirm_phrase(self, device: str, disk_number: str = "",
+                        planned_letter: str = "") -> str:
+        """Фраза подтверждения по реальной/планируемой букве диска."""
+        if planned_letter:
+            return f"WRITE {planned_letter.upper()}"
         try:
             from ..builder.usb_writer import resolve_drive_letter
             letter = resolve_drive_letter(device, disk_number)
@@ -1147,6 +1148,8 @@ class MainWindow(QMainWindow):
     def _usb_confirm(self, device: str):
         """Экран/диалог подтверждения: ввод фразы WRITE <device>."""
         from PySide6.QtWidgets import QDialog, QLineEdit, QDialogButtonBox, QPushButton, QLabel
+        if not self._ensure_admin():
+            return
         mode = self.usb_mode.currentData() or "full"
 
         dlg = QDialog(self)
@@ -1156,6 +1159,13 @@ class MainWindow(QMainWindow):
 
         dev = next((x for x in getattr(self, "usb_devices", []) if x.device == device), None)
         dev_txt = f"{device} {dev.size if dev else ''}".strip()
+        planned = ""
+        if not (len(device) == 2 and device.endswith(":")):
+            try:
+                from ..builder.usb_writer import _find_free_drive_letter
+                planned = _find_free_drive_letter()
+            except Exception:
+                planned = ""
 
         dlgv.addWidget(_h2(dlg, f"{tr.t('usb.confirm_target')}: {dev_txt}"))
 
@@ -1172,7 +1182,7 @@ class MainWindow(QMainWindow):
         else:
             dlgv.addWidget(_muted(dlg, tr.t("usb.warn_formatted")))
 
-        phrase = self._confirm_phrase(device, getattr(dev, "disk_number", ""))
+        phrase = self._confirm_phrase(device, getattr(dev, "disk_number", ""), planned)
         dlgv.addWidget(_val(dlg, f"{tr.t('usb.confirm_phrase')}:  {phrase}"))
         if not phrase.split()[-1].endswith(":"):
             note = _muted(dlg, tr.t("usb.letter_missing")); note.setWordWrap(True)
@@ -1202,9 +1212,37 @@ class MainWindow(QMainWindow):
         cancel_btn.clicked.connect(dlg.reject)
 
         if dlg.exec() == QDialog.Accepted:
-            self._usb_run(device, mode)
+            self._usb_run(device, mode, planned)
 
-    def _usb_run(self, device: str, mode: str):
+    def _ensure_admin(self) -> bool:
+        """Проверяет права администратора и предлагает перезапуск с UAC."""
+        try:
+            from ..builder.usb_writer import is_admin
+            if is_admin():
+                return True
+        except Exception:
+            return True
+        ans = QMessageBox.question(
+            self, tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
+            QMessageBox.Yes | QMessageBox.No)
+        if ans != QMessageBox.Yes:
+            return False
+        try:
+            import ctypes
+            import subprocess
+            if getattr(sys, "frozen", False):
+                params = subprocess.list2cmdline(sys.argv[1:])
+            else:
+                params = subprocess.list2cmdline(sys.argv)
+            ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable, params, None, 1)
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("usb.admin_title"), str(e))
+            return False
+        QApplication.quit()
+        return False
+
+    def _usb_run(self, device: str, mode: str, planned_letter: str = ""):
         """Запуск записи EFI на флешку в фоновом потоке."""
         if getattr(self, "_usb_worker", None) and self._usb_worker.isRunning():
             return
@@ -1217,7 +1255,8 @@ class MainWindow(QMainWindow):
         recovery_macos = ""
         if getattr(self, "usb_recovery_chk", None) and self.usb_recovery_chk.isChecked():
             recovery_macos = self.usb_recovery_ver.currentData() or ""
-        self._usb_worker = USBWriteWorker(source, device, skip_format, recovery_macos)
+        self._usb_worker = USBWriteWorker(source, device, skip_format, recovery_macos,
+                                          planned_letter)
         self._usb_worker.signal.connect(self._usb_worker_log)
         self._usb_worker.done.connect(self._usb_done)
         self._usb_worker.failed.connect(self._usb_failed)
