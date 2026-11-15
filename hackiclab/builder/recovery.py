@@ -8,6 +8,7 @@ com.apple.recovery.*) с Apple CDN под конкретную версию macO
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -136,6 +137,57 @@ def cached_recovery_files(version: MacOSVersion) -> list:
     return [f for f in files if f.is_file()]
 
 
+class _LineWriter:
+    """Пишет вывод macrecovery построчно в callback (без второго окна)."""
+
+    def __init__(self, cb):
+        self.cb = cb
+        self.buf = ""
+
+    def write(self, text):
+        self.buf += text
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            line = line.strip()
+            if line and self.cb:
+                self.cb(line)
+
+    def flush(self):
+        line = self.buf.strip()
+        self.buf = ""
+        if line and self.cb:
+            self.cb(line)
+
+
+def _run_macrecovery_inprocess(script: Path, args: list, dest: Path,
+                               progress_cb=None) -> int:
+    """Запускает macrecovery.py в текущем процессе: без второго экземпляра EXE."""
+    import contextlib
+    import runpy
+
+    old_argv = sys.argv[:]
+    old_cwd = os.getcwd()
+    writer = _LineWriter(progress_cb)
+    code = 0
+    try:
+        sys.argv = [str(script)] + list(args)
+        os.chdir(str(dest))
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as e:
+        try:
+            code = int(e.code or 0)
+        except Exception:
+            code = 1
+    except Exception as e:
+        writer.write(f"{e}\n")
+        code = 1
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+    return code
+
+
 def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tuple[bool, str]:
     """Скачивает recovery macOS в dest (папка com.apple.recovery.boot). Возвращает (ok, msg)."""
     last_result = (False, "")
@@ -175,57 +227,60 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
     if progress_cb:
         progress_cb("Подключение к серверам Apple…")
 
-    STALL_TIMEOUT = 120
-    cmd = [sys.executable, str(script)] + script_args
+    if getattr(sys, "frozen", False):
+        # в EXE нельзя запускать sys.executable — это снова HackicLab.exe
+        try:
+            code = _run_macrecovery_inprocess(script, script_args, dest, progress_cb)
+        except Exception as e:
+            return False, f"Ошибка загрузки: {e}"
+        if code != 0:
+            return False, f"macrecovery завершился с кодом {code}"
+    else:
+        STALL_TIMEOUT = 120
+        cmd = [sys.executable, str(script)] + script_args
 
-    last_lines: list = []
-    try:
-        if getattr(sys, "frozen", False):
-            # в EXE запускаем subprocess текущим python
+        last_lines: list = []
+        try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             )
-        else:
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            )
 
-        import queue as _queue
-        import threading as _th
-        line_q = _queue.Queue()
+            import queue as _queue
+            import threading as _th
+            line_q = _queue.Queue()
 
-        def _reader():
-            for line in proc.stdout:
-                line_q.put(line)
-            line_q.put(None)
+            def _reader():
+                for line in proc.stdout:
+                    line_q.put(line)
+                line_q.put(None)
 
-        _th.Thread(target=_reader, daemon=True).start()
+            _th.Thread(target=_reader, daemon=True).start()
 
-        last_msg = ""
-        while True:
-            try:
-                line = line_q.get(timeout=STALL_TIMEOUT)
-            except _queue.Empty:
-                proc.kill()
-                return False, (
-                    f"Загрузка recovery зависла (нет ответа {STALL_TIMEOUT}с) — "
-                    "серверы Apple могут быть недоступны. Повторите позже."
-                )
-            if line is None:
-                break
-            line = line.strip()
-            if line and line != last_msg:
-                last_msg = line
-                last_lines.append(line)
-                del last_lines[:-5]
-                if progress_cb:
-                    progress_cb(line)
-        proc.wait()
-        if proc.returncode != 0:
-            detail = " | ".join(last_lines) if last_lines else "нет вывода"
-            return False, f"macrecovery завершился с кодом {proc.returncode}: {detail}"
-    except Exception as e:
-        return False, f"Ошибка загрузки: {e}"
+            last_msg = ""
+            while True:
+                try:
+                    line = line_q.get(timeout=STALL_TIMEOUT)
+                except _queue.Empty:
+                    proc.kill()
+                    return False, (
+                        f"Загрузка recovery зависла (нет ответа {STALL_TIMEOUT}с) — "
+                        "серверы Apple могут быть недоступны. Повторите позже."
+                    )
+                if line is None:
+                    break
+                line = line.strip()
+                if line and line != last_msg:
+                    last_msg = line
+                    last_lines.append(line)
+                    del last_lines[:-5]
+                    if progress_cb:
+                        progress_cb(line)
+            proc.wait()
+            if proc.returncode != 0:
+                detail = " | ".join(last_lines) if last_lines else "нет вывода"
+                return False, f"macrecovery завершился с кодом {proc.returncode}: {detail}"
+        except Exception as e:
+            return False, f"Ошибка загрузки: {e}"
 
     files = list(dest.glob("*.dmg")) + list(dest.glob("*.chunklist")) + list(dest.glob("com.apple.*"))
     if not files:

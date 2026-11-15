@@ -981,8 +981,16 @@ class MainWindow(QMainWindow):
         self.usb_progress = QProgressBar(); self.usb_progress.setMaximum(0); self.usb_progress.setVisible(False)
         v.addWidget(self.usb_progress)
 
-        lbl = _h2(page, tr.t("usb.log"))
-        v.addWidget(lbl)
+        log_row = QHBoxLayout()
+        log_row.addWidget(_h2(page, tr.t("usb.log")))
+        log_row.addStretch()
+        clear_btn = QPushButton(tr.t("usb.log_clear")); clear_btn.setObjectName("ghost")
+        clear_btn.clicked.connect(self._usb_log_clear)
+        save_btn = QPushButton(tr.t("usb.log_save")); save_btn.setObjectName("ghost")
+        save_btn.clicked.connect(self._usb_log_save)
+        log_row.addWidget(clear_btn)
+        log_row.addWidget(save_btn)
+        v.addLayout(log_row)
         self.usb_log = QPlainTextEdit(); self.usb_log.setReadOnly(True); self.usb_log.setMinimumHeight(180)
         v.addWidget(self.usb_log, 1)
 
@@ -1028,6 +1036,26 @@ class MainWindow(QMainWindow):
         self._usb_select()
         self.statusBar().showMessage(
             f"{tr.t('usb.detected')}: {len(self.usb_devices)}", 3000)
+
+    def _usb_log_clear(self):
+        self.usb_log.clear()
+
+    def _usb_log_save(self):
+        text = self.usb_log.toPlainText()
+        if not text.strip():
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr.t("usb.log_save"), "HackicLab-usb-log.txt",
+            "Text (*.txt);;All files (*)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("usb.title"), str(e))
+            return
+        self.statusBar().showMessage(
+            tr.t("usb.log_saved").format(path=path), 4000)
 
     def _usb_failed(self, err: str):
         self.usb_devices = []
