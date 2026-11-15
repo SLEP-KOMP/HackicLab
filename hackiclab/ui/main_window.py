@@ -1226,31 +1226,15 @@ class MainWindow(QMainWindow):
             self._usb_run(device, mode, planned)
 
     def _ensure_admin(self) -> bool:
-        """Проверяет права администратора и предлагает перезапуск с UAC."""
+        """Проверяет права администратора без запуска второго окна."""
         try:
             from ..builder.usb_writer import is_admin
             if is_admin():
                 return True
         except Exception:
             return True
-        ans = QMessageBox.question(
-            self, tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
-            QMessageBox.Yes | QMessageBox.No)
-        if ans != QMessageBox.Yes:
-            return False
-        try:
-            import ctypes
-            import subprocess
-            if getattr(sys, "frozen", False):
-                params = subprocess.list2cmdline(sys.argv[1:])
-            else:
-                params = subprocess.list2cmdline(sys.argv)
-            ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", sys.executable, params, None, 1)
-        except Exception as e:
-            QMessageBox.critical(self, tr.t("usb.admin_title"), str(e))
-            return False
-        QApplication.quit()
+        QMessageBox.warning(self, tr.t("usb.admin_title"),
+                            tr.t("usb.admin_manual"))
         return False
 
     def _usb_run(self, device: str, mode: str, planned_letter: str = ""):

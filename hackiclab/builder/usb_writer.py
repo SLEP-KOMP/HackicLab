@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -141,7 +142,7 @@ def get_usb_devices() -> list[USBDevice]:
         letter = f"{letters[0]}:" if letters else ""
         vol = vol_map.get(letters[0], {}) if letters else {}
         label = vol.get("label") or meta.get("friendly") or ""
-        size_b = vol.get("size") or meta.get("size") or 0
+        size_b = meta.get("size") or vol.get("size") or 0
         size_gb = f"{int(size_b) // 1024 // 1024 // 1024}GB" if size_b else "?"
         raw = (not letters) or meta.get("style") == "RAW"
         device = letter if letter else f"DISK{disk_num}"
@@ -280,9 +281,13 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     # проверим, что буква не занята
     busy = _powershell(f"Test-Path {target}:\\").lower()
     if busy == "true":
-        raise RuntimeError(
-            f"Буква {target}: уже занята другим накопителем. Освободите её и повторите."
-        )
+        # буква может принадлежать этому же диску (форматируем его же)
+        owner = _powershell(
+            f"(Get-Partition -DriveLetter {target} | Get-Disk).Number").strip()
+        if owner and owner != disk_num:
+            raise RuntimeError(
+                f"Буква {target}: уже занята другим накопителем. Освободите её и повторите."
+            )
 
     # размер раздела: 4 ГБ хватает для EFI, но не больше, чем диск
     size_mb_raw = _powershell(f"[math]::Floor((Get-Disk -Number {disk_num}).Size / 1MB)")
@@ -465,7 +470,12 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
         else:
             if log:
                 log("Форматирую флешку (GPT + FAT32 + ESP)…")
-            target_letter = format_usb(device, drive_letter=drive_letter)
+            keep = drive_letter
+            if not keep:
+                dev = device.rstrip(":\\").upper()
+                if len(dev) == 1 and dev.isalpha():
+                    keep = f"{dev}:"
+            target_letter = format_usb(device, drive_letter=keep)
             if log:
                 log(f"Флешка отформатирована: {target_letter}")
 
