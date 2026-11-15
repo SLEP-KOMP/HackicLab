@@ -78,16 +78,6 @@ def get_usb_devices() -> list[USBDevice]:
     if not usb:
         return devices
 
-    nums = ",".join(usb.keys())
-
-    # назначаем буквы разделам USB без букв (как в hackmate)
-    _powershell(
-        f"Get-Partition | Where-Object {{ -not $_.DriveLetter -and "
-        f"$_.DiskNumber -in @({nums}) }} | "
-        f"Add-PartitionAccessPath -AssignDriveLetter -ErrorAction SilentlyContinue",
-        timeout=20,
-    )
-
     out_part = _powershell(
         "Get-Partition | Where-Object {$_.DriveLetter} | Select-Object DiskNumber, DriveLetter",
         timeout=20,

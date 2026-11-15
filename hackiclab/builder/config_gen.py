@@ -174,16 +174,18 @@ def _apply_smbios(cfg: dict, data: "SMBIOSData"):
 
 
 def _macos_major(target: str) -> int:
-    """Из имени 'macOS Sequoia / 15' возвращает мажорную версию, или 20 (неизвестно)."""
+    """Из имени 'macOS Sequoia / 15' возвращает мажорную версию."""
     t = (target or "").lower()
+    # старые 10.x проверяем ДО числовых подстрок, иначе 10.15 → 15
+    if "catalina" in t or "10.15" in t: return 10
+    if "mojave" in t or "10.14" in t: return 10
+    if "high sierra" in t or "10.13" in t: return 10
     if "tahoe" in t or "26" in t: return 26
     if "sequoia" in t or "15" in t: return 15
     if "sonoma" in t or "14" in t: return 14
     if "ventura" in t or "13" in t: return 13
     if "monterey" in t or "12" in t: return 12
     if "big sur" in t or "11" in t: return 11
-    if "catalina" in t or "10.15" in t: return 15
-    if "mojave" in t or "10.14" in t: return 14
     return 26  # по умолчанию актуальная
 
 

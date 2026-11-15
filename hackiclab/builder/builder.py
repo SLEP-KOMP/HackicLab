@@ -136,6 +136,10 @@ class EFIBuilder:
                         placed_drivers.append(drv)
                         self._log(f"  {drv} → Drivers")
                 res.stats["drivers_placed"] = placed_drivers
+                if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
+                           for d in placed_drivers):
+                    layout.warnings.append(
+                        "HFS+ driver (OpenHfsPlus.efi) не найден в архиве OpenCore")
             except Exception as e:
                 self._log(f"OpenCore: распаковка не удалась: {e}")
         else:
@@ -213,6 +217,10 @@ class EFIBuilder:
             from .amd_patches import fetch_amd_patches
             amd_patches = fetch_amd_patches(log=self._log)
             self._log(f"AMD kernel patches: {len(amd_patches) if amd_patches else 0}")
+            if not amd_patches:
+                res.errors.append(
+                    "AMD kernel patches недоступны: EFI не загрузится на Ryzen")
+                res.ok = False
         layout.write_plist_with_kexts(data, kexts_placed,
                                       driver_names=res.stats.get("drivers_placed", []),
                                       kernel_patches=amd_patches)
@@ -233,6 +241,11 @@ class EFIBuilder:
         if not ocv.ok and ocv.errors:
             res.ok = False
 
+        if layout.errors:
+            res.errors.extend(layout.errors)
+            res.ok = False
+        res.warnings = list(layout.warnings) + list(dl.log)
+
         # чистим временные папки, чтобы не мусорить в выбранной директории
         shutil.rmtree(str(tmp), ignore_errors=True)
         shutil.rmtree(str(target / ".ssdt"), ignore_errors=True)
@@ -251,7 +264,7 @@ class EFIBuilder:
             "ocvalidate_warnings": ocv.warnings,
             "dir": str(target),
         }
-        res.warnings = dl.log
+        res.warnings = list(layout.warnings) + list(dl.log)
         try:
             from .history import record_build
             record_build(self.plan, res)

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QPlainTextEdit, QSplitter, QFrame, QLineEdit,
     QSpinBox, QScrollArea,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtCore import Qt, QThread, Signal, QSize, QTimer
 from PySide6.QtGui import QFont, QIcon, QColor
 
 from ..i18n import tr, LANGS
@@ -269,6 +269,20 @@ class UsbListWorker(QThread):
             self.failed.emit(str(e))
 
 
+def _has_cyrillic(text: str) -> bool:
+    return any("\u0400" <= ch <= "\u04FF" for ch in (text or ""))
+
+
+def _issue_title(issue) -> str:
+    """EN-заголовок проблемы с сохранением имени файла/кекста после двоеточия."""
+    title = tr.issue(issue.code, "title", issue.title)
+    if title != issue.title and ":" in issue.title:
+        tail = issue.title.split(":", 1)[1].strip()
+        if tail and not _has_cyrillic(tail):
+            title = f"{title}: {tail}"
+    return title
+
+
 def _macos_newer(a: str, b: str) -> bool:
     """Версия a новее b? (по имени macOS). Для подсказки о несовместимости."""
     order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
@@ -333,6 +347,7 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(0, 0, 0, 0)
         logo = QLabel("HackicLab"); logo.setObjectName("logo")
         sub = QLabel(tr.t("app.tagline")); sub.setObjectName("sub"); sub.setWordWrap(True)
+        self._tagline_label = sub
         side_layout.addWidget(logo)
         side_layout.addWidget(sub)
 
@@ -374,6 +389,11 @@ class MainWindow(QMainWindow):
 
         # Stack
         self.stack = QStackedWidget()
+        self._create_pages()
+        root.addWidget(self.stack, 1)
+
+    def _create_pages(self):
+        """Создаёт страницы заново — используется при старте и смене языка."""
         self.page_scan = self._build_scan()
         self.page_build = self._build_build()
         self.page_validate = self._build_validate()
@@ -386,7 +406,6 @@ class MainWindow(QMainWindow):
                      self.page_usb, self.page_ports, self.page_analyze,
                      self.page_settings, self.page_about):
             self.stack.addWidget(self._scroll_page(page))
-        root.addWidget(self.stack, 1)
 
     # ---- pages ----
     def _card(self, parent):
@@ -440,6 +459,7 @@ class MainWindow(QMainWindow):
         opts.addWidget(usb_desc)
         opts.addSpacing(8)
         self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
+        self.opt_sip.setChecked(True)
         sip_desc = _muted(page, tr.t("build.sip_desc")); sip_desc.setWordWrap(True)
         opts.addWidget(self.opt_sip)
         opts.addWidget(sip_desc)
@@ -543,7 +563,7 @@ class MainWindow(QMainWindow):
         sv.addLayout(last_row)
         # ручной выбор config.plist
         pick_row = QHBoxLayout()
-        self.val_config_path = Path("")
+        self.val_config_path = None
         self.val_path_label = QLabel(tr.t("validate.none")); self.val_path_label.setObjectName("muted")
         self.val_path_label.setWordWrap(True)
         pick_row.addWidget(self.val_path_label, 1)
@@ -704,14 +724,10 @@ class MainWindow(QMainWindow):
 
     def _do_validate(self):
         """Запускает ocvalidate против config.plist."""
-        cfg = Path("")
-        if self.val_config_path and self.val_config_path.exists():
-            cfg = self.val_config_path
-        elif self.profile and getattr(self, "last_build_dir", None):
-            cand = self.last_build_dir / "EFI" / "OC" / "config.plist"
-            if cand.exists():
-                cfg = cand
-        if not cfg.exists():
+        if getattr(self, "_worker_val", None) and self._worker_val.isRunning():
+            return
+        cfg = self._resolve_config()
+        if cfg is None:
             if self.profile is None:
                 QMessageBox.information(self, tr.t("validate.title"), tr.t("validate.scan_first"))
             else:
@@ -755,20 +771,22 @@ class MainWindow(QMainWindow):
         self.val_status.setText(tr.t("validate.invalid"))
         QMessageBox.critical(self, tr.t("validate.title"), str(err))
 
-    def _resolve_config(self) -> Path:
+    def _resolve_config(self) -> Path | None:
         """config.plist для проверки: ручной выбор или последняя сборка."""
-        if self.val_config_path and self.val_config_path.exists():
+        if self.val_config_path and self.val_config_path.is_file():
             return self.val_config_path
         if self.profile and getattr(self, "last_build_dir", None):
             cand = self.last_build_dir / "EFI" / "OC" / "config.plist"
-            if cand.exists():
+            if cand.is_file():
                 return cand
-        return Path("")
+        return None
 
     def _do_audit(self):
         """Структурный аудит EFI: kexts, ACPI, драйверы, SIP, USB."""
+        if getattr(self, "_worker_audit", None) and self._worker_audit.isRunning():
+            return
         cfg = self._resolve_config()
-        if not cfg.exists():
+        if cfg is None or not cfg.is_file():
             QMessageBox.information(self, tr.t("validate.audit_title"),
                                     tr.t("validate.audit_need_path"))
             return
@@ -791,11 +809,13 @@ class MainWindow(QMainWindow):
         marks = {2: "✖", 1: "⚠", 0: "ℹ"}
         lines = [tr.t("validate.audit_summary").format(e=err, w=warn, i=info), ""]
         for issue in sorted(issues, key=lambda x: -int(x.severity)):
-            lines.append(f"{marks.get(int(issue.severity), '•')} {issue.title}")
-            if issue.detail:
+            title = _issue_title(issue)
+            fix = tr.issue(issue.code, "fix", issue.suggestion)
+            lines.append(f"{marks.get(int(issue.severity), '•')} {title}")
+            if issue.detail and (tr.current == "ru" or not _has_cyrillic(issue.detail)):
                 lines.append(f"   {issue.detail}")
-            if issue.suggestion:
-                lines.append(f"   → {issue.suggestion}")
+            if fix:
+                lines.append(f"   → {fix}")
             lines.append("")
         self.val_audit.setPlainText("\n".join(lines).rstrip())
         self.statusBar().showMessage(
@@ -1186,6 +1206,8 @@ class MainWindow(QMainWindow):
 
     def _usb_run(self, device: str, mode: str):
         """Запуск записи EFI на флешку в фоновом потоке."""
+        if getattr(self, "_usb_worker", None) and self._usb_worker.isRunning():
+            return
         self.usb_progress.setVisible(True)
         self.usb_log.clear()
         self.usb_log.appendPlainText(tr.t("usb.running"))
@@ -1466,7 +1488,7 @@ class MainWindow(QMainWindow):
 
     def _enable_oclog(self):
         cfg = self._resolve_config()
-        if not cfg.is_file():
+        if cfg is None or not cfg.is_file():
             QMessageBox.information(self, tr.t("oclog.title"), tr.t("oclog.need_config"))
             return
         from ..analyzer.oc_log import enable_logging
@@ -1511,32 +1533,6 @@ class MainWindow(QMainWindow):
         tv.addWidget(theme_desc)
         v.addWidget(gb_theme)
 
-        # Поведение приложения
-        gb_behavior = QGroupBox(tr.t("settings.app_behavior"))
-        bv = QVBoxLayout(gb_behavior)
-        self.set_autoscan = QCheckBox(tr.t("settings.autoscan")); self.set_autoscan.setChecked(True)
-        self.set_hints = QCheckBox(tr.t("settings.show_welcome")); self.set_hints.setChecked(True)
-        self.set_updates = QCheckBox(tr.t("settings.check_updates")); self.set_updates.setChecked(True)
-        self.set_logs = QCheckBox(tr.t("settings.keep_builds")); self.set_logs.setChecked(True)
-        bv.addWidget(self.set_autoscan)
-        bv.addWidget(self.set_hints)
-        bv.addWidget(self.set_updates)
-        bv.addWidget(self.set_logs)
-        v.addWidget(gb_behavior)
-
-        # Дополнительно
-        gb_adv = QGroupBox(tr.t("settings.advanced"))
-        av = QVBoxLayout(gb_adv)
-        conc_row = QHBoxLayout()
-        conc_row.addWidget(_h2(page, tr.t("settings.download_concurrent")))
-        self.dl_concurrent = QComboBox()
-        for n in ("1", "2", "3", "4"):
-            self.dl_concurrent.addItem(n, int(n))
-        self.dl_concurrent.setCurrentIndex(1)
-        conc_row.addWidget(self.dl_concurrent, 1)
-        av.addLayout(conc_row)
-        v.addWidget(gb_adv)
-
         # Лицензия / Premium (переводится через i18n)
         gb_lic = QGroupBox(tr.t("settings.premium"))
         lv = QVBoxLayout(gb_lic)
@@ -1573,22 +1569,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, tr.t("settings.premium"), tr.t("settings.premium_activated"))
         else:
             QMessageBox.warning(self, tr.t("settings.premium"), tr.t("settings.premium_invalid"))
-
-    def _on_theme(self):
-        theme = self.theme_combo.currentData() or "dark"
-        self._theme = theme
-        self.apply_theme(theme)
-
-    def _activate_license(self):
-        from ..license import LicenseManager
-        mgr = LicenseManager()
-        ok, res = mgr.activate_premium(self.lic_key.text())
-        if ok:
-            self.statusBar().showMessage("Premium activated", 4000)
-            self.lic_status.setText("HackicLab Premium")
-            QMessageBox.information(self, "HackicLab Premium", "Активировано")
-        else:
-            QMessageBox.warning(self, "HackicLab Premium", "Неверный ключ")
 
     def _build_about(self):
         page = QWidget()
@@ -1636,26 +1616,134 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentIndex(row)
 
     def _on_lang(self):
-        code = self.lang_combo.currentData() or "ru"
+        sender = self.sender()
+        code = ""
+        if isinstance(sender, QComboBox):
+            code = sender.currentData() or ""
+        if not code:
+            code = self.lang_combo.currentData() or "ru"
+        if code == tr.current:
+            return
+        if self._workers_running():
+            self._sync_lang_combos()
+            QMessageBox.information(self, "HackicLab", tr.t("app.lang_busy"))
+            return
         tr.set_lang(code)
-        self._retranslate()
+        # пересобираем страницы после выхода из обработчика сигнала
+        QTimer.singleShot(0, self._rebuild_pages)
 
     def _retranslate(self):
-        self.nav.clear()
-        icons = ["🖥", "⚙", "✔", "💾", "🔌", "🔍", "⚙", "ℹ"]
-        for i, key in enumerate(self._nav_keys):
-            self.nav.addItem(QListWidgetItem(f"{icons[i]}  {tr.t(key)}"))
-        self.nav.setCurrentRow(self.stack.currentIndex())
-        # обновим заголовки страниц
-        self._refresh_dynamic()
-        self._refresh_validate_hw()
+        """Совместимость: полная пересборка страниц под текущий язык."""
+        self._rebuild_pages()
 
-    def _refresh_dynamic(self):
-        if self.profile is None:
+    _WORKER_ATTRS = ("_worker_scan", "_worker_build", "_usb_worker", "_worker_usb",
+                     "_worker_val", "_worker_audit", "_worker_an")
+
+    def _workers_running(self) -> bool:
+        for name in self._WORKER_ATTRS:
+            w = getattr(self, name, None)
+            try:
+                if w is not None and w.isRunning():
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _sync_lang_combos(self):
+        for combo in (getattr(self, "lang_combo", None),
+                      getattr(self, "settings_lang", None)):
+            if combo is None:
+                continue
+            i = combo.findData(tr.current)
+            if i >= 0:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(i)
+                combo.blockSignals(False)
+
+    def _rebuild_pages(self):
+        """Пересоздаёт все страницы на текущем языке, сохраняя состояние."""
+        if not hasattr(self, "stack"):
             return
+        idx = self.stack.currentIndex()
+        st = {
+            "profile": getattr(self, "profile", None),
+            "build_dest": self.build_dest.text(),
+            "usb_source": self.usb_source.text(),
+            "usb_mode": self.usb_mode.currentIndex(),
+            "usb_rec": self.usb_recovery_chk.isChecked(),
+            "usb_ver": self.usb_recovery_ver.currentData(),
+            "build_log": self.build_log.toPlainText(),
+            "rationale": self.build_rationale.toPlainText(),
+            "last_build_dir": getattr(self, "last_build_dir", None),
+            "val_config_path": getattr(self, "val_config_path", None),
+            "val_status": self.val_status.text(),
+            "opt_usb": self.opt_usb.isChecked(),
+            "opt_sip": self.opt_sip.isChecked(),
+            "macos": self.macos_combo.currentData(),
+        }
+        while self.stack.count():
+            w = self.stack.widget(0)
+            self.stack.removeWidget(w)
+            w.deleteLater()
+        self._create_pages()
+
+        icons = ["🖥", "⚙", "✔", "💾", "🔌", "🔍", "⚙", "ℹ"]
+        self.nav.blockSignals(True)
+        for i, key in enumerate(self._nav_keys):
+            item = self.nav.item(i)
+            if item is not None:
+                item.setText(f"{icons[i]}  {tr.t(key)}")
+        self.nav.blockSignals(False)
+        self._tagline_label.setText(tr.t("app.tagline"))
+
+        self.last_build_dir = st["last_build_dir"]
+        if st["val_config_path"]:
+            self.val_config_path = st["val_config_path"]
+        self.build_dest.setText(st["build_dest"])
+        self.usb_source.setText(st["usb_source"])
+        self.usb_mode.setCurrentIndex(st["usb_mode"])
+        self.usb_recovery_chk.setChecked(st["usb_rec"])
+        if st["usb_ver"]:
+            i = self.usb_recovery_ver.findData(st["usb_ver"])
+            if i >= 0:
+                self.usb_recovery_ver.setCurrentIndex(i)
+        self.opt_usb.setChecked(st["opt_usb"])
+        self.opt_sip.setChecked(st["opt_sip"])
+        if st["macos"]:
+            i = self.macos_combo.findData(st["macos"])
+            if i >= 0:
+                self.macos_combo.setCurrentIndex(i)
+        self.build_log.setPlainText(st["build_log"])
+        self.build_rationale.setPlainText(st["rationale"])
+        self.val_status.setText(st["val_status"])
+        if st["last_build_dir"]:
+            try:
+                self.val_last_label.setText(str(st["last_build_dir"]))
+            except Exception:
+                pass
+        if st["profile"]:
+            self.profile = st["profile"]
+            self._scan_done(st["profile"])
+        if st["val_config_path"]:
+            try:
+                self.val_path_label.setText(str(st["val_config_path"]))
+                self._load_quick()
+            except Exception:
+                pass
+        try:
+            self._on_macos_change()
+        except Exception:
+            pass
+
+        self.stack.setCurrentIndex(max(0, min(idx, self.stack.count() - 1)))
+        self.nav.setCurrentRow(self.stack.currentIndex())
+        self._sync_lang_combos()
+        self.statusBar().showMessage(tr.t("app.lang_changed"), 2500)
 
     # ---- scan ----
     def _do_scan(self):
+        if getattr(self, "_worker_scan", None) and self._worker_scan.isRunning():
+            return
         # очистим сетку
         while self.hw_grid.count():
             it = self.hw_grid.takeAt(0)
@@ -1735,6 +1823,8 @@ class MainWindow(QMainWindow):
             self.build_dest.setText(d)
 
     def _do_build(self):
+        if getattr(self, "_worker_build", None) and self._worker_build.isRunning():
+            return
         if not self.profile:
             QMessageBox.information(self, "HackicLab", tr.t("scan.button"))
             return
@@ -1848,6 +1938,8 @@ class MainWindow(QMainWindow):
             self.an_folder.setText(d)
 
     def _do_analyze(self):
+        if getattr(self, "_worker_an", None) and self._worker_an.isRunning():
+            return
         if not self.profile:
             QMessageBox.information(self, "HackicLab", tr.t("scan.button"))
             return
@@ -1872,7 +1964,8 @@ class MainWindow(QMainWindow):
         self.issue_list.clear()
         for iss in issues:
             icon = self._SEV.get(int(iss.severity), "ℹ")
-            it = QListWidgetItem(f"{icon} {iss.title}")
+            title = _issue_title(iss)
+            it = QListWidgetItem(f"{icon} {title}")
             it.setData(Qt.UserRole, iss)
             it.setForeground(QColor(self._SEV_COLOR.get(int(iss.severity), "#cdd6f4")))
             self.issue_list.addItem(it)
@@ -1887,10 +1980,24 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, tr.t("analyze.title"), str(err))
 
     def _on_issue(self, cur, _prev):
-        if cur:
-            iss = cur.data(Qt.UserRole)
-            txt = f"{cur.text()}\n\n{iss.detail}\n\n→ {iss.suggestion}" if iss else ""
-            self.issue_detail.setPlainText(txt)
+        if not cur:
+            self.issue_detail.clear()
+            return
+        iss = cur.data(Qt.UserRole)
+        if not iss:
+            self.issue_detail.clear()
+            return
+        title = _issue_title(iss)
+        fix = tr.issue(iss.code, "fix", iss.suggestion)
+        detail = iss.detail or ""
+        if tr.current != "ru" and _has_cyrillic(detail):
+            detail = ""
+        parts = [title]
+        if detail:
+            parts.append(detail)
+        if fix:
+            parts.append("→ " + fix)
+        self.issue_detail.setPlainText("\n\n".join(parts))
 
 
 def run_app() -> int:

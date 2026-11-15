@@ -20,6 +20,8 @@ T = {
         # app
         "app.title": "HackicLab",
         "app.tagline": "Интеллектуальный сборщик Hackintosh EFI",
+        "app.lang_busy": "Дождитесь завершения текущей операции, затем смените язык.",
+        "app.lang_changed": "Язык интерфейса изменён.",
         # nav
         "nav.scan": "Сканирование",
         "nav.build": "Сборка EFI",
@@ -316,6 +318,8 @@ T = {
     "en": {
         "app.title": "HackicLab",
         "app.tagline": "Intelligent Hackintosh EFI builder",
+        "app.lang_busy": "Wait for the current operation to finish, then change the language.",
+        "app.lang_changed": "Interface language changed.",
         "nav.scan": "Scan",
         "nav.build": "Build EFI",
         "nav.validate": "Validation",
@@ -606,6 +610,82 @@ T = {
 }
 
 
+# Английские тексты для машинных кодов анализа/аудита (см. AnalysisIssue.code).
+# Пары: (заголовок, рекомендация). Для русского берутся исходные тексты.
+ISSUE_EN = {
+    "folder_missing": ("Folder not found",
+                       "Choose an existing folder with EFI/kext files."),
+    "kext_missing": ("Missing kext",
+                     "Add the kext to EFI/OC/Kexts and config.plist."),
+    "kext_extra": ("Unneeded kext",
+                   "Remove it unless you know it is required."),
+    "oc_missing": ("OpenCore not found",
+                   "Download OpenCorePkg or enable auto-download."),
+    "amd_laptop": ("AMD laptop CPU is not supported",
+                   "AMD Vanilla patches do not work on mobile APUs."),
+    "igpu_unsupported": ("iGPU has no macOS driver",
+                         "Use a supported discrete GPU or patch the iGPU."),
+    "wifi_intel": ("Intel Wi-Fi requires a kext",
+                   "Add itlwm + HeliPort or AirportItlwm."),
+    "wifi_realtek_unsupported": ("Realtek Wi-Fi is not supported",
+                                 "Replace the card with a supported Broadcom model."),
+    "wifi_mediatek_unsupported": ("MediaTek Wi-Fi is not supported",
+                                  "Replace the card with a supported Broadcom model."),
+    "acpi_file_missing": ("ACPI file missing",
+                          "Download the table or disable the entry."),
+    "acpi_orphan_rename": ("Orphaned ACPI rename",
+                           "Add an SSDT defining this name or disable the patch."),
+    "boot_args_empty": ("boot-args is empty",
+                        "Add -v debug=0x100 keepsyms=1 while testing."),
+    "boot_args_quiet": ("Verbose boot is disabled",
+                        "Add -v to boot-args to see boot errors."),
+    "config_unreadable": ("config.plist cannot be read",
+                          "Restore it from a backup or rebuild the EFI."),
+    "driver_hfs": ("No HFS+ driver",
+                   "Add OpenHfsPlus.efi or HfsPlus.efi."),
+    "driver_missing": ("Driver file missing",
+                       "Download the driver or remove the UEFI/Drivers entry."),
+    "driver_openruntime": ("OpenRuntime.efi is not loaded",
+                           "Add OpenRuntime.efi to UEFI/Drivers and OC/Drivers."),
+    "efi_no_bootx64": ("BOOT/BOOTx64.efi is missing",
+                       "Copy BOOTx64.efi from OpenCorePkg."),
+    "efi_no_opencore": ("OpenCore.efi is missing",
+                        "Reinstall OpenCore or choose another EFI folder."),
+    "efi_structure": ("EFI structure is incomplete",
+                      "Rebuild the EFI with HackicLab."),
+    "kext_bundle_missing": ("kext bundle missing",
+                            "Download the kext again or disable the entry."),
+    "kext_exec_missing": ("kext executable missing",
+                          "The bundle is damaged; download it again."),
+    "kext_legacy": ("Legacy kext",
+                    "Replace it with a modern alternative."),
+    "lilu_missing": ("Lilu is missing",
+                     "Add Lilu.kext before its plugins."),
+    "lilu_order": ("Lilu loads after its plugins",
+                   "Move Lilu.kext to the top of Kernel/Add."),
+    "platforminfo_incomplete": ("PlatformInfo is incomplete",
+                                "Regenerate SMBIOS (Serial, MLB, UUID, ROM)."),
+    "quirk_conflict": ("Conflicting Booter quirks",
+                       "Use RebuildAppleMemoryMap instead of EnableWriteUnprotector."),
+    "sip_enabled": ("SIP is enabled",
+                    "Set csr-active-config to 0x67 for installation."),
+    "sip_partial": ("SIP is partially disabled",
+                    "This is normal for a hackintosh."),
+    "sip_undefined": ("SIP value is not set",
+                      "Set csr-active-config to 0x67."),
+    "sip_wide_open": ("SIP is fully disabled",
+                      "Consider using 0x67 instead of 0xFF."),
+    "smc_conflict": ("Conflicting SMC kexts",
+                     "Use VirtualSMC or FakeSMC, not both."),
+    "usbmap_empty": ("USB map is empty",
+                     "Rebuild the USB map."),
+    "usbmap_generic": ("Generic USB map",
+                       "Create a map for your exact ports."),
+    "usbmap_no_ports": ("USB map has no ports",
+                        "Rebuild the map with port detection."),
+}
+
+
 class Tr:
     """Обёртка локализации. t("key") возвращает перевод на текущий язык."""
 
@@ -618,6 +698,15 @@ class Tr:
 
     def t(self, key: str) -> str:
         return T[self.lang].get(key) or T["ru"].get(key) or key
+
+    def issue(self, code: str, field: str, default: str = "") -> str:
+        """Заголовок/рекомендация проблемы по коду: EN или исходный текст."""
+        if self.lang == "ru":
+            return default
+        pair = ISSUE_EN.get(code)
+        if not pair:
+            return default
+        return pair[0] if field == "title" else pair[1]
 
     @property
     def current(self) -> str:
