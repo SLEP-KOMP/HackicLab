@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import IntEnum
 from pathlib import Path
 from typing import Optional
 
@@ -17,27 +15,8 @@ from ..knowledge.kexts import (
     KEXT_DB, KextEntry, select_kexts, smbios_model_for,
 )
 from ..knowledge.oc_platforms import MAX_MACOS_BY_GEN
-
-
-class Severity(IntEnum):
-    INFO = 0
-    WARNING = 1
-    ERROR = 2
-
-
-@dataclass
-class AnalysisIssue:
-    severity: Severity
-    code: str            # машинный идентификатор (kext_missing, etc.)
-    title: str           # локализуемый ключ/текст
-    detail: str = ""
-    kext: str = ""       # имя кекста, если относится к кексту
-    suggestion: str = ""
-
-    @property
-    def sev_label(self) -> str:
-        return {Severity.INFO: "info", Severity.WARNING: "warning",
-                Severity.ERROR: "error"}[self.severity]
+from .models import AnalysisIssue, Severity
+from .efi_health import audit as audit_efi_root
 
 
 class Analyzer:
@@ -154,6 +133,13 @@ class Analyzer:
         self._check_hardware_warnings()
         return self.issues
 
+    # --- структурный аудит готового EFI ---
+    def audit_efi(self, folder: Path) -> list[AnalysisIssue]:
+        """Аудит EFI независимо от профиля железа (файлы, kexts, ACPI)."""
+        extra = audit_efi_root(folder)
+        self.issues.extend(extra)
+        return extra
+
 
 def analyze_folders(profile: HardwareProfile, folder: Path) -> list[AnalysisIssue]:
     return Analyzer(profile).analyze_folder(folder)
@@ -161,3 +147,8 @@ def analyze_folders(profile: HardwareProfile, folder: Path) -> list[AnalysisIssu
 
 def analyze_profile(profile: HardwareProfile) -> list[AnalysisIssue]:
     return Analyzer(profile).analyze_profile()
+
+
+def audit_efi(folder: Path) -> list[AnalysisIssue]:
+    """Аудит EFI/OC без привязки к железу."""
+    return audit_efi_root(folder)

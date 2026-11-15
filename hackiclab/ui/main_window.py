@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QStackedWidget, QListWidget, QListWidgetItem,
     QFileDialog, QMessageBox, QProgressBar, QTextEdit, QGroupBox,
     QCheckBox, QComboBox, QPlainTextEdit, QSplitter, QFrame, QLineEdit,
+    QSpinBox,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QFont, QIcon, QColor
@@ -179,6 +180,23 @@ class AnalyzeWorker(QThread):
         try:
             issues = Analyzer(self.profile).analyze_folder(self.folder)
             self.done.emit(issues)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class AuditWorker(QThread):
+    """Структурный аудит EFI в фоне (kexts, ACPI, драйверы, SIP)."""
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, efi_root: Path):
+        super().__init__()
+        self.efi_root = efi_root
+
+    def run(self):
+        try:
+            from ..analyzer.engine import audit_efi
+            self.done.emit(audit_efi(self.efi_root))
         except Exception as e:
             self.failed.emit(str(e))
 
@@ -395,8 +413,23 @@ class MainWindow(QMainWindow):
 
         lbl = _h2(page, tr.t("build.log"))
         v.addWidget(lbl)
-        self.build_log = QPlainTextEdit(); self.build_log.setReadOnly(True); self.build_log.setMinimumHeight(200)
+        self.build_log = QPlainTextEdit(); self.build_log.setReadOnly(True); self.build_log.setMinimumHeight(160)
         v.addWidget(self.build_log, 1)
+
+        # --- Почему так собрано (объяснение решений) ---
+        rrow = QHBoxLayout()
+        rrow.addWidget(_h2(page, tr.t("build.rationale")))
+        rrow.addStretch()
+        self.rationale_save_btn = QPushButton(tr.t("build.rationale_save"))
+        self.rationale_save_btn.setObjectName("ghost")
+        self.rationale_save_btn.setEnabled(False)
+        self.rationale_save_btn.clicked.connect(self._save_rationale)
+        rrow.addWidget(self.rationale_save_btn)
+        v.addLayout(rrow)
+        self.build_rationale = QPlainTextEdit(); self.build_rationale.setReadOnly(True)
+        self.build_rationale.setMinimumHeight(140)
+        self.build_rationale.setPlaceholderText(tr.t("build.rationale_empty"))
+        v.addWidget(self.build_rationale, 1)
         return page
 
     def _build_validate(self):
@@ -428,8 +461,56 @@ class MainWindow(QMainWindow):
         sv.addLayout(pick_row)
         b = QPushButton(tr.t("validate.run"))
         b.clicked.connect(self._do_validate)
-        sv.addWidget(b, alignment=Qt.AlignRight)
+        audit_btn = QPushButton(tr.t("validate.audit_run"))
+        audit_btn.setObjectName("ghost")
+        audit_btn.clicked.connect(self._do_audit)
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(audit_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(b)
+        sv.addLayout(btn_row)
         v.addWidget(src)
+
+        # --- быстрые правки config.plist ---
+        from ..builder.config_editor import SECURE_BOOT_MODELS
+        quick = self._card(page)
+        self.quick_card = quick
+        qv = QVBoxLayout(quick)
+        qv.addWidget(_h2(page, tr.t("validate.quick_title")))
+
+        qargs = QHBoxLayout()
+        qargs.addWidget(_val(page, tr.t("validate.quick_bootargs")))
+        self.quick_bootargs = QLineEdit()
+        self.quick_bootargs.setPlaceholderText("-v debug=0x100 keepsyms=1")
+        qargs.addWidget(self.quick_bootargs, 1)
+        qv.addLayout(qargs)
+
+        qrow = QHBoxLayout()
+        self.quick_sip = QCheckBox(tr.t("validate.quick_sip"))
+        qrow.addWidget(self.quick_sip)
+        qrow.addSpacing(16)
+        qrow.addWidget(_val(page, tr.t("validate.quick_timeout")))
+        self.quick_timeout = QSpinBox(); self.quick_timeout.setRange(0, 60)
+        qrow.addWidget(self.quick_timeout)
+        qrow.addSpacing(16)
+        qrow.addWidget(_val(page, tr.t("validate.quick_secureboot")))
+        self.quick_sbm = QComboBox(); self.quick_sbm.addItems(list(SECURE_BOOT_MODELS))
+        qrow.addWidget(self.quick_sbm)
+        qrow.addStretch()
+        qv.addLayout(qrow)
+
+        qsmb = QHBoxLayout()
+        qsmb.addWidget(_val(page, tr.t("validate.quick_smbios")))
+        self.quick_smbios = QLineEdit()
+        self.quick_smbios.setPlaceholderText("MacPro7,1")
+        qsmb.addWidget(self.quick_smbios, 1)
+        qv.addLayout(qsmb)
+
+        qsave = QPushButton(tr.t("validate.quick_save"))
+        qsave.clicked.connect(self._save_quick)
+        qv.addWidget(qsave, alignment=Qt.AlignRight)
+        quick.setEnabled(False)
+        v.addWidget(quick)
 
         # --- жёсткое предупреждение о железе (Wi-Fi/BT) ---
         self.val_hw_card = self._card(page)
@@ -462,7 +543,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._labelled(self, tr.t("validate.missing_title"), self.val_missing))
         splitter.addWidget(self._labelled(self, tr.t("validate.schema_title"), self.val_schema))
         splitter.addWidget(self._labelled(self, tr.t("validate.warnings_title"), self.val_warn))
-        splitter.setSizes([200, 160, 120])
+        self.val_audit = QPlainTextEdit(); self.val_audit.setReadOnly(True)
+        self.val_audit.setPlaceholderText(tr.t("validate.audit_title"))
+        splitter.addWidget(self._labelled(self, tr.t("validate.audit_title"), self.val_audit))
+        splitter.setSizes([180, 140, 110, 150])
         v.addWidget(splitter, 1)
         return page
 
@@ -479,6 +563,52 @@ class MainWindow(QMainWindow):
         if d:
             self.val_config_path = Path(d)
             self.val_path_label.setText(d)
+            self._load_quick()
+
+    def _load_quick(self):
+        """Загружает текущие значения config.plist в панель быстрых правок."""
+        cfg_path = self._resolve_config()
+        if not cfg_path or not cfg_path.exists():
+            self.quick_card.setEnabled(False)
+            return
+        try:
+            from ..builder import config_editor as ce
+            cfg = ce.load_config(cfg_path)
+        except Exception:
+            self.quick_card.setEnabled(False)
+            return
+        self.quick_bootargs.setText(ce.get_boot_args(cfg))
+        self.quick_sip.setChecked(ce.get_sip_enabled(cfg))
+        self.quick_timeout.setValue(ce.get_timeout(cfg))
+        self.quick_sbm.setCurrentText(ce.get_secure_boot_model(cfg))
+        self.quick_smbios.setText(ce.get_smbios(cfg))
+        self.quick_card.setEnabled(True)
+
+    def _save_quick(self):
+        """Сохраняет правки с резервной копией и предлагает перепроверку."""
+        cfg_path = self._resolve_config()
+        if not cfg_path or not cfg_path.exists():
+            QMessageBox.information(self, tr.t("validate.title"),
+                                    tr.t("validate.quick_need_config"))
+            return
+        try:
+            from ..builder import config_editor as ce
+            cfg = ce.load_config(cfg_path)
+            ce.set_boot_args(cfg, self.quick_bootargs.text().strip())
+            ce.set_sip(cfg, self.quick_sip.isChecked())
+            ce.set_timeout(cfg, self.quick_timeout.value())
+            ce.set_secure_boot_model(cfg, self.quick_sbm.currentText().strip())
+            ce.set_smbios(cfg, self.quick_smbios.text().strip())
+            backup = ce.save_config(cfg_path, cfg)
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("validate.quick_title"), str(e))
+            return
+        self.val_config_path = cfg_path
+        self.statusBar().showMessage(
+            tr.t("validate.quick_saved").format(path=backup), 8000)
+        if QMessageBox.question(self, tr.t("validate.quick_title"),
+                                tr.t("validate.quick_revalidate")) == QMessageBox.Yes:
+            self._do_validate()
 
     def _do_validate(self):
         """Запускает ocvalidate против config.plist."""
@@ -496,6 +626,7 @@ class MainWindow(QMainWindow):
                 self.val_status.setText(tr.t("validate.no_result"))
             return
         self.val_config_path = cfg
+        self._load_quick()
         self.val_progress.setVisible(True)
         self.val_status.setText("…")
         self._worker_val = ValidateWorker(cfg)
@@ -531,6 +662,55 @@ class MainWindow(QMainWindow):
         self.val_progress.setVisible(False)
         self.val_status.setText(tr.t("validate.invalid"))
         QMessageBox.critical(self, tr.t("validate.title"), str(err))
+
+    def _resolve_config(self) -> Path:
+        """config.plist для проверки: ручной выбор или последняя сборка."""
+        if self.val_config_path and self.val_config_path.exists():
+            return self.val_config_path
+        if self.profile and getattr(self, "last_build_dir", None):
+            cand = self.last_build_dir / "EFI" / "OC" / "config.plist"
+            if cand.exists():
+                return cand
+        return Path("")
+
+    def _do_audit(self):
+        """Структурный аудит EFI: kexts, ACPI, драйверы, SIP, USB."""
+        cfg = self._resolve_config()
+        if not cfg.exists():
+            QMessageBox.information(self, tr.t("validate.audit_title"),
+                                    tr.t("validate.audit_need_path"))
+            return
+        self.val_config_path = cfg
+        efi_root = cfg.parent.parent if cfg.parent.name.upper() == "OC" else cfg.parent
+        self.val_audit.setPlainText(tr.t("validate.audit_running"))
+        self._worker_audit = AuditWorker(efi_root)
+        self._worker_audit.done.connect(self._audit_done)
+        self._worker_audit.failed.connect(self._audit_failed)
+        self._worker_audit.start()
+
+    def _audit_done(self, issues):
+        err = sum(1 for i in issues if int(i.severity) == 2)
+        warn = sum(1 for i in issues if int(i.severity) == 1)
+        info = sum(1 for i in issues if int(i.severity) == 0)
+        if not issues:
+            self.val_audit.setPlainText(tr.t("validate.audit_no_findings"))
+            self.statusBar().showMessage(tr.t("validate.audit_no_findings"), 6000)
+            return
+        marks = {2: "✖", 1: "⚠", 0: "ℹ"}
+        lines = [tr.t("validate.audit_summary").format(e=err, w=warn, i=info), ""]
+        for issue in sorted(issues, key=lambda x: -int(x.severity)):
+            lines.append(f"{marks.get(int(issue.severity), '•')} {issue.title}")
+            if issue.detail:
+                lines.append(f"   {issue.detail}")
+            if issue.suggestion:
+                lines.append(f"   → {issue.suggestion}")
+            lines.append("")
+        self.val_audit.setPlainText("\n".join(lines).rstrip())
+        self.statusBar().showMessage(
+            f"EFI audit: {err} err / {warn} warn / {info} info", 6000)
+
+    def _audit_failed(self, err):
+        self.val_audit.setPlainText(str(err))
 
     def _refresh_validate_hw(self):
         """Показывает на вкладке валидации состояние Wi-Fi/Bluetooth железа."""
@@ -651,6 +831,32 @@ class MainWindow(QMainWindow):
         self.usb_recovery_chk.toggled.connect(self._usb_recovery_toggle)
         v.addWidget(rec_card)
 
+        # --- 3.6. История сборок ---
+        hist_card = self._card(page)
+        hv = QVBoxLayout(hist_card)
+        hrow = QHBoxLayout()
+        hrow.addWidget(_h2(page, tr.t("history.title")))
+        hrow.addStretch()
+        hist_refresh = QPushButton(tr.t("history.refresh"))
+        hist_refresh.setObjectName("ghost")
+        hist_refresh.clicked.connect(self._history_refresh)
+        hrow.addWidget(hist_refresh)
+        hv.addLayout(hrow)
+        self.history_list = QListWidget(); self.history_list.setMaximumHeight(110)
+        hv.addWidget(self.history_list)
+        hbtns = QHBoxLayout()
+        self.history_open_btn = QPushButton(tr.t("history.open"))
+        self.history_open_btn.setObjectName("ghost")
+        self.history_open_btn.clicked.connect(self._history_open)
+        self.history_restore_btn = QPushButton(tr.t("history.restore"))
+        self.history_restore_btn.setObjectName("ghost")
+        self.history_restore_btn.clicked.connect(self._history_restore)
+        hbtns.addWidget(self.history_open_btn)
+        hbtns.addWidget(self.history_restore_btn)
+        hbtns.addStretch()
+        hv.addLayout(hbtns)
+        v.addWidget(hist_card)
+
         v.addStretch()
 
         # --- Кнопки ---
@@ -669,8 +875,9 @@ class MainWindow(QMainWindow):
         self.usb_log = QPlainTextEdit(); self.usb_log.setReadOnly(True); self.usb_log.setMinimumHeight(180)
         v.addWidget(self.usb_log, 1)
 
-        # сразу просканируем флешки
+        # сразу просканируем флешки и историю
         self._usb_refresh()
+        self._history_refresh()
         return page
 
     def _usb_refresh(self):
@@ -696,6 +903,62 @@ class MainWindow(QMainWindow):
         self._usb_select()
         self.statusBar().showMessage(
             f"{tr.t('usb.detected')}: {len(self.usb_devices)}", 3000)
+
+    def _history_refresh(self):
+        """Показывает последние сборки из истории."""
+        from ..builder import history
+        self.history_list.clear()
+        try:
+            entries = history.list_entries()
+        except Exception:
+            entries = []
+        if not entries:
+            it = QListWidgetItem(tr.t("history.empty"))
+            it.setFlags(Qt.NoItemFlags)
+            self.history_list.addItem(it)
+            return
+        for e in entries:
+            ocv = "OK" if e.ocvalidate_ok else ("err" if e.ocvalidate_ok is False else "—")
+            text = (f"{e.created_at} · {e.smbios or '—'} · "
+                    f"{e.opencore or '—'} · ocvalidate: {ocv}")
+            it = QListWidgetItem(text)
+            it.setData(Qt.UserRole, e)
+            if not e.exists:
+                it.setForeground(QColor("#f38ba8"))
+            self.history_list.addItem(it)
+
+    def _history_selected(self):
+        it = self.history_list.currentItem()
+        return it.data(Qt.UserRole) if it else None
+
+    def _history_open(self):
+        entry = self._history_selected()
+        if not entry:
+            return
+        path = Path(entry.efi_path)
+        if not path.exists():
+            QMessageBox.warning(self, tr.t("history.title"), tr.t("history.missing"))
+            return
+        import os
+        try:
+            os.startfile(str(path))
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("history.title"), str(e))
+
+    def _history_restore(self):
+        entry = self._history_selected()
+        if not entry:
+            return
+        d = QFileDialog.getExistingDirectory(self, tr.t("history.pick_target"))
+        if not d:
+            return
+        try:
+            from ..builder import history
+            out = history.restore(entry.id, Path(d))
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("history.title"), str(e))
+            return
+        self.statusBar().showMessage(tr.t("history.restored").format(path=out), 8000)
 
     def _usb_select(self):
         idx = self.usb_combo.currentIndex()
@@ -1172,6 +1435,11 @@ class MainWindow(QMainWindow):
         )
         plan = BuildPlan(profile=self.profile, options=opts)
         target = Path(self.build_dest.text())
+        self._last_build_options = opts
+        self._last_build_smbios = plan.smbios
+        self._rationale_text = ""
+        self.build_rationale.clear()
+        self.rationale_save_btn.setEnabled(False)
         self.build_progress.setVisible(True)
         self.build_log.clear()
         self.build_log.appendPlainText(tr.t("build.building"))
@@ -1208,11 +1476,51 @@ class MainWindow(QMainWindow):
                 for w in ocv_warn[:15]:
                     log += f"\n  [warn] {w}"
         self.build_log.setPlainText(log)
+        # --- объяснение решений ---
+        self._render_rationale()
         # статус
         if res.stats and res.stats.get("ocvalidate_ok") is False:
             self.statusBar().showMessage(f"ocvalidate: {len(res.stats.get('ocvalidate_errors', []))} ошибок", 6000)
         else:
             self.statusBar().showMessage(tr.t("build.done"), 4000)
+
+    def _render_rationale(self):
+        """Блок «Почему так собрано» по реально сгенерированному config.plist."""
+        text = ""
+        if self.profile:
+            try:
+                from ..knowledge.rationale import explain, render
+                decisions = explain(
+                    self.profile,
+                    getattr(self, "_last_build_options", None),
+                    smbios=getattr(self, "_last_build_smbios", None),
+                    lang=tr.current,
+                )
+                text = render(decisions)
+            except Exception as e:
+                text = f"rationale: {e}"
+        self._rationale_text = text
+        self.build_rationale.setPlainText(text)
+        self.rationale_save_btn.setEnabled(bool(text.strip()))
+
+    def _save_rationale(self):
+        """Сохраняет объяснение рядом с собранным EFI (.md или .txt)."""
+        text = getattr(self, "_rationale_text", "")
+        if not text.strip():
+            return
+        default = ""
+        if getattr(self, "last_build_dir", None):
+            default = str(Path(self.last_build_dir) / "REASONING.md")
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr.t("build.rationale_save"), default,
+            "Markdown (*.md);;Text (*.txt)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+            self.statusBar().showMessage(tr.t("build.rationale_saved"), 5000)
+        except OSError as e:
+            QMessageBox.critical(self, tr.t("build.rationale"), str(e))
 
     def _build_failed(self, err):
         self.build_progress.setVisible(False)

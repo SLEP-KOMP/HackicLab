@@ -219,4 +219,9 @@ class EFIBuilder:
             "dir": str(target),
         }
         res.warnings = dl.log
+        try:
+            from .history import record_build
+            record_build(self.plan, res)
+        except Exception:
+            pass
         return res

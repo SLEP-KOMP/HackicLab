@@ -30,6 +30,7 @@ class USBWriteResult:
     ok: bool
     error: str = ""
     target_letter: str = ""
+    backup_path: str = ""
     log: list = field(default_factory=list)
 
 
@@ -269,8 +270,45 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     return f"{target}:"
 
 
-def copy_efi(source_efi: Path, target_letter: str, log=None) -> None:
-    """Копирует содержимое собранной папки (EFI/) на флешку."""
+def _backup_root() -> Path:
+    """Каталог резервных копий EFI (в профиле пользователя)."""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / "HackicLab" / "backups"
+
+
+def backup_efi(efi_dir: Path, backup_root: Optional[Path] = None) -> Path:
+    """Копирует существующую EFI в резервную папку и возвращает путь копии.
+
+    Вызывается перед перезаписью EFI на флешке: старая структура сохраняется
+    целиком, чтобы неудачный ремонт можно было откатить.
+    """
+    import shutil
+    from datetime import datetime
+
+    src = Path(efi_dir)
+    if not src.is_dir():
+        raise RuntimeError(f"Резервировать нечего: {src} — не папка")
+
+    root = Path(backup_root) if backup_root else _backup_root()
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dst = root / f"{src.name}-{stamp}"
+    suffix = 1
+    while dst.exists():
+        dst = root / f"{src.name}-{stamp}-{suffix}"
+        suffix += 1
+    shutil.copytree(str(src), str(dst))
+    return dst
+
+
+def copy_efi(source_efi: Path, target_letter: str, log=None,
+             backup: bool = True, backup_root: Optional[Path] = None) -> Optional[Path]:
+    """Копирует содержимое собранной папки (EFI/) на флешку.
+
+    Если на флешке уже есть EFI, она сначала копируется в резервную папку
+    (``backup=True``), и только после успешного бэкапа удаляется. При ошибке
+    бэкапа старая EFI остаётся нетронутой.
+    """
     def _log(msg):
         if log:
             log(msg)
@@ -308,8 +346,14 @@ def copy_efi(source_efi: Path, target_letter: str, log=None) -> None:
 
     # удаляем старый EFI на флешке
     old = Path(f"{letter}:\\EFI")
+    backup_path: Optional[Path] = None
     if old.exists():
         import shutil
+        if backup:
+            backup_path = backup_efi(old, backup_root)
+            _log(f"Резервная копия старой EFI: {backup_path}")
+        else:
+            _log("Старая EFI будет удалена без резервной копии")
         shutil.rmtree(str(old))
         _log(f"Удалена старая EFI на {letter}:\\EFI")
 
@@ -324,14 +368,19 @@ def copy_efi(source_efi: Path, target_letter: str, log=None) -> None:
         _log(f"  {item.name} → {letter}:\\")
 
     _log("EFI записана на флешку.")
+    return backup_path
 
 
 def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
-                     recovery_macos: str = "", log=None) -> USBWriteResult:
+                     recovery_macos: str = "", log=None,
+                     backup: bool = True,
+                     backup_root: Optional[Path] = None) -> USBWriteResult:
     """Полный цикл: (опц.) форматирование + запись EFI + возврат буквы.
 
     Если задан recovery_macos (напр. "macOS Sonoma") — дополнительно скачивает
     macOS recovery и раскладывает com.apple.recovery.boot (полноценный установщик).
+    Перед перезаписью существующей EFI на флешке делается резервная копия
+    (``backup=True``); путь к ней возвращается в ``USBWriteResult.backup_path``.
     """
     res = USBWriteResult(ok=False, log=[])
     if log:
@@ -358,7 +407,12 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
             if log:
                 log(f"Флешка отформатирована: {target_letter}")
 
-        copy_efi(source_efi, target_letter, log=log)
+        backup_path = copy_efi(source_efi, target_letter, log=log,
+                               backup=backup, backup_root=backup_root)
+        if backup_path:
+            res.backup_path = str(backup_path)
+            if log:
+                log(f"Резервная копия старой EFI: {backup_path}")
 
         recovery_msg = ""
         if recovery_macos:
