@@ -423,25 +423,84 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
         shutil.rmtree(str(old))
         _log(f"Удалена старая EFI на {letter}:\\EFI")
 
-    # копируем всё содержимое EFI
+    # копируем содержимое EFI в <буква>:\EFI (стандартная структура ESP)
     import shutil
+    old.mkdir(parents=True, exist_ok=True)
     for item in src_efi_core.iterdir():
-        dst = Path(f"{letter}:\\") / item.name
+        dst = old / item.name
         if item.is_dir():
             shutil.copytree(str(item), str(dst), dirs_exist_ok=True)
         else:
             shutil.copy2(str(item), str(dst))
-        _log(f"  {item.name} → {letter}:\\")
+        _log(f"  {item.name} → {letter}:\\EFI\\")
 
     _log("EFI записана на флешку.")
     return backup_path
+
+
+def inject_usb_map(target_letter: str, log=None) -> bool:
+    """Создаёт UTBMap.kext на флешке и регистрирует его в config.plist."""
+    import plistlib
+    from .usb_map import generate_auto_map, write_map_kext, summarise
+
+    def _log(msg: str):
+        if log:
+            log(msg)
+
+    letter = target_letter.rstrip(":\\")
+    oc = Path(f"{letter}:\\EFI\\OC")
+    cfg_path = oc / "config.plist"
+    if not cfg_path.is_file():
+        _log("USB map: config.plist не найден — пропускаю")
+        return False
+
+    work = Path(tempfile.mkdtemp(prefix="hackiclab_usbmap_"))
+    try:
+        _log("USB map: определяю порты…")
+        plist = generate_auto_map(work, log=_log)
+        if not plist:
+            _log("USB map: порты не найдены — пропускаю")
+            return False
+        write_map_kext(plist, oc / "Kexts")
+        with open(cfg_path, "rb") as f:
+            cfg = plistlib.load(f)
+        adds = cfg.setdefault("Kernel", {}).setdefault("Add", [])
+        entry = next((e for e in adds
+                      if (e.get("BundlePath") or "").lower() == "utbmap.kext"), None)
+        changed = False
+        if entry is None:
+            adds.append({
+                "Arch": "x86_64",
+                "BundlePath": "UTBMap.kext",
+                "Comment": "USB port map",
+                "Enabled": True,
+                "ExecutablePath": "",
+                "MaxKernel": "",
+                "MinKernel": "",
+                "PlistPath": "Contents/Info.plist",
+            })
+            changed = True
+        elif not entry.get("Enabled"):
+            entry["Enabled"] = True
+            changed = True
+        if changed:
+            shutil.copy2(str(cfg_path), str(cfg_path.with_suffix(".plist.bak")))
+            with open(cfg_path, "wb") as f:
+                plistlib.dump(cfg, f, fmt=plistlib.FMT_XML, sort_keys=False)
+        s = summarise(plist)
+        _log(f"USB map: {s['ports']} портов в {s['controllers']} контроллере(ах) "
+             f"добавлено в UTBMap.kext")
+        return True
+    finally:
+        shutil.rmtree(str(work), ignore_errors=True)
 
 
 def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                      recovery_macos: str = "", log=None,
                      backup: bool = True,
                      backup_root: Optional[Path] = None,
-                     drive_letter: str = "") -> USBWriteResult:
+                     drive_letter: str = "",
+                     make_usb_map: bool = True) -> USBWriteResult:
     """Полный цикл: (опц.) форматирование + запись EFI + возврат буквы.
 
     Если задан recovery_macos (напр. "macOS Sonoma") — дополнительно скачивает
@@ -485,6 +544,13 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
             res.backup_path = str(backup_path)
             if log:
                 log(f"Резервная копия старой EFI: {backup_path}")
+
+        if make_usb_map:
+            try:
+                inject_usb_map(target_letter, log=log)
+            except Exception as e:
+                if log:
+                    log(f"USB map: ошибка ({e})")
 
         recovery_msg = ""
         if recovery_macos:

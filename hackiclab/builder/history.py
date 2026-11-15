@@ -89,6 +89,37 @@ def remove(entry_id: str, root: Optional[Path] = None) -> bool:
     return False
 
 
+def clear_entries(root: Optional[Path] = None) -> int:
+    """Удаляет записи истории; экспортированные JSON-файлы не трогает."""
+    base = Path(root) if root else history_dir()
+    if not base.is_dir():
+        return 0
+    count = 0
+    for path in base.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict) or "id" not in data or "efi_path" not in data:
+            continue
+        try:
+            path.unlink()
+            count += 1
+        except Exception:
+            continue
+    return count
+
+
+def export_entries(output: Path, root: Optional[Path] = None) -> Path:
+    """Сохраняет историю сборок в JSON-файл."""
+    out = Path(output)
+    data = [asdict(e) for e in list_entries(root)]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    return out
+
+
 def restore(entry_id: str, target_dir: Path, root: Optional[Path] = None) -> Path:
     """Копирует EFI записи в target_dir (внутрь целевой папки)."""
     entry = get(entry_id, root)

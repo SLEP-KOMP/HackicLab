@@ -114,13 +114,15 @@ class USBWriteWorker(QThread):
     signal = Signal(str)
 
     def __init__(self, source_efi: Path, device: str, skip_format: bool,
-                 recovery_macos: str = "", drive_letter: str = ""):
+                 recovery_macos: str = "", drive_letter: str = "",
+                 make_usb_map: bool = True):
         super().__init__()
         self.source_efi = source_efi
         self.device = device
         self.skip_format = skip_format
         self.recovery_macos = recovery_macos
         self.drive_letter = drive_letter
+        self.make_usb_map = make_usb_map
 
     def run(self):
         try:
@@ -129,6 +131,7 @@ class USBWriteWorker(QThread):
                                    skip_format=self.skip_format,
                                    recovery_macos=self.recovery_macos,
                                    drive_letter=self.drive_letter,
+                                   make_usb_map=self.make_usb_map,
                                    log=self._log)
             self.done.emit(res)
         except Exception as e:
@@ -942,6 +945,13 @@ class MainWindow(QMainWindow):
         self.usb_recovery_chk.toggled.connect(self._usb_recovery_toggle)
         v.addWidget(rec_card)
 
+        # --- 3.5. Карта USB-портов ---
+        self.usb_make_map = QCheckBox(tr.t("usb.make_map"))
+        self.usb_make_map.setChecked(True)
+        v.addWidget(self.usb_make_map)
+        map_desc = _muted(page, tr.t("usb.make_map_desc")); map_desc.setWordWrap(True)
+        v.addWidget(map_desc)
+
         # --- 3.6. История сборок ---
         hist_card = self._card(page)
         hv = QVBoxLayout(hist_card)
@@ -962,8 +972,16 @@ class MainWindow(QMainWindow):
         self.history_restore_btn = QPushButton(tr.t("history.restore"))
         self.history_restore_btn.setObjectName("ghost")
         self.history_restore_btn.clicked.connect(self._history_restore)
+        self.history_clear_btn = QPushButton(tr.t("history.clear"))
+        self.history_clear_btn.setObjectName("ghost")
+        self.history_clear_btn.clicked.connect(self._history_clear)
+        self.history_save_btn = QPushButton(tr.t("history.save"))
+        self.history_save_btn.setObjectName("ghost")
+        self.history_save_btn.clicked.connect(self._history_save)
         hbtns.addWidget(self.history_open_btn)
         hbtns.addWidget(self.history_restore_btn)
+        hbtns.addWidget(self.history_clear_btn)
+        hbtns.addWidget(self.history_save_btn)
         hbtns.addStretch()
         hv.addLayout(hbtns)
         v.addWidget(hist_card)
@@ -1105,6 +1123,32 @@ class MainWindow(QMainWindow):
             os.startfile(str(path))
         except Exception as e:
             QMessageBox.critical(self, tr.t("history.title"), str(e))
+
+    def _history_clear(self):
+        if QMessageBox.question(
+                self, tr.t("history.title"),
+                tr.t("history.clear_ask")) != QMessageBox.Yes:
+            return
+        from ..builder import history
+        n = history.clear_entries()
+        self._history_refresh()
+        self.statusBar().showMessage(
+            tr.t("history.cleared").format(count=n), 4000)
+
+    def _history_save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr.t("history.save"), "HackicLab-history.json",
+            "JSON (*.json);;All files (*)")
+        if not path:
+            return
+        try:
+            from ..builder import history
+            out = history.export_entries(Path(path))
+        except Exception as e:
+            QMessageBox.critical(self, tr.t("history.title"), str(e))
+            return
+        self.statusBar().showMessage(
+            tr.t("history.saved").format(path=out), 4000)
 
     def _history_restore(self):
         entry = self._history_selected()
@@ -1251,7 +1295,7 @@ class MainWindow(QMainWindow):
         cancel_btn.clicked.connect(dlg.reject)
 
         if dlg.exec() == QDialog.Accepted:
-            self._usb_run(device, mode, planned)
+            self._usb_run(device, mode, planned, self.usb_make_map.isChecked())
 
     def _ensure_admin(self) -> bool:
         """Проверяет права администратора без запуска второго окна."""
@@ -1265,7 +1309,8 @@ class MainWindow(QMainWindow):
                             tr.t("usb.admin_manual"))
         return False
 
-    def _usb_run(self, device: str, mode: str, planned_letter: str = ""):
+    def _usb_run(self, device: str, mode: str, planned_letter: str = "",
+                 make_usb_map: bool = True):
         """Запуск записи EFI на флешку в фоновом потоке."""
         if getattr(self, "_usb_worker", None) and self._usb_worker.isRunning():
             return
@@ -1279,7 +1324,7 @@ class MainWindow(QMainWindow):
         if getattr(self, "usb_recovery_chk", None) and self.usb_recovery_chk.isChecked():
             recovery_macos = self.usb_recovery_ver.currentData() or ""
         self._usb_worker = USBWriteWorker(source, device, skip_format, recovery_macos,
-                                          planned_letter)
+                                          planned_letter, make_usb_map)
         self._usb_worker.signal.connect(self._usb_worker_log)
         self._usb_worker.done.connect(self._usb_done)
         self._usb_worker.failed.connect(self._usb_failed)
