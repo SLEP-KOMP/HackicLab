@@ -2,11 +2,14 @@
 
 **Интеллектуальный сборщик Hackintosh EFI** — GUI-приложение (RU/EN), которое сканирует ваше железо на Windows, автоматически подбирает и **реально скачивает** kext и OpenCore, генерирует `config.plist` по **полной схеме OpenCore**, прогоняет его через **ocvalidate** начисто и даёт рекомендации. Включает запись EFI на USB и полноценный установщик macOS Recovery.
 
+[![Release](https://img.shields.io/github/v/release/SLEP-KOMP/HackicLab?include_prereleases&style=flat-square&label=Release)](https://github.com/SLEP-KOMP/HackicLab/releases)
+[![Downloads](https://img.shields.io/github/downloads/SLEP-KOMP/HackicLab/total?style=flat-square&label=Downloads)](https://github.com/SLEP-KOMP/HackicLab/releases)
 [![Лицензия: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Версия](https://img.shields.io/badge/version-v1.0.0-brightgreen.svg)](https://github.com/SLEP-KOMP/HackicLab/releases)
 [![Платформа: Windows](https://img.shields.io/badge/platform-Windows-0078d6.svg)](https://github.com/SLEP-KOMP/HackicLab)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![GUI: PySide6](https://img.shields.io/badge/GUI-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
+
+> **Статус сборки:** опубликованная версия v1.0.0 помечена GitHub как предварительный выпуск (Pre-release). Функции активно развиваются; перед операциями записи EFI на USB обязательно сохраняйте резервные копии важных данных.
 
 ## Возможности
 
@@ -30,6 +33,8 @@
 ## Загрузка
 
 Готовый портативный дистрибутив для Windows — в разделе [Releases](https://github.com/SLEP-KOMP/HackicLab/releases). Просто скачайте `HackicLab.exe` и запустите — установка не требуется.
+
+[Скачать последнюю опубликованную сборку](https://github.com/SLEP-KOMP/HackicLab/releases/latest).
 
 ## Технологии
 
