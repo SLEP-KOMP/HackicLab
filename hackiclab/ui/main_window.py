@@ -17,6 +17,7 @@ from PySide6.QtGui import QFont, QIcon, QColor
 
 from ..i18n import tr, LANGS
 from ..themes import get_qss, THEMES
+from .. import __version__
 from ..scanner import WindowsScanner, HardwareProfile
 from ..builder import (
     BuildPlan, BuildOptions, generate_config_plist, EFIBuilder,
@@ -1713,7 +1714,7 @@ class MainWindow(QMainWindow):
         tv.addWidget(_h2(page, tr.t("about.tech_title")))
         tv.addWidget(_muted(page, tr.t("about.tech_text")))
         tv.addSpacing(6)
-        tv.addWidget(_muted(page, f"{tr.t('about.version')} 0.1.0 · {tr.t('about.license')}"))
+        tv.addWidget(_muted(page, f"{tr.t('about.version')} {__version__} · {tr.t('about.license')}"))
         v.addWidget(c_tech)
 
         # Дисклеймер
