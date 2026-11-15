@@ -31,8 +31,20 @@ class Analyzer:
         self.issues = []
         self._check_required_kexts_present(folder)
         self._check_open_core_present(folder)
+        self._check_amd_patches(folder)
         self._check_hardware_warnings()
         return self.issues
+
+    @staticmethod
+    def _oc_dir(folder: Path) -> Path:
+        """Папка OC: принимаем и корень с EFI/, и саму папку EFI."""
+        cand = folder / "EFI" / "OC"
+        return cand if cand.exists() else folder / "OC"
+
+    @staticmethod
+    def _boot_dir(folder: Path) -> Path:
+        cand = folder / "EFI" / "BOOT"
+        return cand if cand.exists() else folder / "BOOT"
 
     def _discover_kexts(self, folder: Path) -> set[str]:
         """Ищет *.kext в папке (рекурсивно) и имена из config.plist."""
@@ -41,7 +53,7 @@ class Analyzer:
             names.add(p.name)
             names.add(p.stem)
         # также ищем имена кекстов в config.plist
-        cfg = folder / "EFI" / "OC" / "config.plist"
+        cfg = self._oc_dir(folder) / "config.plist"
         if cfg.exists():
             try:
                 import plistlib
@@ -83,8 +95,8 @@ class Analyzer:
                     "Есть в папке, но не требуется вашим железом", kext=nm))
 
     def _check_open_core_present(self, folder: Path):
-        oc = folder / "EFI" / "OC" / "OpenCore.efi"
-        boot = folder / "EFI" / "BOOT" / "BOOTx64.efi"
+        oc = self._oc_dir(folder) / "OpenCore.efi"
+        boot = self._boot_dir(folder) / "BOOTx64.efi"
         if not oc.exists() or not boot.exists():
             self.issues.append(AnalysisIssue(
                 Severity.WARNING, "oc_missing",
@@ -92,9 +104,75 @@ class Analyzer:
                 "В папке EFI нет OpenCore.efi и/или BOOTx64.efi",
                 suggestion="Скачайте/укажите OpenCorePkg или разрешите автозагрузку"))
 
+    def _check_amd_patches(self, folder: Path):
+        """На Ryzen без патчей ядра macOS не стартует — проверяем config.plist."""
+        if self.profile.cpu.vendor != "amd":
+            return
+        cfg = self._oc_dir(folder) / "config.plist"
+        if not cfg.exists():
+            return
+        try:
+            import plistlib
+            data = plistlib.loads(cfg.read_bytes())
+        except Exception:
+            return
+        patches = [p for p in (data.get("Kernel", {}).get("Patch", []) or [])
+                   if isinstance(p, dict) and p.get("Enabled", True)]
+        if patches:
+            return
+        self.issues.append(AnalysisIssue(
+            Severity.ERROR, "amd_patches_missing",
+            "Нет патчей ядра AMD Vanilla",
+            "В config.plist отсутствуют записи Kernel/Patch, а на Ryzen без них "
+            "macOS не загрузится.",
+            suggestion="Соберите EFI в HackicLab или добавьте патчи AMD Vanilla."))
+
+    def _check_gpu(self):
+        """Карты, которые macOS не заводит даже с подменой device-id."""
+        g = self.profile.dgpu
+        if not g or (g.vendor or "").lower() != "amd":
+            return
+        did = (g.device_id or "").lower().replace("0x", "")
+        if did != "6fdf":
+            return
+        self.issues.append(AnalysisIssue(
+            Severity.ERROR, "gpu_rx580_2048sp",
+            "RX 580 2048SP не поддерживается macOS",
+            "Dortania относит карты с device-id 6FDF к неподдерживаемым: "
+            "подмена device-id на 67DF обычно не даёт аппаратного ускорения. "
+            "Рабочий путь — прошивка VBIOS от RX 570.",
+            suggestion="Прошейте VBIOS от RX 570 или возьмите карту из GPU Buyers Guide."))
+
+    def _check_network_notes(self):
+        net = self.profile.net
+        eth = (net.eth_name or "").lower()
+        if "i211" in eth:
+            self.issues.append(AnalysisIssue(
+                Severity.INFO, "eth_i211_appleigb",
+                "Intel I211 требует AppleIGB",
+                "IntelMausi не покрывает I211; на Monterey и новее нужен AppleIGB "
+                "(I210/I211/I350).",
+                kext="AppleIGB",
+                suggestion="Добавьте AppleIGB.kext вместо IntelMausi."))
+        if (net.wifi_chipset or "").lower() == "broadcom":
+            self.issues.append(AnalysisIssue(
+                Severity.INFO, "wifi_broadcom_oclp",
+                "Broadcom Wi-Fi на Sonoma и новее",
+                "BCM4360/BCM43602 потеряли поддержку в macOS 14; вернуть их можно "
+                "только root patch-ем OpenCore Legacy Patcher.",
+                suggestion="На Sonoma+ примените root patch OCLP (Modern Wireless)."))
+        if (net.wifi_chipset or "").lower() == "mediatek" and net.has_bt:
+            self.issues.append(AnalysisIssue(
+                Severity.INFO, "bt_mediatek_unsupported",
+                "Bluetooth MediaTek тоже не работает",
+                "Драйвера под macOS нет ни для Wi-Fi, ни для Bluetooth этого модуля.",
+                suggestion="Используйте USB-Bluetooth-донгл с поддержкой macOS."))
+
     def _check_hardware_warnings(self):
         """Добавляет architectural предупреждения, не зависящие от папки."""
         p = self.profile
+        self._check_gpu()
+        self._check_network_notes()
         name = p.cpu.name.lower()
         if p.cpu.vendor == "amd" and p.platform == "laptop":
             self.issues.append(AnalysisIssue(

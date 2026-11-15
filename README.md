@@ -22,6 +22,8 @@
 - **Аудит готового EFI** прямо на вкладке «Валидация»: структура `BOOT/OpenCore.efi`, UEFI-драйверы, kexts и порядок загрузки (Lilu), осиротевшие ACPI-ренеймы, USB-маппинг, PlatformInfo/SMBIOS, SIP и boot-args — с уровнями «ошибка / предупреждение / инфо». 
 - **Выбор macOS-версии** перед сборкой (Tahoe…High Sierra) с защитой от несовместимости железа.
 - **Анализ ваших файлов**: укажите папку с kext/EFI — HackicLab сопоставит с железом, найдёт недостающие kext, несовместимости и даст рекомендации.
+- **Проверки совместимости по источникам** — RX 580 2048SP (device-id `6FDF`) помечается как неподдерживаемая, Intel I211 получает AppleIGB вместо IntelMausi, MediaTek Wi-Fi/BT и Broadcom на Sonoma+ получают явные предупреждения, на Ryzen проверяется наличие патчей AMD Vanilla в `config.plist`.
+- **Вкладка «Источники»** — проверенные ссылки (Dortania OpenCore/AMD/GPU/Wireless, AppleIGB, itlwm, OCLP, примеры готовых EFI mikigal/subhead/Maxritz) с подбором под ваше железо.
 - **Запись EFI на USB** (по образцу hackmate, современнее): выбор флешки, режимы Full/Formatted/Repair, подтверждение вводом фразы, BIOS-чеклист.
 - **Карта USB-портов (UTBMap)** — порты читаются из DSDT прошивки (через `iasl`), при недоступности — через `usbdump.exe` из USBToolBox; готовая карта сохраняется как `UTBMap.kext` в выбранную EFI.
 - **Карта дисков и загрузчиков** — только чтение: диски, разделы, ESP, Windows / OpenCore / Linux / rEFInd, предупреждения о дубликатах OpenCore и MBR-разметке.
@@ -75,7 +77,7 @@ python -m PyInstaller --noconfirm --clean HackicLab.spec
 ```
 hackiclab/
   scanner/      # модели + сканер железа Windows, карта дисков (diskmap)
-  knowledge/    # kextDB, OC-платформы, SSDT-логика, rationale
+  knowledge/    # kextDB, OC-платформы, SSDT-логика, rationale, sources
   builder/      # загрузка, config.plist, SMBIOS, EFI, ocvalidate,
                 # config_editor, history, usb_writer, usb_map (UTBMap)
   analyzer/     # модели, анализ файлов, аудит EFI (efi_health), лог OC (oc_log)
@@ -90,7 +92,7 @@ HackicLab.spec  # конфигурация PyInstaller
 
 ## Дорожная карта
 
-1. **Сейчас**: скан железа (с точной детекцией Wi-Fi/BT), реальная загрузка OpenCore/kext, генерация `config.plist` по полной схеме OpenCore, выбор macOS-версии, валидация ocvalidate начисто, авто-подбор SMBIOS под версию, отдельная вкладка «Валидация», запись EFI на USB + установщик macOS Recovery, анализ своих EFI-файлов, аудит готового EFI, объяснение решений («Почему так собрано»), быстрые правки `config.plist`, безопасная перезапись с резервной копией, история сборок, карта USB-портов (UTBMap), карта дисков и загрузчиков, проверка лога OpenCore.
+1. **Сейчас**: скан железа (с точной детекцией Wi-Fi/BT), реальная загрузка OpenCore/kext, генерация `config.plist` по полной схеме OpenCore, выбор macOS-версии, валидация ocvalidate начисто, авто-подбор SMBIOS под версию, отдельная вкладка «Валидация», запись EFI на USB + установщик macOS Recovery, анализ своих EFI-файлов, аудит готового EFI, объяснение решений («Почему так собрано»), быстрые правки `config.plist`, безопасная перезапись с резервной копией, история сборок, карта USB-портов (UTBMap), карта дисков и загрузчиков, проверка лога OpenCore, каталог источников и проверки совместимости (RX 580 2048SP, Intel I211, Wi-Fi/BT, AMD-патчи).
 2. **Скоро**: процентный прогресс скачивания, сборка баннеров/скриншотов для README.
 3. **Premium (будущее)**: облачные профили, авто-обновления, расширенный анализ совместимости.
 

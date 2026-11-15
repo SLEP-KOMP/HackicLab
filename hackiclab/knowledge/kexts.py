@@ -60,7 +60,8 @@ _reg({
     "IntelMausiEthernet": KextEntry("IntelMausiEthernet", "acidanthera/IntelMausi", "IntelMausi-", "Intel I219/I218/I217", bundle_name="IntelMausi"),
     "AppleIGC": KextEntry("AppleIGC", "SongXiaoXi/AppleIGC", "AppleIGC", "Intel I225-V / I226-V 2.5GbE"),
     "AppleIntelE1000e": KextEntry("AppleIntelE1000e", "chris1111/AppleIntelE1000e", "AppleIntelE1000e-", "Intel 82578/82577/82574/82567"),
-    "AppleIntelI210Ethernet": KextEntry("AppleIntelI210Ethernet", "donatengit/AppleIntelI210Ethernet", "AppleIntelI210-", "Intel I211/I210"),
+    "AppleIntelI210Ethernet": KextEntry("AppleIntelI210Ethernet", "donatengit/AppleIntelI210Ethernet", "AppleIntelI210-", "Intel I211/I210 (легаси, до Monterey)"),
+    "AppleIGB": KextEntry("AppleIGB", "ayushere/AppleIGB", "AppleIGB-", "Intel I210/I211/I350 на Monterey+", bundle_name="AppleIGB", os_min="monterey"),
     "RealtekRTL8111": KextEntry("RealtekRTL8111", "Mieze/RTL8111_driver_for_OS_X", "RealtekRTL8111-", "Realtek RTL8111/RTL8168"),
     "RealtekRTL8125": KextEntry("LucyRTL8125Ethernet", "Mieze/LucyRTL8125Ethernet", "LucyRTL8125Ethernet-", "Realtek RTL8125 2.5GbE"),
     "NullEthernet": KextEntry("NullEthernet", "jcreed69/NullEthernet", "NullEthernet", "Заглушка Ethernet для iMessage"),
@@ -246,12 +247,12 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     if profile.audio.codec:
         add("AppleALC")
 
-    # Сеть
-    el = (profile.net.eth_chipset or "").lower()
+    # Сеть: чипсет приходит общим («intel»), модель уточняется по имени устройства
+    el = f"{profile.net.eth_chipset or ''} {profile.net.eth_name or ''}".lower()
     if "i219" in el or "i218" in el or "i217" in el:
         add("IntelMausiEthernet")
     elif "i211" in el or "i210" in el:
-        add("AppleIntelI210Ethernet")
+        add("AppleIGB")
     elif "i225" in el or "i226" in el:
         add("AppleIGC")
     elif "rtl8125" in el:

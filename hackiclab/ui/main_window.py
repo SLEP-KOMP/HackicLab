@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
@@ -24,6 +25,10 @@ from ..builder import (
     generate_smbios,
 )
 from ..knowledge.kexts import smbios_model_for, select_kexts
+from ..knowledge.sources import (
+    GROUP_COMMUNITY, GROUP_EFI, GROUP_GUIDES, GROUP_HARDWARE,
+    note_of, sources_by_group, sources_for, title_of,
+)
 from ..analyzer import Analyzer
 
 # ---- Тёмная тема (QSS) ----
@@ -366,6 +371,7 @@ class MainWindow(QMainWindow):
             ("usb.nav", "💾"),
             ("usbmap.nav", "🔌"),
             ("nav.analyze", "🔍"),
+            ("nav.sources", "📚"),
             ("nav.settings", "⚙"),
             ("nav.about", "ℹ"),
         ]
@@ -406,11 +412,12 @@ class MainWindow(QMainWindow):
         self.page_usb = self._build_usb()
         self.page_ports = self._build_ports()
         self.page_analyze = self._build_analyze()
+        self.page_sources = self._build_sources()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
         for page in (self.page_scan, self.page_build, self.page_validate,
                      self.page_usb, self.page_ports, self.page_analyze,
-                     self.page_settings, self.page_about):
+                     self.page_sources, self.page_settings, self.page_about):
             self.stack.addWidget(self._scroll_page(page))
 
     # ---- pages ----
@@ -1512,6 +1519,80 @@ class MainWindow(QMainWindow):
     def _diskmap_failed(self, err: str):
         self.disk_warn.setText(str(err))
 
+    # ---- sources ----
+    def _link_label(self, parent, src) -> QWidget:
+        """Строка-ссылка: заголовок открывается в браузере, ниже пояснение."""
+        w = QWidget(parent)
+        lv = QVBoxLayout(w); lv.setContentsMargins(0, 2, 0, 2); lv.setSpacing(1)
+        a = QLabel(w)
+        a.setTextFormat(Qt.RichText)
+        a.setText(
+            f'<a href="{src.url}" style="color:#89b4fa; text-decoration:none;">'
+            f'{html.escape(title_of(src, tr.current))}</a>'
+        )
+        a.setOpenExternalLinks(True)
+        a.setWordWrap(True)
+        a.setToolTip(src.url)
+        lv.addWidget(a)
+        note = note_of(src, tr.current)
+        if note:
+            n = _muted(w, note); n.setWordWrap(True)
+            lv.addWidget(n)
+        return w
+
+    def _build_sources(self):
+        page = QWidget()
+        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
+        v.addWidget(_h1(page, tr.t("sources.title")))
+        hint = _muted(page, tr.t("sources.hint")); hint.setWordWrap(True)
+        v.addWidget(hint)
+
+        self._src_ctx_page = page
+        self._src_ctx = QVBoxLayout(); self._src_ctx.setSpacing(2)
+        v.addLayout(self._src_ctx)
+
+        for group, key in ((GROUP_HARDWARE, "sources.hardware"),
+                           (GROUP_GUIDES, "sources.guides"),
+                           (GROUP_EFI, "sources.efi"),
+                           (GROUP_COMMUNITY, "sources.community")):
+            items = sources_by_group(group, tr.current)
+            if not items:
+                continue
+            card = self._card(page)
+            cv = QVBoxLayout(card); cv.setContentsMargins(14, 10, 14, 10); cv.setSpacing(2)
+            cv.addWidget(_h2(page, tr.t(key)))
+            for src in items:
+                cv.addWidget(self._link_label(page, src))
+            v.addWidget(card)
+        v.addStretch()
+        self._fill_sources_ctx()
+        return page
+
+    def _fill_sources_ctx(self):
+        """Ссылки под текущий профиль: после сканирования и при смене языка."""
+        lay = getattr(self, "_src_ctx", None)
+        page = getattr(self, "_src_ctx_page", None)
+        if lay is None or page is None:
+            return
+        while lay.count():
+            it = lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+        prof = getattr(self, "profile", None)
+        if not prof:
+            lbl = _muted(page, tr.t("sources.no_profile")); lbl.setWordWrap(True)
+            lay.addWidget(lbl)
+            return
+        # общие ссылки уже есть в блоках ниже — в контексте только специфика
+        skip = {"oc_guide", "insanelymac", "tonymacx86"}
+        picked = [s for s in sources_for(prof) if s.key not in skip]
+        if not picked:
+            return
+        lay.addWidget(_h2(page, tr.t("sources.for_hw")))
+        for src in picked:
+            lay.addWidget(self._link_label(page, src))
+
     def _build_analyze(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
@@ -1805,7 +1886,7 @@ class MainWindow(QMainWindow):
             w.deleteLater()
         self._create_pages()
 
-        icons = ["🖥", "⚙", "✔", "💾", "🔌", "🔍", "⚙", "ℹ"]
+        icons = ["🖥", "⚙", "✔", "💾", "🔌", "🔍", "📚", "⚙", "ℹ"]
         self.nav.blockSignals(True)
         for i, key in enumerate(self._nav_keys):
             item = self.nav.item(i)
@@ -1898,6 +1979,7 @@ class MainWindow(QMainWindow):
             cv.addWidget(vv)
             self.hw_grid.addWidget(c)
         self.scan_save_btn.setVisible(True)
+        self._fill_sources_ctx()
         self.statusBar().showMessage(tr.t("scan.done"), 3000)
 
     def _scan_failed(self, err):
