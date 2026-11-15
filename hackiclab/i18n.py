@@ -19,6 +19,8 @@ T = {
     "ru": {
         # app
         "app.title": "HackicLab",
+        "common.yes": "Да",
+        "common.no": "Нет",
         "app.tagline": "Интеллектуальный сборщик Hackintosh EFI",
         "app.lang_busy": "Дождитесь завершения текущей операции, затем смените язык.",
         "app.lang_changed": "Язык интерфейса изменён.",
@@ -331,6 +333,8 @@ T = {
     },
     "en": {
         "app.title": "HackicLab",
+        "common.yes": "Yes",
+        "common.no": "No",
         "app.tagline": "Intelligent Hackintosh EFI builder",
         "app.lang_busy": "Wait for the current operation to finish, then change the language.",
         "app.lang_changed": "Interface language changed.",

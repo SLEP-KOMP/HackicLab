@@ -98,11 +98,15 @@ class EFILayout:
                 k = k + ".kext"
             exe = k[:-5]
             arch = "Any" if exe in ("Lilu", "VirtualSMC") else "x86_64"
+            bundle = self.oc / "Kexts" / k
+            macos_dir = bundle / "Contents" / "MacOS"
+            exe_path = (f"Contents/MacOS/{exe}"
+                        if (macos_dir / exe).is_file() else "")
             adds.append({
                 "Arch": arch,
                 "BundlePath": k,
                 "Enabled": True,
-                "ExecutablePath": f"Contents/MacOS/{exe}",
+                "ExecutablePath": exe_path,
                 "MaxKernel": "",
                 "MinKernel": "",
                 "PlistPath": "Contents/Info.plist",

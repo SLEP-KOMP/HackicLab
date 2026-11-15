@@ -438,6 +438,74 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
     return backup_path
 
 
+def _ensure_usbtoolbox(target_letter: str, log=None) -> bool:
+    """Кладёт USBToolBox.kext на флешку и регистрирует его в config.plist."""
+    import plistlib
+    from ..knowledge.kexts import KEXT_DB
+
+    def _log(msg: str):
+        if log:
+            log(msg)
+
+    letter = target_letter.rstrip(":\\")
+    oc = Path(f"{letter}:\\EFI\\OC")
+    cfg_path = oc / "config.plist"
+    kexts = oc / "Kexts"
+    dst = kexts / "USBToolBox.kext"
+
+    if not dst.exists():
+        try:
+            from .downloader import Downloader
+            tmp = Path(tempfile.mkdtemp(prefix="hackiclab_utb_"))
+            try:
+                Downloader().download_kext(KEXT_DB["USBToolBox"], tmp)
+                src = next((p for p in tmp.rglob("USBToolBox.kext")
+                            if p.is_dir()), None)
+                if not src:
+                    _log("USBToolBox: кекст не найден в архиве")
+                    return False
+                shutil.copytree(str(src), str(dst), dirs_exist_ok=True)
+                _log("USBToolBox.kext → EFI/OC/Kexts")
+            finally:
+                shutil.rmtree(str(tmp), ignore_errors=True)
+        except Exception as e:
+            _log(f"USBToolBox: не удалось скачать ({e})")
+            return False
+
+    if not cfg_path.is_file():
+        return False
+    try:
+        with open(cfg_path, "rb") as f:
+            cfg = plistlib.load(f)
+        adds = cfg.setdefault("Kernel", {}).setdefault("Add", [])
+        entry = next((e for e in adds
+                      if (e.get("BundlePath") or "").lower() == "usbtoolbox.kext"), None)
+        changed = False
+        if entry is None:
+            adds.append({
+                "Arch": "x86_64",
+                "BundlePath": "USBToolBox.kext",
+                "Comment": "USBToolBox",
+                "Enabled": True,
+                "ExecutablePath": "",
+                "MaxKernel": "",
+                "MinKernel": "",
+                "PlistPath": "Contents/Info.plist",
+            })
+            changed = True
+        elif entry.get("ExecutablePath"):
+            entry["ExecutablePath"] = ""
+            changed = True
+        if changed:
+            shutil.copy2(str(cfg_path), str(cfg_path.with_suffix(".plist.bak")))
+            with open(cfg_path, "wb") as f:
+                plistlib.dump(cfg, f, fmt=plistlib.FMT_XML, sort_keys=False)
+        return True
+    except Exception as e:
+        _log(f"USBToolBox: config.plist не обновлён ({e})")
+        return False
+
+
 def inject_usb_map(target_letter: str, log=None) -> bool:
     """Создаёт UTBMap.kext на флешке и регистрирует его в config.plist."""
     import plistlib
@@ -456,6 +524,8 @@ def inject_usb_map(target_letter: str, log=None) -> bool:
 
     work = Path(tempfile.mkdtemp(prefix="hackiclab_usbmap_"))
     try:
+        if not _ensure_usbtoolbox(target_letter, log=_log):
+            _log("USB map: USBToolBox.kext недоступен — карта может не загрузиться")
         _log("USB map: определяю порты…")
         plist = generate_auto_map(work, log=_log)
         if not plist:

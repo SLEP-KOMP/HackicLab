@@ -157,7 +157,8 @@ class EFIBuilder:
 
         # 2) Кексты по профилю
         from ..knowledge.kexts import select_kexts
-        selected = select_kexts(self.plan.profile, self.plan.options.wifi_kext_mode)
+        selected = select_kexts(self.plan.profile, self.plan.options.wifi_kext_mode,
+                                self.plan.options.usb_toolbox)
         kexts_dir = layout.oc / "Kexts"
         kexts_dir.mkdir(parents=True, exist_ok=True)
         downloaded = []

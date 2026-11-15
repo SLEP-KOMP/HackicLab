@@ -719,8 +719,8 @@ class MainWindow(QMainWindow):
         self.val_config_path = cfg_path
         self.statusBar().showMessage(
             tr.t("validate.quick_saved").format(path=backup), 8000)
-        if QMessageBox.question(self, tr.t("validate.quick_title"),
-                                tr.t("validate.quick_revalidate")) == QMessageBox.Yes:
+        if self._ask_yes_no(tr.t("validate.quick_title"),
+                             tr.t("validate.quick_revalidate")):
             self._do_validate()
 
     def _do_validate(self):
@@ -1124,10 +1124,20 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, tr.t("history.title"), str(e))
 
+    def _ask_yes_no(self, title: str, text: str) -> bool:
+        """Локализованный диалог Да/Нет вместо стандартных Yes/No."""
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setText(text)
+        yes = box.addButton(tr.t("common.yes"), QMessageBox.YesRole)
+        box.addButton(tr.t("common.no"), QMessageBox.NoRole)
+        box.setDefaultButton(yes)
+        box.exec()
+        return box.clickedButton() is yes
+
     def _history_clear(self):
-        if QMessageBox.question(
-                self, tr.t("history.title"),
-                tr.t("history.clear_ask")) != QMessageBox.Yes:
+        if not self._ask_yes_no(
+                tr.t("history.title"), tr.t("history.clear_ask")):
             return
         from ..builder import history
         n = history.clear_entries()

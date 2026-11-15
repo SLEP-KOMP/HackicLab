@@ -202,7 +202,8 @@ def _is_navi2x(gpu) -> bool:
                ("6600", "6650", "6700", "6750", "6800", "6900", "6950"))
 
 
-def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> list[KextEntry]:
+def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
+                 usb_toolbox: bool = False) -> list[KextEntry]:
     """Подбирает нужный набор кекстсов по профилю железа."""
     selected: list[KextEntry] = []
     seen: set[str] = set()
@@ -218,6 +219,10 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     # Ядро всегда
     add("Lilu", "VirtualSMC")
+
+    # USB-маппинг: USBToolBox.kext — инжектор для UTBMap.kext
+    if usb_toolbox:
+        add("USBToolBox")
 
     # CPU/платформа
     if profile.cpu.vendor == "amd":
