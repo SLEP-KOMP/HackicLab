@@ -19,10 +19,21 @@ from typing import Optional
 
 @dataclass
 class USBDevice:
-    device: str          # "E:" или "RAWDISK<n>"
+    device: str          # "E:" или "DISK<n>"
     size: str            # "15GB"
     label: str
     disk_number: str = ""
+    model: str = ""
+    letter: str = ""
+    raw: bool = False
+    partition_style: str = ""
+
+    def __post_init__(self):
+        dev = (self.device or "").upper()
+        if not self.letter and len(dev) == 2 and dev.endswith(":"):
+            self.letter = dev
+        if not self.letter:
+            self.raw = True
 
 
 @dataclass
@@ -51,7 +62,7 @@ def get_usb_devices() -> list[USBDevice]:
 
     out_disk = _powershell(
         "Get-Disk | Where-Object {$_.BusType -eq 'USB'} | "
-        "Select-Object Number, FriendlyName, Size | ConvertTo-Json",
+        "Select-Object Number, FriendlyName, Size, PartitionStyle, IsSystem, IsBoot | ConvertTo-Json",
         timeout=20,
     )
     if not out_disk:
@@ -65,21 +76,25 @@ def get_usb_devices() -> list[USBDevice]:
     if isinstance(disks, dict):
         disks = [disks]
 
-    # порядок важн: номер диска => (размер, имя)
+    # номер диска => размер, модель, стиль разметки
     usb: dict[str, dict] = {}
     for d in disks:
         num = str(d.get("Number") or "").strip()
-        if num:
-            usb[num] = {
-                "size": d.get("Size") or 0,
-                "friendly": str(d.get("FriendlyName") or "").strip(),
-            }
+        if not num or d.get("IsSystem") or d.get("IsBoot"):
+            continue
+        usb[num] = {
+            "size": int(d.get("Size") or 0),
+            "friendly": str(d.get("FriendlyName") or "").strip(),
+            "style": str(d.get("PartitionStyle") or "").strip().upper(),
+        }
 
     if not usb:
         return devices
 
+    nums = ",".join(usb.keys())
     out_part = _powershell(
-        "Get-Partition | Where-Object {$_.DriveLetter} | Select-Object DiskNumber, DriveLetter",
+        f"Get-Partition | Where-Object {{ $_.DriveLetter -and $_.DiskNumber -in @({nums}) }} | "
+        "Select-Object DiskNumber, DriveLetter | ConvertTo-Json",
         timeout=20,
     )
     parts: list = []
@@ -94,7 +109,7 @@ def get_usb_devices() -> list[USBDevice]:
 
     out_vol = _powershell(
         "Get-Volume | Where-Object {$_.DriveLetter} | "
-        "Select-Object DriveLetter, FileSystemLabel, Size",
+        "Select-Object DriveLetter, FileSystemLabel, Size | ConvertTo-Json",
         timeout=20,
     )
     vol_map: dict = {}
@@ -114,26 +129,27 @@ def get_usb_devices() -> list[USBDevice]:
         except Exception:
             pass
 
-    seen = set()
-    disks_with_letter = set()
+    letters_by_disk: dict[str, list] = {}
     for p in parts:
         disk_num = str(p.get("DiskNumber") or "").strip()
         letter = str(p.get("DriveLetter") or "").strip().upper()
-        if disk_num in usb and letter and letter not in seen:
-            seen.add(letter)
-            disks_with_letter.add(disk_num)
-            meta = vol_map.get(letter, {})
-            label = meta.get("label") or usb[disk_num]["friendly"] or ""
-            size_b = meta.get("size") or usb[disk_num]["size"] or 0
-            size_gb = f"{int(size_b) // 1024 // 1024 // 1024}GB" if size_b else "?"
-            devices.append(USBDevice(f"{letter}:", size_gb, label, disk_num))
+        if disk_num in usb and letter:
+            letters_by_disk.setdefault(disk_num, []).append(letter)
 
-    # флешки без разметки
     for disk_num, meta in usb.items():
-        if disk_num not in disks_with_letter:
-            size_gb = f"{int(meta['size']) // 1024 // 1024 // 1024}GB" if meta.get("size") else "?"
-            label = "(raw / не разметана)" if not meta.get("friendly") else meta["friendly"]
-            devices.append(USBDevice(f"RAWDISK{disk_num}", size_gb, label, disk_num))
+        letters = sorted(set(letters_by_disk.get(disk_num, [])))
+        letter = f"{letters[0]}:" if letters else ""
+        vol = vol_map.get(letters[0], {}) if letters else {}
+        label = vol.get("label") or meta.get("friendly") or ""
+        size_b = vol.get("size") or meta.get("size") or 0
+        size_gb = f"{int(size_b) // 1024 // 1024 // 1024}GB" if size_b else "?"
+        raw = (not letters) or meta.get("style") == "RAW"
+        device = letter if letter else f"DISK{disk_num}"
+        devices.append(USBDevice(
+            device, size_gb, label, disk_num,
+            model=meta.get("friendly", ""), letter=letter, raw=raw,
+            partition_style=meta.get("style", "")))
+    devices.sort(key=lambda d: int(d.disk_number) if d.disk_number.isdigit() else 999)
     return devices
 
 
@@ -147,6 +163,8 @@ def resolve_drive_letter(device: str, disk_number: str = "") -> str:
         return dev if dev[0] in set(used.split()) else ""
 
     num = str(disk_number or "").strip()
+    if not num and dev.startswith("DISK"):
+        num = dev[4:]
     if not num and dev.startswith("RAWDISK"):
         num = dev[7:]
     if not num:
@@ -187,6 +205,8 @@ def _find_free_drive_letter() -> str:
 
 def _resolve_disk_number(device: str) -> str:
     letter = device.rstrip(":\\").upper()
+    if letter.startswith("DISK"):
+        return letter[4:]
     if letter.startswith("RAWDISK"):
         return letter[7:]
     num = _powershell(
@@ -430,7 +450,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
     try:
         if skip_format:
             letter = device.rstrip(":\\").upper()
-            if letter.startswith("RAWDISK"):
+            if letter.startswith(("RAWDISK", "DISK")):
                 raise RuntimeError(
                     "У этой флешки нет файловой системы (RAW). Используйте "
                     "«Полную запись», чтобы HackicLab отформатировал её."

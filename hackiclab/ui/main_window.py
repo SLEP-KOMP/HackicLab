@@ -1019,7 +1019,10 @@ class MainWindow(QMainWindow):
         self.usb_empty.setVisible(False)
         self.usb_combo.setEnabled(True)
         for d in self.usb_devices:
-            label = f"{d.device}   {d.size}   {d.label or ''}".strip()
+            if d.letter:
+                label = f"{d.letter}   {d.model or d.label}   {d.size}"
+            else:
+                label = f"Disk {d.disk_number}   {d.model or d.label}   {d.size}   RAW"
             self.usb_combo.addItem(label, d.device)
         self.usb_combo.blockSignals(False)
         self._usb_select()
@@ -1096,8 +1099,10 @@ class MainWindow(QMainWindow):
             self.usb_selected_desc.setText("")
             return
         d = self.usb_devices[idx]
+        bits = [f"Disk {d.disk_number}", d.model or d.label, d.size,
+                d.letter if d.letter else "RAW"]
         self.usb_selected_desc.setText(
-            f"{tr.t('usb.selected')}: {d.device} {d.size} — {d.label or ''}".strip())
+            f"{tr.t('usb.selected')}: " + " · ".join(x for x in bits if x))
 
     def _usb_mode_change(self):
         mode = self.usb_mode.currentData() or "full"
@@ -1131,19 +1136,19 @@ class MainWindow(QMainWindow):
         device = self.usb_combo.itemData(idx)
         self._usb_confirm(device)
 
-    def _confirm_phrase(self, device: str, disk_number: str = "",
-                        planned_letter: str = "") -> str:
-        """Фраза подтверждения по реальной/планируемой букве диска."""
-        if planned_letter:
-            return f"WRITE {planned_letter.upper()}"
-        try:
-            from ..builder.usb_writer import resolve_drive_letter
-            letter = resolve_drive_letter(device, disk_number)
-        except Exception:
-            letter = ""
-        if letter:
-            return f"WRITE {letter.upper()}"
-        return f"WRITE {(device or '').strip().upper()}"
+    def _confirm_phrase(self, device: str, disk_number: str = "") -> str:
+        """Фраза по тому, что видно в поле: WRITE F: или WRITE DISK 3."""
+        dev = (device or "").strip().upper()
+        if len(dev) == 2 and dev.endswith(":"):
+            return f"WRITE {dev}"
+        num = str(disk_number or "").strip()
+        if not num and dev.startswith("DISK"):
+            num = dev[4:]
+        if not num and dev.startswith("RAWDISK"):
+            num = dev[7:]
+        if num:
+            return f"WRITE DISK {num}"
+        return f"WRITE {dev}"
 
     def _usb_confirm(self, device: str):
         """Экран/диалог подтверждения: ввод фразы WRITE <device>."""
@@ -1158,9 +1163,14 @@ class MainWindow(QMainWindow):
         dlgv = QVBoxLayout(dlg)
 
         dev = next((x for x in getattr(self, "usb_devices", []) if x.device == device), None)
-        dev_txt = f"{device} {dev.size if dev else ''}".strip()
+        if dev:
+            bits = [f"Disk {dev.disk_number}", dev.model or dev.label, dev.size]
+            bits.append(dev.letter if dev.letter else "RAW")
+            dev_txt = " · ".join(x for x in bits if x)
+        else:
+            dev_txt = device
         planned = ""
-        if not (len(device) == 2 and device.endswith(":")):
+        if dev and dev.raw:
             try:
                 from ..builder.usb_writer import _find_free_drive_letter
                 planned = _find_free_drive_letter()
@@ -1182,10 +1192,11 @@ class MainWindow(QMainWindow):
         else:
             dlgv.addWidget(_muted(dlg, tr.t("usb.warn_formatted")))
 
-        phrase = self._confirm_phrase(device, getattr(dev, "disk_number", ""), planned)
+        phrase = self._confirm_phrase(device, getattr(dev, "disk_number", ""))
         dlgv.addWidget(_val(dlg, f"{tr.t('usb.confirm_phrase')}:  {phrase}"))
-        if not phrase.split()[-1].endswith(":"):
-            note = _muted(dlg, tr.t("usb.letter_missing")); note.setWordWrap(True)
+        if dev and dev.raw:
+            note = _muted(dlg, tr.t("usb.raw_note").format(letter=planned or "—"))
+            note.setWordWrap(True)
             dlgv.addWidget(note)
         inp = QLineEdit(dlg)
         inp.setPlaceholderText(phrase)
