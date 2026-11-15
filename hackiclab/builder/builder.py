@@ -109,19 +109,29 @@ class EFIBuilder:
                     shutil.rmtree(str(extract), ignore_errors=True)
                 with zipfile.ZipFile(str(oc_zip)) as z:
                     z.extractall(str(extract))
-                # найти OpenCore.efi и Tools внутри архива
-                oc_efi = next(extract.rglob("OpenCore.efi"), None)
-                if oc_efi:
-                    layout.place_bootx64(oc_efi)
-                    self._log(f"  OpenCore.efi → {layout.root / 'EFI' / 'BOOT'}")
+                # 64-битная ветка релиза: X64/EFI (IA32 не подходит)
+                x64_efi = None
+                for cand in extract.rglob("EFI"):
+                    if (cand.is_dir() and "IA32" not in str(cand).upper()
+                            and (cand / "OC" / "OpenCore.efi").exists()
+                            and (cand / "BOOT" / "BOOTx64.efi").exists()):
+                        x64_efi = cand
+                        break
+                if x64_efi:
+                    layout.place_opencore(x64_efi / "OC" / "OpenCore.efi")
+                    layout.place_bootx64(x64_efi / "BOOT" / "BOOTx64.efi")
+                    self._log("  OpenCore.efi → EFI/OC, BOOTx64.efi → EFI/BOOT")
                     res.stats["opencore"] = "OK"
                 else:
-                    self._log("  OpenCore.efi не найден в архиве")
-                # обязательные UEFI-драйверы: OpenRuntime + HfsPlus (+ OpenCanopy)
+                    self._log("  OpenCore.efi/BOOTx64.efi не найдены в архиве")
+                # обязательные UEFI-драйверы: OpenRuntime + OpenHfsPlus
                 placed_drivers = []
-                for drv in ("OpenRuntime.efi", "HfsPlus.efi", "OpenCanopy.efi"):
-                    src = next(extract.rglob(drv), None)
-                    if src:
+                drivers_dir = (x64_efi / "OC" / "Drivers") if x64_efi else (extract / "Drivers")
+                for drv in ("OpenRuntime.efi", "OpenHfsPlus.efi"):
+                    src = drivers_dir / drv
+                    if not src.exists():
+                        src = next(extract.rglob(drv), None)
+                    if src is not None and src.exists():
                         layout.place_driver(src)
                         placed_drivers.append(drv)
                         self._log(f"  {drv} → Drivers")
@@ -147,6 +157,19 @@ class EFIBuilder:
             except Exception as ex:
                 self._log(f"  {e.name}: ошибка ({ex})")
         res.stats["kexts_downloaded"] = downloaded
+
+        # оставляем только выбранные кексты и нужные им внутренние модули
+        allowed = {(e.bundle_name or e.name) for e in selected}
+        allowed.add("SMCSuperIO")
+        if self.plan.profile.cpu.vendor == "intel":
+            allowed.add("SMCProcessor")
+        if any(e.name == "RadeonSensor" for e in selected):
+            allowed.add("SMCRadeonGPU")
+        for child in list(kexts_dir.iterdir()):
+            if child.is_dir() and child.name.endswith(".kext") and child.name[:-5] not in allowed:
+                shutil.rmtree(str(child), ignore_errors=True)
+            elif child.is_file():
+                child.unlink(missing_ok=True)
 
         # 3) SSDT генерация (via SSDTFactory + iasl)
         try:
@@ -185,8 +208,14 @@ class EFIBuilder:
         data = generate_config_plist(self.plan.profile, opts)
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)
         kexts_placed = [x.name for x in kexts_dir.iterdir() if x.is_dir() and x.name.endswith('.kext')]
+        amd_patches = None
+        if self.plan.profile.cpu.vendor == "amd":
+            from .amd_patches import fetch_amd_patches
+            amd_patches = fetch_amd_patches(log=self._log)
+            self._log(f"AMD kernel patches: {len(amd_patches) if amd_patches else 0}")
         layout.write_plist_with_kexts(data, kexts_placed,
-                                      driver_names=res.stats.get("drivers_placed", []))
+                                      driver_names=res.stats.get("drivers_placed", []),
+                                      kernel_patches=amd_patches)
 
         # 5) ocvalidate финального config.plist
         cfg_path = layout.oc / "config.plist"
@@ -203,6 +232,10 @@ class EFIBuilder:
             self._log(f"  [warn] {w}")
         if not ocv.ok and ocv.errors:
             res.ok = False
+
+        # чистим временные папки, чтобы не мусорить в выбранной директории
+        shutil.rmtree(str(tmp), ignore_errors=True)
+        shutil.rmtree(str(target / ".ssdt"), ignore_errors=True)
 
         res.stats = {
             "kexts": self.plan.kext_names,

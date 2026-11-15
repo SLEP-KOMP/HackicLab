@@ -19,6 +19,7 @@ a = Analysis(
         'hackiclab.builder.usb_map',
         'hackiclab.builder.config_editor',
         'hackiclab.builder.history',
+        'hackiclab.builder.amd_patches',
         'hackiclab.analyzer.oc_log',
         'hackiclab.analyzer.efi_health',
         'hackiclab.knowledge.rationale',

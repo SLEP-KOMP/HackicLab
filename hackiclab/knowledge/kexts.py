@@ -192,6 +192,16 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     return cur
 
 
+def _is_navi2x(gpu) -> bool:
+    """NootRX нужен только Navi 2x (RX 6600–6950), не Polaris/Navi 1x."""
+    name = (getattr(gpu, "name", "") or "").lower()
+    dev = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "")
+    if dev in {"73bf", "73e3", "73ef", "73ff", "7420", "73a5"}:
+        return True
+    return any(x in name for x in
+               ("6600", "6650", "6700", "6750", "6800", "6900", "6950"))
+
+
 def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> list[KextEntry]:
     """Подбирает нужный набор кекстсов по профилю железа."""
     selected: list[KextEntry] = []
@@ -224,7 +234,7 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
             add("WhateverGreen")
         if g.vendor == "amd":
             add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
-            if profile.cpu.vendor == "amd":
+            if profile.cpu.vendor == "amd" and _is_navi2x(g):
                 add("NootRX")
 
     # Аудио

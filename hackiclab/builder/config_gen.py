@@ -45,7 +45,7 @@ IG_PLATFORM_IDS = {
 class BuildOptions:
     usb_toolbox: bool = True
     wifi_kext_mode: str = "itlwm"       # itlwm / airport
-    disable_sip: bool = False
+    disable_sip: bool = True
     has_amd_vgpu: bool = False
     custom_smbios: Optional["SMBIOSData"] = None
     target_macos: str = ""              # e.g. "Sonoma"
@@ -96,10 +96,13 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
 
     # --- ACPI ---
     cfg["ACPI"]["Add"] = [
-        {"Enabled": True, "Path": "SSDT-PLUG.aml", "Comment": "CPU power management"},
         {"Enabled": True, "Path": "SSDT-EC.aml", "Comment": "Fake EC"},
         {"Enabled": False, "Path": "SSDT-USBX.aml", "Comment": "USB power"},
     ]
+    if profile.cpu.vendor == "intel":
+        # SSDT-PLUG включает X86PlatformPlugin — только для Intel
+        cfg["ACPI"]["Add"].insert(
+            0, {"Enabled": True, "Path": "SSDT-PLUG.aml", "Comment": "CPU power management"})
     if profile.platform == "laptop":
         cfg["ACPI"]["Add"].append({"Enabled": True, "Path": "SSDT-PNLF.aml", "Comment": "Backlight"})
         cfg["ACPI"]["Add"].append({"Enabled": True, "Path": "SSDT-EC-USBX.aml", "Comment": "Fake EC + USB"})
@@ -125,9 +128,17 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     k["Add"] = []   # заполняется сборщиком по выбранным kext
     if profile.cpu.vendor == "amd":
         k["Quirks"]["ProvideCurrentCpuInfo"] = True
-        cfg["Kernel"]["Patch"] = []  # сюда позже AMD_Vanilla
+        k["Emulate"]["DummyPowerManagement"] = True
+        k["Patch"] = []  # заполняется AMD_Vanilla в сборщике
     else:
         cfg["Kernel"]["Patch"] = []
+
+    # --- Booter: квирки под AMD (Ryzen) ---
+    if profile.cpu.vendor == "amd":
+        bq = cfg["Booter"]["Quirks"]
+        bq["RebuildAppleMemoryMap"] = True
+        bq["EnableWriteUnprotector"] = False
+        bq["SyncRuntimePermissions"] = True
 
     # --- Misc → Boot ---
     cfg["Misc"]["Boot"] = cfg["Misc"]["Boot"]
@@ -137,9 +148,9 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
 
     # --- NVRAM ---
     if options.disable_sip:
-        cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"] = {
-            "csr-active-config": bytes([0x67, 0, 0, 0])
-        }
+        # меняем только csr-active-config, не теряя boot-args и прочие ключи
+        nv = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]
+        nv["csr-active-config"] = bytes([0x67, 0, 0, 0])
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
     if options.custom_smbios:
@@ -177,20 +188,17 @@ def _macos_major(target: str) -> int:
 
 
 def _apply_macos_model(cfg: dict, target: str, profile: HardwareProfile):
-    """Проставляет SecureBootModel и ряд версионных квирков под macOS-версию."""
+    """Проставляет SecureBootModel и версионные квирки под macOS-версию.
+
+    На не-Apple железе (в т.ч. Ryzen) SecureBootModel=Default ломает загрузку
+    recovery/подписанных образов, поэтому всегда Disabled.
+    """
     major = _macos_major(target)
     sb = cfg["Misc"]["Security"]
-    # Для актуальных macOS ставим Default — ocvalidate принимает это значение,
-    # и оно не зависит от конкретной SMBIOS-модели (на AMD проще и надёжнее).
-    if major >= 12:
-        sb["SecureBootModel"] = "Default"
-    else:
-        sb["SecureBootModel"] = "j160"   # Big Sur и старше
-
-    # XhciPortLimit нужен только на macOS < 11.3 / Big Sur и старше
-    # CryptexFixup квирк для новых macOS на старом железе добавляется профилем.
-    if "SMCAMDProcessor" if hasattr(profile, "cpu") and profile.cpu.vendor == "amd" else False:
-        pass
+    sb["SecureBootModel"] = "Disabled"
+    # XhciPortLimit нужен только на macOS < 11.3; на новых — USB map.
+    if major < 11:
+        cfg["Kernel"]["Quirks"]["XhciPortLimit"] = True
 
 
 def _base_config() -> dict:
@@ -319,7 +327,7 @@ def _base_config() -> dict:
                 "EnablePassword": False,
                 "ExposeSensitiveData": 3, "HaltLevel": 0x80000000,
                 "PasswordHash": bytes(), "PasswordSalt": bytes(),
-                "ScanPolicy": 0, "SecureBootModel": "Default",
+                "ScanPolicy": 0, "SecureBootModel": "Disabled",
                 "Vault": "Optional",
             },
             "Serial": {"Init": False, "Override": False},

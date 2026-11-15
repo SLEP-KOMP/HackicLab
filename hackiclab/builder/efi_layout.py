@@ -33,8 +33,18 @@ class EFILayout:
         for f in self.OC_FOLDERS:
             (self.oc / f).mkdir(parents=True, exist_ok=True)
 
+    def place_opencore(self, source_efi: Path) -> None:
+        """Копирует OpenCore.efi в EFI/OC/OpenCore.efi (его грузит BOOTx64.efi)."""
+        try:
+            shutil.copy2(str(source_efi), str(self.oc / "OpenCore.efi"))
+        except Exception as e:
+            self.errors.append(f"OpenCore.efi: {e}")
+
     def place_bootx64(self, source_efi: Path) -> None:
-        """Копирует OpenCore.efi в EFI/BOOT/BOOTx64.EFI (или BOOTx64.efi)."""
+        """Копирует настоящий BOOTx64.efi в EFI/BOOT/BOOTx64.efi."""
+        if source_efi.name.lower() == "opencore.efi":
+            self.errors.append("BOOTx64: передан OpenCore.efi вместо BOOTx64.efi")
+            return
         boot = self.root / "EFI" / "BOOT"
         boot.mkdir(parents=True, exist_ok=True)
         dst = boot / "BOOTx64.efi"
@@ -71,7 +81,7 @@ class EFILayout:
         return p
 
     def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
-                               driver_names: list = None) -> Path:
+                               driver_names: list = None, kernel_patches: list = None) -> Path:
         """Записывает config.plist, заполняя Kernel/Add реальными kext и UEFI/Drivers.
 
         Порядок Kernel/Add важен для загрузчика: Lilu и VirtualSMC должны идти
@@ -114,6 +124,10 @@ class EFILayout:
             if d and d not in _skip
         ]
         cfg["UEFI"]["Drivers"] = drivers
+        if kernel_patches:
+            cfg["Kernel"]["Patch"] = kernel_patches
+        elif "Patch" not in cfg["Kernel"]:
+            cfg["Kernel"]["Patch"] = []
         out = plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
         return self.write_plist(out, name)
 

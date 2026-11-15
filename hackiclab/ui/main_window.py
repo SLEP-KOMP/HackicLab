@@ -1113,21 +1113,16 @@ class MainWindow(QMainWindow):
         device = self.usb_combo.itemData(idx)
         self._usb_confirm(device)
 
-    def _confirm_phrase(self, device: str) -> str:
-        """Фраза подтверждения по букве диска: «WRITE D:»."""
-        dev = (device or "").strip().upper()
-        if len(dev) == 2 and dev.endswith(":"):
-            return f"WRITE {dev}"
+    def _confirm_phrase(self, device: str, disk_number: str = "") -> str:
+        """Фраза подтверждения по реальной букве диска: «WRITE F:»."""
         try:
-            from ..builder.usb_writer import _find_free_drive_letter
-            letter = (_find_free_drive_letter() or "").strip().upper()
-            if letter:
-                if not letter.endswith(":"):
-                    letter += ":"
-                return f"WRITE {letter}"
+            from ..builder.usb_writer import resolve_drive_letter
+            letter = resolve_drive_letter(device, disk_number)
         except Exception:
-            pass
-        return f"WRITE {dev}"
+            letter = ""
+        if letter:
+            return f"WRITE {letter.upper()}"
+        return f"WRITE {(device or '').strip().upper()}"
 
     def _usb_confirm(self, device: str):
         """Экран/диалог подтверждения: ввод фразы WRITE <device>."""
@@ -1157,8 +1152,11 @@ class MainWindow(QMainWindow):
         else:
             dlgv.addWidget(_muted(dlg, tr.t("usb.warn_formatted")))
 
-        phrase = self._confirm_phrase(device)
+        phrase = self._confirm_phrase(device, getattr(dev, "disk_number", ""))
         dlgv.addWidget(_val(dlg, f"{tr.t('usb.confirm_phrase')}:  {phrase}"))
+        if not phrase.split()[-1].endswith(":"):
+            note = _muted(dlg, tr.t("usb.letter_missing")); note.setWordWrap(True)
+            dlgv.addWidget(note)
         inp = QLineEdit(dlg)
         inp.setPlaceholderText(phrase)
         dlgv.addWidget(inp)

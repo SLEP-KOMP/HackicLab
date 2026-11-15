@@ -132,17 +132,23 @@ class Downloader:
         asset_name = self.kext_release_file(entry, tag)
         url = base + asset_name
         dest_dir.mkdir(parents=True, exist_ok=True)
+        # архив и распаковка — в кэше; в EFI/OC/Kexts попадают только .kext
+        work = cache_dir() / "kexts" / entry.name
+        work.mkdir(parents=True, exist_ok=True)
         try:
             data = download_bytes(url, headers={"User-Agent": self.client}, timeout=120)
         except Exception as e:
             self._log(f"{entry.name}: не скачалось ({e})")
             return None
-        zpath = dest_dir / asset_name
+        zpath = work / asset_name
         zpath.write_bytes(data)
         self._log(f"{entry.name}: скачано {asset_name}")
 
         # распаковка
-        extract_dir = dest_dir / "unzip" / entry.name
+        extract_dir = work / "unzip"
+        if extract_dir.exists():
+            import shutil as _sh
+            _sh.rmtree(str(extract_dir), ignore_errors=True)
         extract_dir.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(str(zpath)) as z:
@@ -154,17 +160,13 @@ class Downloader:
                     if target != extract_dir and extract_dir not in target.parents:
                         continue
                     z.extract(member, str(extract_dir))
-            # найти .kext
-            kext_dirs = [p for p in extract_dir.rglob("*.kext")]
-            if kext_dirs:
-                # переложим .kext в корень dest_dir
-                import shutil
-                for kd in kext_dirs:
-                    dst = dest_dir / kd.name
-                    if not dst.exists():
-                        shutil.copytree(str(kd), str(dst))
-                        self._log(f"  → {dst.name}")
-                return extract_dir
+            kext_dirs = [p for p in extract_dir.rglob("*.kext") if p.is_dir()]
+            import shutil
+            for kd in kext_dirs:
+                dst = dest_dir / kd.name
+                if not dst.exists():
+                    shutil.copytree(str(kd), str(dst))
+                    self._log(f"  → {dst.name}")
             return extract_dir
         except Exception as e:
             self._log(f"{entry.name}: распаковка не удалась ({e})")

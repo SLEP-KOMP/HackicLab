@@ -147,6 +147,43 @@ def get_usb_devices() -> list[USBDevice]:
     return devices
 
 
+def resolve_drive_letter(device: str, disk_number: str = "") -> str:
+    """Реальная буква выбранного накопителя: "F:" либо "" (буквы нет)."""
+    dev = (device or "").strip().upper()
+    if len(dev) == 2 and dev.endswith(":"):
+        used = _powershell(
+            "[System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0,1).ToUpper() }"
+        )
+        return dev if dev[0] in set(used.split()) else ""
+
+    num = str(disk_number or "").strip()
+    if not num and dev.startswith("RAWDISK"):
+        num = dev[7:]
+    if not num:
+        return ""
+
+    letter = _read_disk_letter(num)
+    if letter:
+        return letter
+    # последняя попытка: назначить букву разделу и перечитать
+    _powershell(
+        f"Get-Partition -DiskNumber {num} | Where-Object {{ -not $_.DriveLetter }} | "
+        f"Add-PartitionAccessPath -AssignDriveLetter -ErrorAction SilentlyContinue",
+        timeout=20,
+    )
+    return _read_disk_letter(num)
+
+
+def _read_disk_letter(disk_number: str) -> str:
+    out = _powershell(
+        f"Get-Partition -DiskNumber {disk_number} | Where-Object {{ $_.DriveLetter }} | "
+        f"Select-Object -First 1 -ExpandProperty DriveLetter",
+        timeout=20,
+    )
+    letter = (out or "").strip().upper()
+    return f"{letter[0]}:" if letter and letter[0].isalpha() else ""
+
+
 def _find_free_drive_letter() -> str:
     used_raw = _powershell(
         "[System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0,1).ToUpper() }"
