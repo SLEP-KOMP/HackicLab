@@ -2978,6 +2978,10 @@ class MainWindow(QMainWindow):
                 self.macos_combo.setCurrentIndex(i)
         self.build_log.setPlainText(st["build_log"])
         self.build_rationale.setPlainText(st["rationale"])
+        if st["rationale"].strip():
+            self._rationale_text = st["rationale"]
+        self.rationale_save_btn.setEnabled(
+            bool(st["rationale"].strip()) or bool(getattr(self, "profile", None)))
         self.val_status.setText(st["val_status"])
         if st["last_build_dir"]:
             try:
@@ -3197,17 +3201,26 @@ class MainWindow(QMainWindow):
                 text = f"rationale: {e}"
         self._rationale_text = text
         self.build_rationale.setPlainText(text)
-        self.rationale_save_btn.setEnabled(bool(text.strip()))
+        # Кнопка живая всегда, когда есть профиль: текст досчитается по клику,
+        # иначе после перезапуска с сохранённым состоянием она оставалась серой.
+        self.rationale_save_btn.setEnabled(bool(text.strip()) or bool(self.profile))
 
     def _save_rationale(self):
-        """Сохраняет объяснение рядом с собранным EFI (.md или .txt)."""
-        text = getattr(self, "_rationale_text", "")
+        """Сохраняет объяснение решений в выбранное пользователем место."""
+        text = getattr(self, "_rationale_text", "") or ""
         if not text.strip():
+            self._render_rationale()
+            text = getattr(self, "_rationale_text", "") or ""
+        if not text.strip():
+            self.statusBar().showMessage(tr.t("build.rationale_empty"), 6000)
             return
         default = ""
         build_dir = getattr(self, "last_build_dir", None)
         if build_dir:
             default = str(Path(build_dir) / "REASONING.md")
+        else:
+            base = Path.home() / "Documents"
+            default = str((base if base.is_dir() else Path.home()) / "HackicLab-reasoning.md")
         path, _ = QFileDialog.getSaveFileName(
             self, tr.t("build.rationale_save"), default,
             f"{tr.t('file.markdown')};;{tr.t('file.text')}")

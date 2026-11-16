@@ -74,6 +74,71 @@ class FormatUsbScriptTests(unittest.TestCase):
         self.assertTrue(any("format fs=fat32" in s for s in scripts))
 
 
+    def test_removable_stick_uses_mbr_primary(self):
+        """На съёмной флешке Windows не создаёт EFI-раздел — только MBR."""
+        scripts = []
+
+        def fake_diskpart(text):
+            scripts.append(text)
+            return 0, ""
+
+        def fake_powershell(script, timeout=15):
+            if "Size / 1MB" in script:
+                return "29000"
+            if "Test-Path" in script:
+                return "true" if any("format fs=fat32" in s for s in scripts) else "false"
+            return ""
+
+        with mock.patch.object(uw, "is_admin", return_value=True), \
+             mock.patch.object(uw, "_resolve_disk_number", return_value="3"), \
+             mock.patch.object(uw, "_assert_usb_target"), \
+             mock.patch.object(uw, "_is_removable", return_value=True), \
+             mock.patch.object(uw, "_find_free_drive_letter", return_value="H:"), \
+             mock.patch.object(uw, "_powershell", side_effect=fake_powershell), \
+             mock.patch.object(uw, "_run_diskpart", side_effect=fake_diskpart), \
+             mock.patch.object(time, "sleep", lambda *_: None):
+            uw.format_usb("F:")
+
+        create = next(s for s in scripts if "clean" in s)
+        self.assertNotIn("convert gpt", create)
+        self.assertNotIn("create partition efi", create)
+        self.assertIn("create partition primary", create)
+        self.assertIn("active", create)
+
+    def test_fixed_disk_keeps_gpt_efi(self):
+        scripts = []
+
+        def fake_diskpart(text):
+            scripts.append(text)
+            return 0, ""
+
+        def fake_powershell(script, timeout=15):
+            if "Size / 1MB" in script:
+                return "29000"
+            if "Test-Path" in script:
+                return "true" if any("format fs=fat32" in s for s in scripts) else "false"
+            return ""
+
+        with mock.patch.object(uw, "is_admin", return_value=True), \
+             mock.patch.object(uw, "_resolve_disk_number", return_value="3"), \
+             mock.patch.object(uw, "_assert_usb_target"), \
+             mock.patch.object(uw, "_is_removable", return_value=False), \
+             mock.patch.object(uw, "_find_free_drive_letter", return_value="H:"), \
+             mock.patch.object(uw, "_powershell", side_effect=fake_powershell), \
+             mock.patch.object(uw, "_run_diskpart", side_effect=fake_diskpart), \
+             mock.patch.object(time, "sleep", lambda *_: None):
+            uw.format_usb("F:")
+
+        create = next(s for s in scripts if "clean" in s)
+        self.assertIn("convert gpt", create)
+        self.assertIn("create partition efi", create)
+
+    def test_diskpart_failure_reports_reason(self):
+        detail = ("Microsoft DiskPart version 10.0\n"
+                  "Ошибка: эта операция не поддерживается на съёмных носителях.")
+        self.assertIn("не поддерживается", uw._diskpart_reason(detail))
+
+
 class ConfirmPhraseTests(unittest.TestCase):
     def test_phrase_uses_letter_or_disk_number(self):
         try:

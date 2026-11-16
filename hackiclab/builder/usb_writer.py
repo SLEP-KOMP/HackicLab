@@ -241,7 +241,7 @@ def _disk_info(disk_number: str) -> dict:
 
     out = _powershell(
         f"Get-Disk -Number {disk_number} | Select-Object Number, BusType, IsSystem, "
-        f"IsBoot, PartitionStyle, Size | ConvertTo-Json",
+        f"IsBoot, PartitionStyle, MediaType, Size | ConvertTo-Json",
         timeout=20,
     )
     if not out:
@@ -343,6 +343,31 @@ def relaunch_as_admin() -> bool:
         return False
 
 
+def _is_removable(disk_number: str) -> bool:
+    """Съёмный носитель? На таких Windows не умеет создавать EFI-раздел.
+
+    ``create partition efi`` на флешке заканчивается ошибкой «Эта операция
+    не поддерживается на съёмных носителях», поэтому для них используется
+    обычная MBR-разметка с активным основным разделом FAT32.
+    """
+    info = _disk_info(disk_number)
+    media = str(info.get("MediaType") or "").strip().lower()
+    if media:
+        return media == "removable"
+    return str(info.get("BusType") or "").strip().upper() == "USB"
+
+
+def _diskpart_reason(detail: str) -> str:
+    """Вытаскивает из вывода diskpart строку с причиной отказа."""
+    lines = [ln.strip() for ln in (detail or "").splitlines() if ln.strip()]
+    for line in lines:
+        low = line.lower()
+        if ("ошибка" in low or "error" in low
+                or "не поддерживается" in low or "not supported" in low):
+            return line
+    return lines[-1] if lines else "diskpart завершился с ошибкой"
+
+
 def format_usb(device: str, drive_letter: str = "") -> str:
     """Форматирует USB как FAT32 + GPT + ESP, возвращает букву диска.
 
@@ -397,6 +422,26 @@ def format_usb(device: str, drive_letter: str = "") -> str:
         "exit\n"
     )
 
+    # Съёмная флешка: diskpart не умеет EFI-раздел на removable-носителях,
+    # поэтому размечаем её как MBR с активным основным разделом FAT32 —
+    # UEFI грузит такой раздел так же, как ESP.
+    if _is_removable(disk_num):
+        create_script = (
+            f"select disk {disk_num}\n"
+            "clean\n"
+            "create partition primary\n"
+            "select partition 1\n"
+            "active\n"
+            "exit\n"
+        )
+        format_script = (
+            f"select disk {disk_num}\n"
+            "select partition 1\n"
+            "format fs=fat32 quick label=HACKINTOSH\n"
+            f"assign letter={target}\n"
+            "exit\n"
+        )
+
     last_detail = ""
     for _attempt in range(3):
         code, detail = _run_diskpart(create_script)
@@ -413,7 +458,13 @@ def format_usb(device: str, drive_letter: str = "") -> str:
         _time.sleep(3)
 
     if not last_detail == "":
-        raise RuntimeError(f"diskpart не смог отформатировать флешку:\n{last_detail}")
+        raise RuntimeError(
+            "diskpart не смог отформатировать флешку: "
+            f"{_diskpart_reason(last_detail)}\n"
+            "Закройте программы, которые держат файлы на флешке, и повторите. "
+            "Если не помогает — отформатируйте её в FAT32 в Проводнике и "
+            "выберите режим «Уже отформатирована»."
+        )
 
     mounted = _powershell(f"Test-Path {target}:\\").lower()
     if mounted != "true":

@@ -279,7 +279,7 @@ class PageColumnLayoutTests(unittest.TestCase):
         try:
             from PySide6.QtWidgets import QApplication
         except Exception as exc:  # pragma: no cover
-            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from exc
         cls.app = QApplication.instance() or QApplication([])
 
     def test_every_page_centered(self):
@@ -496,3 +496,46 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_long_notes_are_trimmed(self):
         cleaned = self.clean("строка\n" * 5000)
         self.assertLessEqual(len(cleaned), 4000)
+
+class RationaleSaveTests(unittest.TestCase):
+    """Кнопка «Сохранить объяснение» всегда открывает выбор места."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from exc
+        from hackiclab.ui import main_window as mw
+        cls.mw = mw
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _window(self):
+        from hackiclab.scanner.windows_scanner import scan_hardware
+        window = self.mw.MainWindow()
+        window.profile = scan_hardware()
+        return window
+
+    def test_button_enabled_with_profile(self):
+        window = self._window()
+        window._rationale_text = ""
+        window.build_rationale.clear()
+        window.rationale_save_btn.setEnabled(True)
+        self.assertTrue(window.rationale_save_btn.isEnabled())
+
+    def test_click_writes_file(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from PySide6.QtWidgets import QFileDialog
+
+        window = self._window()
+        window._rationale_text = ""
+        window.build_rationale.clear()
+        target = Path(tempfile.mkdtemp()) / "REASONING.md"
+        with mock.patch.object(QFileDialog, "getSaveFileName",
+                               return_value=(str(target), "")):
+            window._save_rationale()
+        self.assertTrue(target.exists())
+        self.assertIn("SMBIOS", target.read_text(encoding="utf-8"))
