@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -360,7 +361,7 @@ class UpdateCheckWorker(QThread):
 class UpdateDownloadWorker(QThread):
     """Скачивание EXE обновления в фоне."""
     done = Signal(object)
-    failed = Signal(str)
+    failed = Signal(object)
 
     def __init__(self, info):
         super().__init__()
@@ -371,7 +372,36 @@ class UpdateDownloadWorker(QThread):
             from .. import updater
             self.done.emit(updater.download_update(self.info))
         except Exception as e:
-            self.failed.emit(str(e))
+            self.failed.emit(e)
+
+
+def _release_notes_text(text: str, limit: int = 4000) -> str:
+    """Превращает markdown релиза в читаемый текст для панели «Обновления».
+
+    В релизе описание хранится разметкой, и в QPlainTextEdit она выглядела
+    как мусор: «### Установка», «> ⚠️», обратные кавычки и звёздочки.
+    """
+    result: list[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            result.append("")
+            continue
+        stripped = re.sub(r"^#{1,6}\s*", "", stripped)
+        stripped = re.sub(r"^[-*+]\s+", "• ", stripped)
+        stripped = re.sub(r"^\d+[.)]\s+", lambda m: f"{m.group(0).strip()} ", stripped)
+        stripped = re.sub(r"^>\s*", "", stripped)
+        stripped = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", stripped)
+        stripped = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", stripped)
+        stripped = re.sub(r"\*\*(.+?)\*\*", r"\1", stripped)
+        stripped = re.sub(r"__(.+?)__", r"\1", stripped)
+        stripped = re.sub(r"`([^`]+)`", r"\1", stripped)
+        stripped = re.sub(r"^\s*[—–-]{3,}\s*$", "", stripped)
+        result.append(stripped.strip())
+    cleaned = "\n".join(result)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned[:limit]
 
 
 def _has_cyrillic(text: str) -> bool:
@@ -2659,7 +2689,7 @@ class MainWindow(QMainWindow):
                else "settings.updates_available")
         text = tr.t(key).format(version=info.version)
         self.upd_status.setText(text)
-        notes = (info.notes or "").strip()
+        notes = _release_notes_text(info.notes)
         self.upd_notes.setPlainText(notes)
         self.upd_notes.setVisible(bool(notes))
         self.upd_now_btn.setText(
@@ -2734,8 +2764,16 @@ class MainWindow(QMainWindow):
         # Принудительный os._exit оставлял её и давал предупреждение при старте.
         QTimer.singleShot(300, QApplication.quit)
 
-    def _update_download_failed(self, err: str):
+    def _update_download_failed(self, err):
         self.upd_now_btn.setEnabled(True)
+        if getattr(err, "already_installed", False):
+            # Скачалась ровно та сборка, что уже запущена: обновляться некуда.
+            self._pending_update = None
+            self.upd_status.setText(tr.t("settings.updates_latest"))
+            self.upd_notes.setVisible(False)
+            self.upd_actions.setVisible(False)
+            self.upd_fallback.setVisible(False)
+            return
         self.upd_status.setText(tr.t("settings.updates_failed").format(error=str(err)))
         self.upd_fallback.setVisible(True)
 

@@ -467,3 +467,32 @@ class SystemDefaultLanguageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ReleaseNotesTests(unittest.TestCase):
+    """Описание релиза показывается текстом, а не markdown-разметкой."""
+
+    @classmethod
+    def setUpClass(cls):
+        from hackiclab.ui.main_window import _release_notes_text
+        cls.clean = staticmethod(_release_notes_text)
+
+    def test_headings_and_lists_are_plain(self):
+        text = "## Итог\n\n### Установка\n- **Скачайте** `HackicLab.exe`\n> ⚠️ только своё железо"
+        cleaned = self.clean(text)
+        self.assertNotIn("##", cleaned)
+        self.assertNotIn("###", cleaned)
+        self.assertNotIn("**", cleaned)
+        self.assertNotIn("`", cleaned)
+        self.assertNotIn("> ", cleaned)
+        self.assertIn("Итог", cleaned)
+        self.assertIn("Установка", cleaned)
+        self.assertIn("Скачайте HackicLab.exe", cleaned)
+
+    def test_links_become_text(self):
+        cleaned = self.clean("- см. [страницу релиза](https://example.com)")
+        self.assertIn("страницу релиза", cleaned)
+        self.assertNotIn("https://example.com", cleaned)
+
+    def test_long_notes_are_trimmed(self):
+        cleaned = self.clean("строка\n" * 5000)
+        self.assertLessEqual(len(cleaned), 4000)

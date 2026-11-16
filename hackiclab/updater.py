@@ -37,6 +37,10 @@ RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 RELEASES_ATOM = f"https://github.com/{REPO}/releases.atom"
 ASSET_NAME = "HackicLab.exe"
 ASSET_URL = f"https://github.com/{REPO}/releases/download/{{tag}}/{ASSET_NAME}"
+#: Рядом с EXE публикуется файл с sha256: он не тратит лимит API и позволяет
+#: отличить «ту же сборку» от пересборки, когда GitHub отдаёт 403/429.
+DIGEST_ASSET = f"{ASSET_NAME}.sha256"
+DIGEST_URL = f"https://github.com/{REPO}/releases/download/{{tag}}/{DIGEST_ASSET}"
 
 #: Сколько держать результат проверки, чтобы не тратить лимит GitHub API.
 CACHE_TTL = 6 * 3600
@@ -45,9 +49,11 @@ CACHE_TTL = 6 * 3600
 class UpdateError(RuntimeError):
     """Ошибка обновления с текстом, который можно показать пользователю."""
 
-    def __init__(self, message: str, *, page_url: str = RELEASES_PAGE):
+    def __init__(self, message: str, *, page_url: str = RELEASES_PAGE,
+                 already_installed: bool = False):
         super().__init__(message)
         self.page_url = page_url
+        self.already_installed = already_installed
 
 
 class _RateLimited(Exception):
@@ -263,6 +269,42 @@ def _cache_payload(release: dict, etag: str = "") -> dict:
     }
 
 
+def remote_asset_digest(tag: str) -> str:
+    """sha256 вложения из файла ``HackicLab.exe.sha256`` рядом с релизом.
+
+    Файл отдаётся как обычное вложение: лимит GitHub API не расходуется,
+    а хеш позволяет отличить пересборку от уже установленной сборки.
+    """
+    if not tag:
+        return ""
+    try:
+        _, _, body = _http(DIGEST_URL.format(tag=tag), timeout=20)
+    except (UpdateError, _RateLimited):
+        return ""
+    except Exception:
+        return ""
+    text = body.decode("utf-8", "replace").strip()
+    match = re.search(r"([0-9a-fA-F]{64})", text)
+    return f"sha256:{match.group(1).lower()}" if match else ""
+
+
+def _cached_update(cache: dict) -> Optional[UpdateInfo]:
+    """Кэш как подсказка, а не приговор: сверяем с запущенным EXE.
+
+    Раньше запись из кэша возвращалась как «доступно обновление» даже когда
+    версия та же и EXE совпадает с релизом — пользователь видел предложение
+    обновиться сразу после скачивания новой сборки. Хеш в кэше может быть
+    от предыдущей заливки, поэтому пересборку подтверждаем только онлайн
+    (API или sidecar-файл с sha256), а из кэша отдаём лишь более новую версию.
+    """
+    info = _info_from_dict(cache)
+    if info is None:
+        return None
+    if is_newer(info.version):
+        return info
+    return None
+
+
 def _info_from_tag(tag: str) -> Optional[UpdateInfo]:
     """Fallback без API: тег из ленты releases.atom и прямой URL вложения."""
     tag = (tag or "").strip()
@@ -271,6 +313,7 @@ def _info_from_tag(tag: str) -> Optional[UpdateInfo]:
     version = tag.lstrip("vV")
     asset_url = ASSET_URL.format(tag=tag)
     page_url = f"https://github.com/{REPO}/releases/tag/{tag}"
+    digest = remote_asset_digest(tag)
     if is_newer(version):
         return UpdateInfo(
             version=version,
@@ -279,16 +322,23 @@ def _info_from_tag(tag: str) -> Optional[UpdateInfo]:
             page_url=page_url,
             asset_url=asset_url,
             asset_size=_remote_size(asset_url),
-            asset_digest="",
+            asset_digest=digest,
         )
     if parse_version(version) != parse_version(__version__):
         return None
-    local, remote = local_binary_size(), _remote_size(asset_url)
-    if not local or not remote or local == remote:
-        return None
+    local = current_binary_digest()
+    if digest and local:
+        if digest == local:
+            return None  # скачана та же сборка — обновляться некуда
+    else:
+        # Без хешей остаётся только размер; при равенстве считаем сборку той же
+        local_size, remote_size = local_binary_size(), _remote_size(asset_url)
+        if not local_size or not remote_size or local_size == remote_size:
+            return None
     return UpdateInfo(
         version=version, tag=tag, notes="", page_url=page_url,
-        asset_url=asset_url, asset_size=remote, asset_digest="", is_rebuild=True,
+        asset_url=asset_url, asset_size=_remote_size(asset_url),
+        asset_digest=digest, is_rebuild=True,
     )
 
 
@@ -314,7 +364,7 @@ def check_for_update(timeout: int = 25, force: bool = False) -> Optional[UpdateI
     совсем.
     """
     cache = _read_cache()
-    cached = _info_from_dict(cache)
+    cached = _cached_update(cache)
     fresh = (time.time() - float(cache.get("ts") or 0)) < CACHE_TTL
     if not force and cached is not None and fresh:
         return cached
@@ -406,18 +456,17 @@ def download_update(info: UpdateInfo, progress: Optional[Callable[[int], None]] 
             f"Размер обновления не совпал: ожидалось {info.asset_size}, получено {len(data)}"
         )
     digest = "sha256:" + hashlib.sha256(data).hexdigest()
+    local = current_binary_digest()
+    # Скачался ровно тот файл, который уже запущен — обновлять нечего.
+    if local and digest.lower() == local.lower():
+        raise UpdateError("У вас уже установлена эта сборка — обновление не нужно.",
+                          already_installed=True)
     if info.asset_digest and info.asset_digest.lower() != digest:
         raise UpdateError(
             "Скачанный файл не совпал с ожидаемым: обновление отменено. "
             "Попробуйте позже или скачайте EXE со страницы релиза.",
             page_url=info.page_url,
         )
-    # пересборку определяли по размеру: подтверждаем хешем файла
-    same_build = (not info.asset_digest
-                  and parse_version(info.version) == parse_version(__version__)
-                  and digest == current_binary_digest())
-    if same_build:
-        raise UpdateError("У вас уже установлена эта сборка — обновление не нужно.")
     tmp = target.with_suffix(".part")
     tmp.write_bytes(data)
     tmp.replace(target)
