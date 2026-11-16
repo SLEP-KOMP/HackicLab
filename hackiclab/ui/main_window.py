@@ -2138,10 +2138,23 @@ class MainWindow(QMainWindow):
         return scaled
 
     def _build_donate(self):
-        """Вкладка поддержки: форма-калькулятор, способы оплаты и фото автора."""
+        """Вкладка поддержки: форма-калькулятор, способы оплаты и фото автора.
+
+        Контент стоит центральной колонкой с одинаковыми отступами слева и
+        справа, как в «Параметрах» Windows: на широком окне поля не растягиваются
+        и не выглядят огромными.
+        """
         page = QWidget()
-        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "donate.title", "donate.subtitle")
+        shell = QHBoxLayout(page)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.addStretch(1)
+        column = QWidget()
+        column.setMaximumWidth(1280)
+        v = QVBoxLayout(column)
+        v.setContentsMargins(24, 22, 24, 24)
+        shell.addWidget(column, 20)
+        shell.addStretch(1)
+        self._page_header(column, v, "donate.title", "donate.subtitle")
 
         cols = QHBoxLayout(); cols.setSpacing(18)
         left = QVBoxLayout(); left.setSpacing(14)
@@ -2244,7 +2257,6 @@ class MainWindow(QMainWindow):
             item = _muted(page, "•  " + tr.t(key)); item.setWordWrap(True)
             uv.addWidget(item)
         left.addWidget(use)
-        left.addStretch(1)
         cols.addLayout(left, 3)
 
         author = self._card(page)
@@ -2266,13 +2278,16 @@ class MainWindow(QMainWindow):
         av.addWidget(thanks)
         av.addStretch(1)
         cols.addWidget(author, 2, Qt.AlignmentFlag.AlignTop)
-        v.addLayout(cols)
+        cols_box = QWidget(column)
+        cols_box.setLayout(cols)
+        v.addWidget(cols_box, 0, Qt.AlignmentFlag.AlignTop)
 
         legal = self._card(page)
         lv = QVBoxLayout(legal)
         legal_text = _muted(page, tr.t("donate.legal")); legal_text.setWordWrap(True)
         lv.addWidget(legal_text)
         v.addWidget(legal)
+        v.addStretch(1)
 
         self._donate_recalc()
         return page
