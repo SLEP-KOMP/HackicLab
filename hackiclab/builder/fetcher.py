@@ -16,21 +16,29 @@ from .cache_manager import cache_dir
 
 
 def _ssl_contexts():
-    ctxs = [ssl.create_default_context()]
+    """Контексты с обязательной проверкой сертификата: системный, затем certifi.
+
+    Незашифрованный fallback (CERT_NONE) намеренно убран: по этим загрузкам в
+    EFI попадают OpenCore и kext'ы, которые затем загружает ядро. Непроверенное
+    TLS-соединение здесь означало бы возможность подмены.
+    """
+    ctxs = []
+    try:
+        ctxs.append(ssl.create_default_context())
+    except Exception:
+        pass
     try:
         import certifi
         ctxs.append(ssl.create_default_context(cafile=certifi.where()))
     except Exception:
         pass
-    unv = ssl.create_default_context()
-    unv.check_hostname = False
-    unv.verify_mode = ssl.CERT_NONE
-    ctxs.append(unv)
+    if not ctxs:
+        ctxs.append(ssl.create_default_context())
     return ctxs
 
 
 def download_bytes(url: str, headers: Optional[dict] = None, timeout: int = 60) -> bytes:
-    """Скачивает URL с SSL-fallback-цепочкой (как в hackmate compat.http_get)."""
+    """Скачивает URL с проверкой TLS (системное хранилище, затем certifi)."""
     last = None
     req = urllib.request.Request(url, headers=headers or {"User-Agent": "HackicLab/0.1"})
     for ctx in _ssl_contexts():
@@ -39,7 +47,10 @@ def download_bytes(url: str, headers: Optional[dict] = None, timeout: int = 60) 
                 return r.read()
         except Exception as e:
             last = e
-    raise last
+    raise RuntimeError(
+        f"Не удалось скачать {url}: {last}. Проверьте дату и время системы, "
+        f"доступ к сети и корневые сертификаты (пакет certifi)."
+    ) from last
 
 
 class GitHubFetcher:

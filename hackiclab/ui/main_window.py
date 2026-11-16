@@ -1316,15 +1316,27 @@ class MainWindow(QMainWindow):
             self._usb_run(device, mode, planned, self.usb_make_map.isChecked())
 
     def _ensure_admin(self) -> bool:
-        """Проверяет права администратора без запуска второго окна."""
+        """Проверяет права администратора и при необходимости перезапускает с UAC."""
         try:
-            from ..builder.usb_writer import is_admin
-            if is_admin():
-                return True
-        except Exception:
+            from ..builder.usb_writer import is_admin, relaunch_as_admin
+        except Exception as e:
+            QMessageBox.warning(self, tr.t("usb.admin_title"), str(e))
+            return False
+        if is_admin():
             return True
-        QMessageBox.warning(self, tr.t("usb.admin_title"),
-                            tr.t("usb.admin_manual"))
+        ans = QMessageBox.question(
+            self, tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        if ans != QMessageBox.Yes:
+            QMessageBox.warning(self, tr.t("usb.admin_title"),
+                                tr.t("usb.admin_manual"))
+            return False
+        if not relaunch_as_admin():
+            QMessageBox.warning(self, tr.t("usb.admin_title"),
+                                tr.t("usb.admin_manual"))
+            return False
+        QApplication.quit()
         return False
 
     def _usb_run(self, device: str, mode: str, planned_letter: str = "",

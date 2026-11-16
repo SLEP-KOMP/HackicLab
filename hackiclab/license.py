@@ -63,12 +63,19 @@ PREMIUM_FEATURES = {
 
 
 def _device_id() -> str:
-    """Стабильный идентификатор устройства (без сбора PII)."""
+    """Стабильный идентификатор устройства (без сбора PII).
+
+    hash() от строк в Python рандомизирован между процессами (PYTHONHASHSEED),
+    поэтому раньше идентификатор менялся при каждом запуске. Здесь только
+    детерминированные данные: имя машины, архитектура и MAC узла.
+    """
     try:
         import platform
+        import uuid
         node = platform.node()
-        mac = hash(platform.machine()) & 0xFFFFFFFF
-        h = hashlib.sha256(f"{node}:{mac}".encode()).hexdigest()[:24]
+        machine = platform.machine()
+        mac = uuid.getnode()
+        h = hashlib.sha256(f"{node}:{machine}:{mac}".encode()).hexdigest()[:24]
         return h
     except Exception:
         return secrets.token_hex(12)

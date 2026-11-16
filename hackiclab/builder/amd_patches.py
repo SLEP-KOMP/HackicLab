@@ -7,10 +7,25 @@ CPUID/MSR. Патчи берутся из официального репози�
 
 from __future__ import annotations
 
+import time
 import plistlib
 from pathlib import Path
 
 _URL = "https://raw.githubusercontent.com/AMD-OSX/AMD_Vanilla/master/patches.plist"
+
+#: Сколько дней кэш патчей считается свежим. AMD_Vanilla обновляется под новые
+#: версии macOS, поэтому старый файл перекачивается.
+CACHE_TTL_DAYS = 7
+
+
+def _cache_is_fresh(cache: Path) -> bool:
+    try:
+        if not cache.exists() or cache.stat().st_size < 1024:
+            return False
+        age = time.time() - cache.stat().st_mtime
+        return age < CACHE_TTL_DAYS * 86400
+    except Exception:
+        return False
 
 
 def fetch_amd_patches(log=None) -> list:
@@ -24,15 +39,22 @@ def fetch_amd_patches(log=None) -> list:
 
     cache: Path = cache_dir() / "amd_patches.plist"
     try:
-        if not cache.exists() or cache.stat().st_size < 1024:
+        if not _cache_is_fresh(cache):
             _log("AMD patches: скачиваю AMD_Vanilla…")
-            data = download_bytes(
-                _URL, headers={"User-Agent": "HackicLab"}, timeout=60)
-            if not data:
+            try:
+                data = download_bytes(
+                    _URL, headers={"User-Agent": "HackicLab"}, timeout=60)
+            except Exception as e:
+                data = b""
+                _log(f"AMD patches: сеть недоступна ({e})")
+            if data:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_bytes(data)
+            elif not cache.exists():
                 _log("AMD patches: пустой ответ GitHub")
                 return []
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_bytes(data)
+            else:
+                _log("AMD patches: использую сохранённый кэш")
         with open(cache, "rb") as f:
             plist = plistlib.load(f)
         patches = list((plist.get("Kernel") or {}).get("Patch") or [])

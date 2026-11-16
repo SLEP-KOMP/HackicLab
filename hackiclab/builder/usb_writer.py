@@ -233,8 +233,65 @@ def _resolve_disk_number(device: str) -> str:
     )
 
 
+def _disk_info(disk_number: str) -> dict:
+    """Параметры диска по номеру (BusType, IsSystem, IsBoot, PartitionStyle)."""
+    import json
+
+    out = _powershell(
+        f"Get-Disk -Number {disk_number} | Select-Object Number, BusType, IsSystem, "
+        f"IsBoot, PartitionStyle, Size | ConvertTo-Json",
+        timeout=20,
+    )
+    if not out:
+        return {}
+    try:
+        info = json.loads(out)
+    except Exception:
+        return {}
+    return info if isinstance(info, dict) else {}
+
+
+def _assert_usb_target(device: str, disk_number: str) -> None:
+    """Проверка прямо перед ``clean``: стирать можно только USB-флешку.
+
+    Список устройств строится заранее, а между выбором и записью номера дисков
+    и буквы могут сместиться (подключили/отключили накопитель). Поэтому
+    параметры диска перечитываются непосредственно перед очисткой.
+    """
+    info = _disk_info(disk_number)
+    if not info:
+        raise RuntimeError(
+            f"Не удалось прочитать параметры диска {disk_number}. Запись отменена — "
+            f"обновите список флешек и выберите её заново."
+        )
+    if info.get("IsSystem") or info.get("IsBoot"):
+        raise RuntimeError(
+            f"Диск {disk_number} — системный или загрузочный. Запись отменена, "
+            f"чтобы не потерять данные."
+        )
+    bus = str(info.get("BusType") or "").strip()
+    if bus.upper() != "USB":
+        raise RuntimeError(
+            f"Диск {disk_number} подключён как «{bus or 'неизвестно'}», а не USB. "
+            f"Запись отменена."
+        )
+    dev = (device or "").strip().rstrip(":\\").upper()
+    if len(dev) == 1 and dev.isalpha():
+        try:
+            actual = _resolve_disk_number(dev)
+        except Exception:
+            actual = ""
+        if actual and actual != str(disk_number):
+            raise RuntimeError(
+                f"Буква {dev}: теперь принадлежит диску {actual}, а не {disk_number}. "
+                f"Обновите список флешек и повторите запись."
+            )
+
+
 def _run_diskpart(script_text: str) -> tuple[int, str]:
-    p = Path(tempfile.mktemp(suffix=".txt"))
+    fd, tmp_name = tempfile.mkstemp(suffix=".txt")
+    os.close(fd)
+    p = Path(tmp_name)
     p.write_text(script_text, encoding="utf-8")
     try:
         r = subprocess.run(
@@ -260,6 +317,30 @@ def is_admin() -> bool:
         return False
 
 
+def _app_command() -> tuple[str, list[str]]:
+    """Команда повторного запуска приложения (EXE или python + main.py)."""
+    if getattr(sys, "frozen", False):
+        return sys.executable, []
+    script = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+    return sys.executable, ([str(script)] if script and script.exists() else [])
+
+
+def relaunch_as_admin() -> bool:
+    """Перезапускает HackicLab с UAC-запросом. True — запрос принят системой.
+
+    Права нужны только на шаг записи на флешку, поэтому манифест EXE объявлен
+    без ``uac_admin`` и повышение запрашивается по требованию.
+    """
+    try:
+        import ctypes
+        exe, args = _app_command()
+        params = subprocess.list2cmdline(args)
+        rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+        return int(rc) > 32
+    except Exception:
+        return False
+
+
 def format_usb(device: str, drive_letter: str = "") -> str:
     """Форматирует USB как FAT32 + GPT + ESP, возвращает букву диска.
 
@@ -273,6 +354,10 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     import time as _time
     letter = device.rstrip(":\\").upper()
     disk_num = _resolve_disk_number(letter)
+
+    # страховка: диск всё ещё USB и не системный — иначе диалог подтверждения
+    # мог относиться к другому диску (номера смещаются при переподключении)
+    _assert_usb_target(device, disk_num)
 
     if not drive_letter:
         drive_letter = _find_free_drive_letter()
@@ -298,7 +383,8 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     create_script = (
         f"select disk {disk_num}\n"
         "clean\n"
-        f"create partition primary size={partition_mb}\n"
+        "convert gpt\n"
+        f"create partition efi size={partition_mb}\n"
         "exit\n"
     )
     format_script = (

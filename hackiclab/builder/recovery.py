@@ -83,34 +83,57 @@ def macrecovery_args(version: MacOSVersion, outdir: Optional[Path] = None) -> li
 
 
 def _macrecovery_path() -> Path:
+    """Куда класть macrecovery.py: рядом с модулем, а в EXE — в кэш пользователя.
+
+    В замороженной сборке ``_MEIPASS`` — временный каталог, который PyInstaller
+    удаляет после выхода, поэтому скрипт скачивался при каждом запуске.
+    """
     if getattr(sys, "frozen", False):
-        import os
-        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-        return Path(base) / "macrecovery.py"
+        from .cache_manager import cache_dir
+        return cache_dir() / "macrecovery.py"
     return Path(__file__).parent / "macrecovery.py"
 
 
 MACRECOVERY_PATH = _macrecovery_path()
 
 
+def _validate_script(data: bytes) -> bool:
+    """Проверяет скачанный macrecovery.py перед запуском.
+
+    Хеш закрепить нельзя (скрипт берётся из master), поэтому минимум проверяем,
+    что это компилируемый Python и что в нём есть ожидаемые элементы CLI.
+    """
+    if not data or len(data) < 1024:
+        return False
+    try:
+        text = data.decode("utf-8")
+        compile(text, "macrecovery.py", "exec")
+    except Exception:
+        return False
+    return "board-id" in text or "-b" in text
+
+
 def ensure_macrecovery() -> Path:
     """Возвращает путь к macrecovery.py (скачивает при необходимости)."""
-    if MACRECOVERY_PATH.exists():
+    if MACRECOVERY_PATH.exists() and MACRECOVERY_PATH.stat().st_size > 1024:
         return MACRECOVERY_PATH
-    import ssl
     import urllib.request
+
     ctx = ssl.create_default_context()
     try:
-        req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackicLab/1.0"})
-        with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
-            MACRECOVERY_PATH.write_bytes(r.read())
-    except (ssl.SSLError, Exception):
-        # fallback без проверки сертификата
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackicLab/1.0"})
-        with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
-            MACRECOVERY_PATH.write_bytes(r.read())
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+    req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackicLab/1.0"})
+    with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
+        data = r.read()
+    if not _validate_script(data):
+        raise RuntimeError(
+            "Скачанный macrecovery.py не похож на оригинальный скрипт — запуск отменён."
+        )
+    MACRECOVERY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MACRECOVERY_PATH.write_bytes(data)
     return MACRECOVERY_PATH
 
 

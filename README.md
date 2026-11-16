@@ -61,13 +61,24 @@
 ## Установка (разработка)
 
 ```powershell
-python -m pip install PySide6 psutil
+python -m pip install -r requirements.txt
 python main.py
 ```
+
+Приложение запускается без прав администратора: UAC-запрос появляется только в момент записи EFI на флешку, и HackicLab предлагает перезапуститься с повышенными правами сам.
+
+## Тесты
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Тесты проверяют чистую логику без обращения к реальным дискам и сети: разбор вывода diskpart-скриптов, генерацию `config.plist`, стабильность идентификатора устройства, полноту переводов RU/EN.
 
 ## Сборка EXE
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m PyInstaller --noconfirm --clean HackicLab.spec
 # результат: dist/HackicLab.exe
 ```
@@ -88,6 +99,9 @@ hackiclab/
   license.py    # Free/Premium
 main.py         # точка входа
 HackicLab.spec  # конфигурация PyInstaller
+requirements.txt       # зависимости для запуска
+requirements-dev.txt   # зависимости для сборки EXE
+tests/          # unittest-тесты чистой логики
 ```
 
 ## Дорожная карта
