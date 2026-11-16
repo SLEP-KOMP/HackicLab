@@ -46,12 +46,22 @@ class EFIBuilder:
 
     OPEN_CORE_REPO = "acidanthera/OpenCorePkg"
 
-    def __init__(self, plan: BuildPlan):
+    def __init__(self, plan: BuildPlan, on_progress=None):
         self.plan = plan
         self.log: list[str] = []
+        self.on_progress = on_progress
 
     def _log(self, msg: str):
         self.log.append(msg)
+
+    def _step(self, percent: int, msg: str):
+        """Пишет шаг в журнал и сразу отдаёт его с процентом в интерфейс."""
+        self._log(msg)
+        if self.on_progress is not None:
+            try:
+                self.on_progress(max(0, min(100, int(percent))), msg)
+            except Exception:
+                pass
 
     def fetch_open_core(self, dest: Path) -> Optional[Path]:
         """Скачивает и распаковывает релиз OpenCorePkg. Возвращает путь к OpenCore.efi."""
@@ -93,7 +103,7 @@ class EFIBuilder:
         layout = EFILayout(target)
         layout.create()
         res = EFIBuildResult(root=target, ok=True)
-        self._log(f"Целевая папка: {target}")
+        self._step(2, f"Целевая папка: {target}")
 
         # --- Реальное скачивание компонентов ---
         from .downloader import Downloader
@@ -105,7 +115,7 @@ class EFIBuilder:
         oc_zip = dl.download_open_core(tmp)
         extract: Path | None = None
         if oc_zip:
-            self._log("Распаковываю OpenCore…")
+            self._step(16, "Распаковываю OpenCore…")
             try:
                 extract = tmp / "oc_extracted"
                 if extract.exists():
@@ -123,7 +133,7 @@ class EFIBuilder:
                 if x64_efi:
                     layout.place_opencore(x64_efi / "OC" / "OpenCore.efi")
                     layout.place_bootx64(x64_efi / "BOOT" / "BOOTx64.efi")
-                    self._log("  OpenCore.efi → EFI/OC, BOOTx64.efi → EFI/BOOT")
+                    self._step(26, "  OpenCore.efi → EFI/OC, BOOTx64.efi → EFI/BOOT")
                     res.stats["opencore"] = "OK"
                 else:
                     self._log("  OpenCore.efi/BOOTx64.efi не найдены в архиве")
@@ -156,7 +166,7 @@ class EFIBuilder:
             except Exception as e:
                 self._log(f"OpenCore: распаковка не удалась: {e}")
         else:
-            self._log("OpenCore: не удалось скачать")
+            self._step(26, "OpenCore: не удалось скачать")
 
         # 2) Кексты по профилю
         from ..knowledge.kexts import select_kexts
@@ -165,10 +175,11 @@ class EFIBuilder:
         kexts_dir = layout.oc / "Kexts"
         kexts_dir.mkdir(parents=True, exist_ok=True)
         downloaded = []
-        for e in selected:
+        total_kexts = max(1, len(selected))
+        for index, e in enumerate(selected, 1):
             if e.internal:
                 continue  # входят в состав родительского архива
-            self._log(f"Скачиваю {e.name}…")
+            self._step(30 + int(40 * index / total_kexts), f"Скачиваю {e.name}…")
             try:
                 dl.download_kext(e, kexts_dir)
                 downloaded.append(e.name)
@@ -190,6 +201,7 @@ class EFIBuilder:
                 child.unlink(missing_ok=True)
 
         # 3) SSDT генерация (via SSDTFactory + iasl)
+        self._step(72, "Готовлю SSDT…")
         try:
             ssdt_out = target / ".ssdt"
             ssdt_out.mkdir(parents=True, exist_ok=True)
@@ -214,7 +226,7 @@ class EFIBuilder:
                 if r["path"] and Path(r["path"]).exists():
                     shutil.copy2(r["path"], str(acpi_dir / Path(r["path"]).name))
                     placed.append(r["name"])
-            self._log(f"SSDT в ACPI: {placed if placed else 'нет готовых .aml'}")
+            self._step(80, f"SSDT в ACPI: {placed if placed else 'нет готовых .aml'}")
             res.stats["ssdt_placed"] = placed
         except Exception as e:
             self._log(f"SSDT: ошибка генерации ({e})")
@@ -223,6 +235,7 @@ class EFIBuilder:
         # 4) config.plist с SMBIOS
         opts = self.plan.options or BuildOptions()
         opts = BuildOptions(**{**opts.__dict__, "custom_smbios": self.plan.smbios})
+        self._step(86, "Формирую config.plist…")
         data = generate_config_plist(self.plan.profile, opts)
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)
         kexts_placed = [x.name for x in kexts_dir.iterdir() if x.is_dir() and x.name.endswith('.kext')]
@@ -244,6 +257,7 @@ class EFIBuilder:
         from ..builder.ocvalidate import find_ocvalidate, run_ocvalidate
         ocv_tool = (find_ocvalidate(in_open_core_root=extract) if extract
                     else find_ocvalidate())
+        self._step(93, "Проверяю config.plist через ocvalidate…")
         ocv = run_ocvalidate(cfg_path, ocvalidate=ocv_tool)
         res.stats["ocvalidate_ok"] = ocv.ok
         res.stats["ocvalidate_errors"] = ocv.errors
@@ -285,4 +299,5 @@ class EFIBuilder:
             record_build(self.plan, res)
         except Exception:
             pass
+        self._step(100, "Сборка завершена")
         return res

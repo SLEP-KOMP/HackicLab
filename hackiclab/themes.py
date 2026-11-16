@@ -350,6 +350,17 @@ QProgressBar {{
     height: 6px; text-align: center; color: transparent;
 }}
 QProgressBar::chunk {{ background: {_accent(p)}; border-radius: 5px; }}
+QFrame#appleCard {{
+    background: {surface}; border: 1px solid {border}; border-radius: 16px;
+}}
+QLabel#applePercent {{
+    font-size: 21px; font-weight: 800; letter-spacing: 1px; color: {p.text};
+}}
+QProgressBar#appleProgress {{
+    background: {_rgba(p.border, 0.7)}; border: none; border-radius: 3px;
+    height: 6px; text-align: center; color: transparent;
+}}
+QProgressBar#appleProgress::chunk {{ background: {_accent(p)}; border-radius: 3px; }}
 QPlainTextEdit, QTextEdit, QTextBrowser {{
     background: {code}; border: 1px solid {border}; border-radius: 10px;
     color: {p.text}; font-family: 'Cascadia Code', 'Consolas', monospace;

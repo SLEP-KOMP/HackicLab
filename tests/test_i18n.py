@@ -316,6 +316,83 @@ class PageColumnLayoutTests(unittest.TestCase):
             window.deleteLater()
 
 
+class BuildProgressTests(unittest.TestCase):
+    """Сборка показывает шаги и проценты, а справа есть яблоко с прогрессом."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_builder_reports_steps(self):
+        from typing import cast
+
+        from hackiclab.builder.builder import BuildPlan, EFIBuilder
+
+        steps: list[tuple[int, str]] = []
+        # план для проверки шагов не нужен: тестируется только _step
+        builder = EFIBuilder(cast("BuildPlan", None),
+                             on_progress=lambda p, m: steps.append((p, m)))
+        builder._step(42, "Скачиваю kext…")
+        self.assertEqual(steps, [(42, "Скачиваю kext…")])
+        self.assertIn("Скачиваю kext…", builder.log)
+        builder._step(150, "край")
+        self.assertEqual(steps[-1][0], 100)
+
+    def test_worker_has_progress_signal(self):
+        from hackiclab.ui.main_window import BuildWorker
+
+        self.assertTrue(hasattr(BuildWorker, "progress"))
+
+    def test_apple_card_present(self):
+        from PySide6.QtWidgets import QFrame, QLabel, QProgressBar
+
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            card = window.page_build.findChild(QFrame, "appleCard")
+            if card is None:
+                self.fail("карточка с яблоком не создана")
+                return
+            logo = card.findChild(QLabel, "appleLogo")
+            percent = card.findChild(QLabel, "applePercent")
+            bar = card.findChild(QProgressBar, "appleProgress")
+            for widget, name in ((logo, "appleLogo"), (percent, "applePercent"),
+                                 (bar, "appleProgress")):
+                self.assertIsNotNone(widget, name)
+            if logo is None or percent is None or bar is None:
+                return
+            self.assertFalse(logo.pixmap().isNull(), "иконка яблока не загрузилась")
+            window._set_apple_progress(37)
+            self.assertEqual(percent.text(), "37 %")
+            self.assertEqual(bar.value(), 37)
+            window._set_apple_progress(100)
+            self.assertEqual(window.apple_caption.text(), "Готово")
+            window._set_apple_progress(0)
+            self.assertEqual(window.apple_caption.text(), "Прогресс сборки")
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_build_log_gets_progress_lines(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            window.build_log.clear()
+            window._build_progress(42, "Скачиваю VirtualSMC…")
+            self.assertIn("[ 42%] Скачиваю VirtualSMC…", window.build_log.toPlainText())
+            self.assertEqual(window.build_progress.value(), 42)
+            self.assertEqual(window.apple_bar.value(), 42)
+        finally:
+            window.close()
+            window.deleteLater()
+
+
 class DialogLanguageTests(unittest.TestCase):
     """Подписи диалогов на обоих языках — как их увидит пользователь."""
 

@@ -14,6 +14,7 @@ from PySide6.QtGui import (
     QGuiApplication,
     QPainter,
     QPainterPath,
+    QPalette,
     QPixmap,
 )
 from PySide6.QtWidgets import (
@@ -146,9 +147,10 @@ class ScanWorker(QThread):
 
 
 class BuildWorker(QThread):
-    """Сборка EFI в фоне."""
+    """Сборка EFI в фоне: возвращает результат и шлёт шаги прогресса."""
     done = Signal(object)
     failed = Signal(str)
+    progress = Signal(int, str)
 
     def __init__(self, plan: BuildPlan, target: Path):
         super().__init__()
@@ -157,10 +159,13 @@ class BuildWorker(QThread):
 
     def run(self):
         try:
-            res = EFIBuilder(self.plan).build(self.target)
+            res = EFIBuilder(self.plan, on_progress=self._progress).build(self.target)
             self.done.emit(res)
         except Exception as e:
             self.failed.emit(str(e))
+
+    def _progress(self, percent: int, message: str):
+        self.progress.emit(int(percent), str(message))
 
 
 class USBWriteWorker(QThread):
@@ -649,6 +654,14 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "build.title", "build.subtitle")
 
+        # Слева настройки и журнал, справа карточка с яблоком и прогрессом —
+        # как фото автора в «Поддержке».
+        cols = QHBoxLayout(); cols.setSpacing(18)
+        main = QVBoxLayout(); main.setSpacing(12)
+        cols.addLayout(main, 3)
+        cols.addWidget(self._apple_card(page), 1, Qt.AlignmentFlag.AlignTop)
+        v.addLayout(cols, 1)
+
         # options with description cards
         gb = QGroupBox(tr.t("build.options"))
         opts = QVBoxLayout(gb)
@@ -672,7 +685,7 @@ class MainWindow(QMainWindow):
         opts.addLayout(wmode_row)
         wifi_desc = _muted(page, tr.t("build.wifi_mode_desc")); wifi_desc.setWordWrap(True)
         opts.addWidget(wifi_desc)
-        v.addWidget(gb)
+        main.addWidget(gb)
 
         # macOS version selection
         mb = QGroupBox(tr.t("build.macos"))
@@ -693,7 +706,7 @@ class MainWindow(QMainWindow):
         self.macos_incompat.setVisible(False)
         mv.addWidget(self.macos_incompat)
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
-        v.addWidget(mb)
+        main.addWidget(mb)
 
         # destination with explicit button
         dest_card = self._card(page)
@@ -712,20 +725,20 @@ class MainWindow(QMainWindow):
         note = _muted(page, tr.t("build.note_online")); note.setWordWrap(True)
         note.setObjectName("ok")
         dv.addWidget(note)
-        v.addWidget(dest_card)
+        main.addWidget(dest_card)
 
         build_btn = QPushButton(tr.t("build.button"))
         build_btn.clicked.connect(self._do_build)
-        v.addWidget(build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        main.addWidget(build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.build_progress = QProgressBar(); self.build_progress.setMaximum(0); self.build_progress.setVisible(False)
-        v.addWidget(self.build_progress)
+        main.addWidget(self.build_progress)
 
         lbl = _h2(page, tr.t("build.log"))
-        v.addWidget(lbl)
+        main.addWidget(lbl)
         self.build_log = QPlainTextEdit(); self.build_log.setReadOnly(True); self.build_log.setMinimumHeight(160)
         self.build_log.setPlaceholderText(tr.t("common.log_placeholder"))
-        v.addWidget(self.build_log, 1)
+        main.addWidget(self.build_log, 1)
 
         # --- Почему так собрано (объяснение решений) ---
         rrow = QHBoxLayout()
@@ -736,11 +749,11 @@ class MainWindow(QMainWindow):
         self.rationale_save_btn.setEnabled(False)
         self.rationale_save_btn.clicked.connect(self._save_rationale)
         rrow.addWidget(self.rationale_save_btn)
-        v.addLayout(rrow)
+        main.addLayout(rrow)
         self.build_rationale = QPlainTextEdit(); self.build_rationale.setReadOnly(True)
         self.build_rationale.setMinimumHeight(140)
         self.build_rationale.setPlaceholderText(tr.t("build.rationale_empty"))
-        v.addWidget(self.build_rationale, 1)
+        main.addWidget(self.build_rationale, 1)
         return page
 
     def _build_validate(self):
@@ -2187,6 +2200,85 @@ class MainWindow(QMainWindow):
         painter.end()
         return canvas
 
+    def _apple_pixmap(self, size: int) -> QPixmap:
+        """Яблоко из SVG (иконка simple-icons, CC0) в цвете текущей темы."""
+        from PySide6.QtSvg import QSvgRenderer
+
+        path = self._asset("brands", "apple.svg")
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return QPixmap()
+        source = QPixmap(size, size)
+        source.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(source)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter)
+        painter.end()
+        # иконка чёрная: перекрашиваем в цвет текста текущей темы
+        tint = self.palette().color(QPalette.ColorRole.WindowText)
+        pix = QPixmap(source.size())
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        painter.drawPixmap(0, 0, source)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pix.rect(), tint)
+        painter.end()
+        return pix
+
+    def _apple_card(self, parent):
+        """Карточка справа: яблоко и тонкий прогресс с процентами, как при загрузке macOS."""
+        card = self._card(parent)
+        card.setObjectName("appleCard")
+        card.setMinimumWidth(200)
+        card.setMaximumWidth(280)
+        av = QVBoxLayout(card)
+        av.setContentsMargins(20, 24, 20, 24)
+        av.setSpacing(14)
+
+        logo = QLabel(card)
+        logo.setObjectName("appleLogo")
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo.setPixmap(self._apple_pixmap(92))
+        av.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self.apple_percent = QLabel("0 %", card)
+        self.apple_percent.setObjectName("applePercent")
+        self.apple_percent.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        av.addWidget(self.apple_percent)
+
+        self.apple_bar = QProgressBar(card)
+        self.apple_bar.setObjectName("appleProgress")
+        self.apple_bar.setRange(0, 100)
+        self.apple_bar.setValue(0)
+        self.apple_bar.setTextVisible(False)
+        self.apple_bar.setFixedHeight(6)
+        av.addWidget(self.apple_bar)
+
+        self.apple_caption = _muted(card, tr.t("build.apple_caption"))
+        self.apple_caption.setWordWrap(True)
+        self.apple_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        av.addWidget(self.apple_caption)
+        av.addStretch(1)
+        return card
+
+    def _set_apple_progress(self, percent: int):
+        """Обновляет яблоко-прогресс; при 100 % показывает готовность."""
+        percent = max(0, min(100, int(percent)))
+        bar = getattr(self, "apple_bar", None)
+        if bar is not None:
+            bar.setValue(percent)
+        label = getattr(self, "apple_percent", None)
+        if label is not None:
+            label.setText(f"{percent} %")
+        caption = getattr(self, "apple_caption", None)
+        if caption is not None:
+            if percent >= 100:
+                caption.setText(tr.t("build.apple_done"))
+            elif percent > 0:
+                caption.setText(tr.t("build.apple_working"))
+            else:
+                caption.setText(tr.t("build.apple_caption"))
+
     def _logo_pixmap(self, name: str, height: int) -> QPixmap:
         pix = QPixmap(str(self._asset("brands", name)))
         if pix.isNull():
@@ -2963,15 +3055,30 @@ class MainWindow(QMainWindow):
         self.build_rationale.clear()
         self.rationale_save_btn.setEnabled(False)
         self.build_progress.setVisible(True)
+        self.build_progress.setRange(0, 100)
+        self.build_progress.setValue(0)
+        self._set_apple_progress(0)
         self.build_log.clear()
         self.build_log.appendPlainText(tr.t("build.building"))
         self._worker_build = BuildWorker(plan, target)
+        self._worker_build.progress.connect(self._build_progress)
         self._worker_build.done.connect(self._build_done)
         self._worker_build.failed.connect(self._build_failed)
         self._worker_build.start()
 
+    def _build_progress(self, percent: int, message: str):
+        """Живой журнал сборки: каждая строка появляется сразу, с процентом."""
+        self.build_log.appendPlainText(f"[{percent:3d}%] {message}")
+        self.build_log.verticalScrollBar().setValue(
+            self.build_log.verticalScrollBar().maximum())
+        self.build_progress.setValue(percent)
+        self._set_apple_progress(percent)
+        self.statusBar().showMessage(message, 4000)
+
     def _build_done(self, res):
+        self.build_progress.setValue(100)
         self.build_progress.setVisible(False)
+        self._set_apple_progress(100)
         self.last_build_dir = Path(res.root) if res and res.root else None
         if self.last_build_dir:
             self.val_last_label.setText(str(self.last_build_dir))
@@ -3052,6 +3159,7 @@ class MainWindow(QMainWindow):
 
     def _build_failed(self, err):
         self.build_progress.setVisible(False)
+        self._set_apple_progress(0)
         self.build_log.setPlainText(str(err))
         QMessageBox.critical(self, tr.t("build.title"), str(err))
 
