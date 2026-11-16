@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from ..knowledge.ssdt_logics import required_ssdts
 from ..proc import run as hidden_run
 from ..scanner.models import HardwareProfile
 
@@ -322,11 +323,7 @@ class SSDTFactory:
           2) встроенный готовый .aml      -> bundled
           3) только шаблон .dsl (без бинарника) -> template-only
         """
-        names = ["SSDT-PLUG-AMD" if self.profile.cpu.vendor == "amd" else "SSDT-PLUG",
-                 "SSDT-EC", "SSDT-USBX", "SSDT-AWAC",
-                 "SSDT-PMC", "SSDT-GPI0"]
-        if self.profile.platform == "laptop":
-            names += ["SSDT-PNLF", "SSDT-EC-USBX", "SSDT-HPET", "SSDT-XOSI"]
+        names = [s.name for s in required_ssdts(self.profile)]
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         results = []

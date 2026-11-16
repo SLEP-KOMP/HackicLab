@@ -16,21 +16,46 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
 from . import __version__
-from .builder.fetcher import download_bytes
+from .builder.fetcher import _ssl_contexts, download_bytes
 
 REPO = "SLEP-KOMP/HackicLab"
 LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
+RELEASES_ATOM = f"https://github.com/{REPO}/releases.atom"
 ASSET_NAME = "HackicLab.exe"
+ASSET_URL = f"https://github.com/{REPO}/releases/download/{{tag}}/{ASSET_NAME}"
+
+#: Сколько держать результат проверки, чтобы не тратить лимит GitHub API.
+CACHE_TTL = 6 * 3600
+
+
+class UpdateError(RuntimeError):
+    """Ошибка обновления с текстом, который можно показать пользователю."""
+
+    def __init__(self, message: str, *, page_url: str = RELEASES_PAGE):
+        super().__init__(message)
+        self.page_url = page_url
+
+
+class _RateLimited(Exception):
+    """GitHub ответил 403/429 — исчерпан лимит запросов с этого IP."""
+
+    def __init__(self, reset: str = ""):
+        super().__init__("rate limited")
+        self.reset = reset
 
 
 @dataclass(frozen=True)
@@ -47,6 +72,82 @@ class UpdateInfo:
     @property
     def has_asset(self) -> bool:
         return bool(self.asset_url)
+
+
+def _cache_path() -> Path:
+    return update_dir().parent / "release.json"
+
+
+def _read_cache() -> dict:
+    """Последний удачный ответ GitHub: нужен при лимите и без сети."""
+    try:
+        data = json.loads(_cache_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_cache(payload: dict) -> None:
+    try:
+        path = _cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def _http(url: str, headers: Optional[dict] = None, timeout: int = 25,
+          method: str = "GET") -> tuple[int, dict, bytes]:
+    """HTTP-запрос с проверкой TLS; 403/429 превращает в _RateLimited."""
+    request_headers = {"User-Agent": f"HackicLab/{__version__}"}
+    request_headers.update(headers or {})
+    last: Exception | None = None
+    for ctx in _ssl_contexts():
+        request = urllib.request.Request(url, headers=request_headers, method=method)
+        try:
+            with urllib.request.urlopen(request, context=ctx, timeout=timeout) as response:
+                return int(response.status), dict(response.headers), response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (403, 429):
+                reset = ""
+                try:
+                    reset = str((exc.headers or {}).get("X-RateLimit-Reset") or "")
+                except Exception:
+                    reset = ""
+                raise _RateLimited(reset) from exc
+            if exc.code == 304:
+                return 304, dict(exc.headers or {}), b""
+            last = exc
+            break
+        except Exception as exc:  # сеть, DNS, сертификаты
+            last = exc
+    raise UpdateError(
+        "Не удалось связаться с GitHub. Проверьте интернет или повторите позже.",
+        page_url=RELEASES_PAGE,
+    ) from last
+
+
+def local_binary_size() -> int:
+    """Размер запущенного EXE: сравнение размера ловит пересборку без API."""
+    if not getattr(sys, "frozen", False):
+        return 0
+    try:
+        return Path(sys.executable).stat().st_size
+    except OSError:
+        return 0
+
+
+def _remote_size(url: str) -> int:
+    try:
+        _, headers, _ = _http(url, method="HEAD", timeout=20)
+        for key, value in headers.items():
+            if str(key).lower() == "content-length":
+                return int(value)
+    except Exception:
+        pass
+    return 0
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -128,20 +229,149 @@ def parse_release(release: dict, current_digest: str = "") -> Optional[UpdateInf
     )
 
 
-def check_for_update(timeout: int = 25) -> Optional[UpdateInfo]:
-    """Возвращает описание нового релиза или None. Бросает исключение при сети."""
-    data = download_bytes(
-        LATEST_API,
-        headers={
-            "User-Agent": f"HackicLab/{__version__}",
-            "Accept": "application/vnd.github+json",
-        },
-        timeout=timeout,
-    )
-    release = json.loads(data.decode("utf-8"))
-    if not isinstance(release, dict):
+def _info_from_dict(data: dict) -> Optional[UpdateInfo]:
+    """Собирает UpdateInfo из кэша (без обращения к сети)."""
+    tag = str(data.get("tag") or "").strip()
+    if not tag:
         return None
-    return parse_release(release, current_binary_digest())
+    version = str(data.get("version") or tag.lstrip("vV"))
+    return UpdateInfo(
+        version=version,
+        tag=tag,
+        notes=str(data.get("notes") or ""),
+        page_url=str(data.get("page_url") or RELEASES_PAGE),
+        asset_url=str(data.get("asset_url") or ""),
+        asset_size=int(data.get("asset_size") or 0),
+        asset_digest=str(data.get("asset_digest") or ""),
+        is_rebuild=bool(data.get("is_rebuild")),
+    )
+
+
+def _cache_payload(release: dict, etag: str = "") -> dict:
+    release_tag = str(release.get("tag_name") or "")
+    url, size, digest = _find_asset(release)
+    return {
+        "tag": release_tag,
+        "version": release_tag.lstrip("vV"),
+        "notes": str(release.get("body") or ""),
+        "page_url": str(release.get("html_url") or RELEASES_PAGE),
+        "asset_url": url,
+        "asset_size": size,
+        "asset_digest": digest,
+        "etag": etag,
+        "ts": time.time(),
+    }
+
+
+def _info_from_tag(tag: str) -> Optional[UpdateInfo]:
+    """Fallback без API: тег из ленты releases.atom и прямой URL вложения."""
+    tag = (tag or "").strip()
+    if not tag:
+        return None
+    version = tag.lstrip("vV")
+    asset_url = ASSET_URL.format(tag=tag)
+    page_url = f"https://github.com/{REPO}/releases/tag/{tag}"
+    if is_newer(version):
+        return UpdateInfo(
+            version=version,
+            tag=tag,
+            notes="",
+            page_url=page_url,
+            asset_url=asset_url,
+            asset_size=_remote_size(asset_url),
+            asset_digest="",
+        )
+    if parse_version(version) != parse_version(__version__):
+        return None
+    local, remote = local_binary_size(), _remote_size(asset_url)
+    if not local or not remote or local == remote:
+        return None
+    return UpdateInfo(
+        version=version, tag=tag, notes="", page_url=page_url,
+        asset_url=asset_url, asset_size=remote, asset_digest="", is_rebuild=True,
+    )
+
+
+_ATOM_LINK = re.compile(r'<link[^>]*rel="alternate"[^>]*href="([^"]+)"', re.I)
+
+
+def _fetch_atom_tag() -> str:
+    """Тег последнего релиза из Atom-ленты: лимит API не расходуется."""
+    _, _, body = _http(RELEASES_ATOM, timeout=20)
+    text = body.decode("utf-8", "replace")
+    match = _ATOM_LINK.search(text)
+    if not match:
+        return ""
+    return match.group(1).rstrip("/").split("/")[-1]
+
+
+def check_for_update(timeout: int = 25, force: bool = False) -> Optional[UpdateInfo]:
+    """Ищет новый релиз: API → лента releases.atom → кэш.
+
+    При исчерпанном лимите GitHub (HTTP 403/429) это не ошибка для
+    пользователя: сначала пробуем ленту релизов, затем последний удачный
+    ответ из кэша. Исключение UpdateError бросается, только если данных нет
+    совсем.
+    """
+    cache = _read_cache()
+    cached = _info_from_dict(cache)
+    fresh = (time.time() - float(cache.get("ts") or 0)) < CACHE_TTL
+    if not force and cached is not None and fresh:
+        return cached
+
+    rate_limited = False
+    try:
+        headers = {"Accept": "application/vnd.github+json"}
+        etag = str(cache.get("etag") or "")
+        if etag:
+            headers["If-None-Match"] = etag
+        status, response_headers, body = _http(LATEST_API, headers=headers, timeout=timeout)
+        if status == 304:
+            _write_cache({**cache, "ts": time.time()})
+            return cached
+        release = json.loads(body.decode("utf-8"))
+        if isinstance(release, dict) and release.get("tag_name"):
+            new_etag = ""
+            for key, value in response_headers.items():
+                if str(key).lower() == "etag":
+                    new_etag = str(value)
+            payload = _cache_payload(release, new_etag)
+            if payload["tag"]:
+                _write_cache(payload)
+            return parse_release(release, current_binary_digest())
+    except _RateLimited:
+        rate_limited = True
+    except UpdateError:
+        pass
+    except Exception:
+        pass
+
+    try:
+        tag = _fetch_atom_tag()
+        if tag:
+            info = _info_from_tag(tag)
+            if info is not None:
+                _write_cache({
+                    "tag": info.tag, "version": info.version, "notes": info.notes,
+                    "page_url": info.page_url, "asset_url": info.asset_url,
+                    "asset_size": info.asset_size, "asset_digest": "",
+                    "is_rebuild": info.is_rebuild, "ts": time.time(),
+                })
+            return info
+    except Exception:
+        pass
+
+    if cached is not None:
+        return cached
+    if rate_limited:
+        raise UpdateError(
+            "GitHub временно ограничил частоту запросов с вашего адреса. "
+            "Обновление можно скачать вручную со страницы релиза.",
+        )
+    raise UpdateError(
+        "Не удалось проверить обновления: GitHub недоступен. "
+        "Проверьте интернет и повторите попытку.",
+    )
 
 
 def can_self_update() -> bool:
@@ -172,9 +402,22 @@ def download_update(info: UpdateInfo, progress: Optional[Callable[[int], None]] 
         timeout=180,
     )
     if info.asset_size and abs(len(data) - info.asset_size) > 1024:
-        raise RuntimeError(
+        raise UpdateError(
             f"Размер обновления не совпал: ожидалось {info.asset_size}, получено {len(data)}"
         )
+    digest = "sha256:" + hashlib.sha256(data).hexdigest()
+    if info.asset_digest and info.asset_digest.lower() != digest:
+        raise UpdateError(
+            "Скачанный файл не совпал с ожидаемым: обновление отменено. "
+            "Попробуйте позже или скачайте EXE со страницы релиза.",
+            page_url=info.page_url,
+        )
+    # пересборку определяли по размеру: подтверждаем хешем файла
+    same_build = (not info.asset_digest
+                  and parse_version(info.version) == parse_version(__version__)
+                  and digest == current_binary_digest())
+    if same_build:
+        raise UpdateError("У вас уже установлена эта сборка — обновление не нужно.")
     tmp = target.with_suffix(".part")
     tmp.write_bytes(data)
     tmp.replace(target)

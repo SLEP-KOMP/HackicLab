@@ -81,7 +81,8 @@ class EFILayout:
 
     def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
                                driver_names: list | None = None,
-                               kernel_patches: list | None = None) -> Path:
+                               kernel_patches: list | None = None,
+                               acpi_names: list | None = None) -> Path:
         """Записывает config.plist, заполняя Kernel/Add реальными kext и UEFI/Drivers.
 
         Порядок Kernel/Add важен для загрузчика: Lilu и VirtualSMC должны идти
@@ -128,6 +129,22 @@ class EFILayout:
             if d and d not in _skip
         ]
         cfg["UEFI"]["Drivers"] = drivers
+        # ACPI/Add строим из реально разложенных .aml: файл без записи в конфиге
+        # (или выключенная запись) — мёртвый груз, а запись без файла ломает загрузку
+        if acpi_names:
+            priority = {"SSDT-PLUG": 0, "SSDT-PLUG-AMD": 0, "SSDT-EC": 1,
+                        "SSDT-EC-USBX": 1, "SSDT-USBX": 2}
+            ordered_acpi = sorted(
+                acpi_names,
+                key=lambda n: (priority.get(n[:-4] if n.endswith(".aml") else n, 50), n))
+            cfg["ACPI"]["Add"] = [
+                {
+                    "Comment": Path(n).stem,
+                    "Enabled": True,
+                    "Path": n if n.endswith(".aml") else f"{n}.aml",
+                }
+                for n in ordered_acpi
+            ]
         if kernel_patches:
             cfg["Kernel"]["Patch"] = kernel_patches
         elif "Patch" not in cfg["Kernel"]:

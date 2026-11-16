@@ -16,6 +16,21 @@ from ..knowledge.kexts import KextEntry
 from .cache_manager import cache_dir
 from .fetcher import GitHubFetcher, download_bytes
 
+_VERSIONED_BUNDLE = re.compile(r"^(?P<base>.+?)-\d+(?:\.\d+)*$")
+
+
+def canonical_kext_name(name: str) -> str:
+    """Имя бандла без версии: ``AppleIGB-5.11.8.kext`` → ``AppleIGB.kext``.
+
+    В архивах релизов часть проектов называет папку с версией
+    (AppleIGB, AirportItlwm и др.). Если оставить её как есть,
+    запись в config.plist и фильтр по выбранным кекстам расходятся,
+    и драйвер молча удаляется из готового EFI.
+    """
+    stem = name[:-5] if name.lower().endswith(".kext") else name
+    match = _VERSIONED_BUNDLE.match(stem)
+    return f"{match.group('base') if match else stem}.kext"
+
 
 class Downloader:
     """Высокоуровневые загрузки компонентов."""
@@ -161,7 +176,7 @@ class Downloader:
             kext_dirs = [p for p in extract_dir.rglob("*.kext") if p.is_dir()]
             import shutil
             for kd in kext_dirs:
-                dst = dest_dir / kd.name
+                dst = dest_dir / canonical_kext_name(kd.name)
                 if not dst.exists():
                     shutil.copytree(str(kd), str(dst))
                     self._log(f"  → {dst.name}")

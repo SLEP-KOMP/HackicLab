@@ -97,18 +97,23 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     cfg = _base_config()
 
     # --- ACPI ---
-    cfg["ACPI"]["Add"] = [
-        {"Enabled": True, "Path": "SSDT-EC.aml", "Comment": "Fake EC"},
-        {"Enabled": False, "Path": "SSDT-USBX.aml", "Comment": "USB power"},
-    ]
-    if profile.cpu.vendor == "intel":
-        # SSDT-PLUG включает X86PlatformPlugin — только для Intel
-        cfg["ACPI"]["Add"].insert(
-            0, {"Enabled": True, "Path": "SSDT-PLUG.aml", "Comment": "CPU power management"})
+    # Все перечисленные таблицы реально кладутся в EFI/OC/ACPI и остаются
+    # включёнными: выключенный SSDT рядом со своим .aml бесполезен.
+    cfg["ACPI"]["Add"] = []
     if profile.platform == "laptop":
-        cfg["ACPI"]["Add"].append({"Enabled": True, "Path": "SSDT-PNLF.aml", "Comment": "Backlight"})
-        cfg["ACPI"]["Add"].append({"Enabled": True, "Path": "SSDT-EC-USBX.aml", "Comment": "Fake EC + USB"})
-        cfg["ACPI"]["Add"] = [x for x in cfg["ACPI"]["Add"] if x["Path"] != "SSDT-EC.aml"]
+        cfg["ACPI"]["Add"].append(
+            {"Enabled": True, "Path": "SSDT-EC-USBX.aml", "Comment": "Fake EC + USB power"})
+        cfg["ACPI"]["Add"].append(
+            {"Enabled": True, "Path": "SSDT-PNLF.aml", "Comment": "Backlight"})
+    else:
+        if profile.cpu.vendor == "intel":
+            # SSDT-PLUG включает X86PlatformPlugin — только для Intel
+            cfg["ACPI"]["Add"].append(
+                {"Enabled": True, "Path": "SSDT-PLUG.aml", "Comment": "CPU power management"})
+        cfg["ACPI"]["Add"].append(
+            {"Enabled": True, "Path": "SSDT-EC.aml", "Comment": "Fake EC"})
+        cfg["ACPI"]["Add"].append(
+            {"Enabled": True, "Path": "SSDT-USBX.aml", "Comment": "USB power"})
     cfg["ACPI"]["Patch"] = []
 
     # --- DeviceProperties ---
@@ -149,10 +154,16 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     _apply_macos_model(cfg, options.target_macos, profile)
 
     # --- NVRAM ---
+    nv = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]
     if options.disable_sip:
         # меняем только csr-active-config, не теряя boot-args и прочие ключи
-        nv = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]
         nv["csr-active-config"] = bytes([0x67, 0, 0, 0])
+    # --- Аудио: без alcid AppleALC не знает layout, и звука нет ---
+    layout_id = getattr(profile.audio, "layout_id", 0) if profile.audio else 0
+    if layout_id and (profile.audio.codec or "").lower().startswith("alc"):
+        boot_args = str(nv.get("boot-args") or "")
+        if "alcid=" not in boot_args:
+            nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
     if options.custom_smbios:

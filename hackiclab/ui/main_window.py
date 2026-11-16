@@ -2606,6 +2606,17 @@ class MainWindow(QMainWindow):
         self.upd_actions.setVisible(False)
         uv.addWidget(self.upd_actions)
 
+        # Запасной путь: при лимите GitHub открыть страницу релиза вручную
+        self.upd_fallback = QWidget(page)
+        fb = QHBoxLayout(self.upd_fallback); fb.setContentsMargins(0, 0, 0, 0)
+        self.upd_page_btn = QPushButton(tr.t("settings.updates_open_page"))
+        self.upd_page_btn.setObjectName("ghost")
+        self.upd_page_btn.clicked.connect(self._open_release_page)
+        fb.addWidget(self.upd_page_btn)
+        fb.addStretch()
+        self.upd_fallback.setVisible(False)
+        uv.addWidget(self.upd_fallback)
+
         self.upd_warning = _muted(page, tr.t("settings.updates_warning"))
         self.upd_warning.setWordWrap(True)
         self.upd_warning.setVisible(False)
@@ -2673,11 +2684,23 @@ class MainWindow(QMainWindow):
         self.upd_status.setText(tr.t("settings.updates_latest"))
         self.upd_notes.setVisible(False)
         self.upd_actions.setVisible(False)
+        self.upd_fallback.setVisible(False)
 
     def _updates_failed(self, err: str):
+        """Понятное сообщение вместо HTTP-кода: лимит GitHub — не поломка."""
         self._pending_update = None
-        self.upd_status.setText(tr.t("settings.updates_failed").format(error=str(err)))
+        message = str(err).strip() or tr.t("settings.updates_hint")
+        self.upd_status.setText(tr.t("settings.updates_failed").format(error=message))
         self.upd_actions.setVisible(False)
+        self.upd_notes.setVisible(False)
+        self.upd_fallback.setVisible(True)
+
+    def _open_release_page(self):
+        from .. import updater
+
+        url = getattr(self, "_release_page_url", "") or updater.RELEASES_PAGE
+        updater.open_release_page(url)
+        self.upd_status.setText(tr.t("settings.updates_browser"))
 
     def _install_update(self):
         """Скачивает новую сборку и запускает подмену EXE."""
@@ -2714,6 +2737,7 @@ class MainWindow(QMainWindow):
     def _update_download_failed(self, err: str):
         self.upd_now_btn.setEnabled(True)
         self.upd_status.setText(tr.t("settings.updates_failed").format(error=str(err)))
+        self.upd_fallback.setVisible(True)
 
     def _postpone_update(self):
         info = getattr(self, "_pending_update", None)

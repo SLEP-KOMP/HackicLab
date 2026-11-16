@@ -188,17 +188,36 @@ class EFIBuilder:
         res.stats["kexts_downloaded"] = downloaded
 
         # оставляем только выбранные кексты и нужные им внутренние модули
-        allowed = {(e.bundle_name or e.name) for e in selected}
-        allowed.add("SMCSuperIO")
+        from .downloader import canonical_kext_name
+        allowed = {canonical_kext_name(e.bundle_name or e.name) for e in selected}
+        allowed.add("SMCSuperIO.kext")
         if self.plan.profile.cpu.vendor == "intel":
-            allowed.add("SMCProcessor")
+            allowed.add("SMCProcessor.kext")
         if any(e.name == "RadeonSensor" for e in selected):
-            allowed.add("SMCRadeonGPU")
+            allowed.add("SMCRadeonGPU.kext")
         for child in list(kexts_dir.iterdir()):
-            if child.is_dir() and child.name.endswith(".kext") and child.name[:-5] not in allowed:
+            if child.is_dir() and child.name.endswith(".kext") and child.name not in allowed:
                 shutil.rmtree(str(child), ignore_errors=True)
             elif child.is_file():
                 child.unlink(missing_ok=True)
+
+        # USBToolBox без карты портов бесполезен: либо строим UTBMap, либо убираем
+        if any(e.name == "USBToolBox" for e in selected):
+            self._step(66, "Строю карту USB-портов…")
+            map_kext = None
+            try:
+                from .usb_map import generate_auto_map, write_map_kext
+                map_plist = generate_auto_map(tmp, log=self._log)
+                if map_plist:
+                    map_kext = write_map_kext(map_plist, kexts_dir)
+            except Exception as ex:
+                self._log(f"USB-карта: ошибка ({ex})")
+            if map_kext:
+                self._step(68, "USB: карта UTBMap.kext собрана")
+            else:
+                self._log("USB: карту построить не удалось — USBToolBox убран, "
+                          "порты macOS определит сама")
+                shutil.rmtree(str(kexts_dir / "USBToolBox.kext"), ignore_errors=True)
 
         # 3) SSDT генерация (via SSDTFactory + iasl)
         self._step(72, "Готовлю SSDT…")
@@ -250,7 +269,8 @@ class EFIBuilder:
                 res.ok = False
         layout.write_plist_with_kexts(data, kexts_placed,
                                       driver_names=res.stats.get("drivers_placed", []),
-                                      kernel_patches=amd_patches)
+                                      kernel_patches=amd_patches,
+                                      acpi_names=res.stats.get("ssdt_placed", []))
 
         # 5) ocvalidate финального config.plist
         cfg_path = layout.oc / "config.plist"
@@ -274,6 +294,14 @@ class EFIBuilder:
             res.errors.extend(layout.errors)
             res.ok = False
         res.warnings = list(layout.warnings) + list(dl.log)
+
+        # пустая папка Tools только путает: OpenCore её не требует
+        tools_dir = layout.oc / "Tools"
+        try:
+            if tools_dir.is_dir() and not any(tools_dir.iterdir()):
+                tools_dir.rmdir()
+        except OSError:
+            pass
 
         # чистим временные папки, чтобы не мусорить в выбранной директории
         shutil.rmtree(str(tmp), ignore_errors=True)

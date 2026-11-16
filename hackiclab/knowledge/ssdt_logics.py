@@ -39,8 +39,23 @@ SSDT_DB: list[SSDTSpec] = [
 
 
 def required_ssdts(profile: HardwareProfile) -> list[SSDTSpec]:
-    """Список SSDT, нужных данному профилю."""
-    specs = list(SSDT_DB)
-    # Логика отбора не влияет на сам список при текущей простоте модели — все идут,
-    # финальное решение о применении принимает сборщик по DSDT/условиям.
-    return specs
+    """Список SSDT, нужных данному профилю.
+
+    В EFI попадают только применимые таблицы: PMC — Intel 300-серии,
+    GPI0/PNLF — ноутбуки, PLUG — только Intel. Лишние .aml в ACPI
+    сбивают с толку и не регистрируются в config.plist.
+    """
+    amd = (profile.cpu.vendor or "").lower() == "amd"
+    laptop = profile.platform == "laptop"
+
+    names: list[str] = ["SSDT-PLUG-AMD" if amd else "SSDT-PLUG"]
+    if laptop:
+        names += ["SSDT-EC-USBX", "SSDT-PNLF", "SSDT-HPET", "SSDT-XOSI", "SSDT-GPI0"]
+    else:
+        names += ["SSDT-EC", "SSDT-USBX"]
+        if not amd:
+            names.append("SSDT-AWAC")
+            if profile.platform in ("desktop", "workstation", "mini"):
+                names.append("SSDT-PMC")
+    by_name = {s.name: s for s in SSDT_DB}
+    return [by_name[n] for n in names if n in by_name]

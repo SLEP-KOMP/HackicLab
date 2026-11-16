@@ -91,11 +91,12 @@ class ParseReleaseTests(unittest.TestCase):
 
     def test_check_for_update_uses_github_json(self):
         payload = json.dumps(release("9.9.9")).encode("utf-8")
-        with mock.patch.object(updater, "download_bytes", return_value=payload) as dl:
-            info = updater.check_for_update()
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", return_value=(200, {"ETag": '"abc"'}, payload)) as http:
+            info = updater.check_for_update(force=True)
         assert info is not None
         self.assertEqual(info.version, "9.9.9")
-        called_url = dl.call_args[0][0]
+        called_url = http.call_args[0][0]
         self.assertIn("api.github.com", called_url)
         self.assertIn("SLEP-KOMP/HackicLab", called_url)
 
@@ -103,10 +104,81 @@ class ParseReleaseTests(unittest.TestCase):
         with mock.patch.object(updater.sys, "frozen", False, create=True):
             self.assertEqual(updater.current_binary_digest(), "")
 
-    def test_http_error_propagates(self):
-        with mock.patch.object(updater, "download_bytes", side_effect=RuntimeError("403")):
-            with self.assertRaises(RuntimeError):
-                updater.check_for_update()
+    def _temp_cache(self):
+        """Изолирует файл кэша релиза: он живёт рядом с папкой обновлений."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patcher = mock.patch.object(updater, "update_dir",
+                                    return_value=Path(tmp.name) / "update")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_network_error_falls_back_and_explains(self):
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", side_effect=updater.UpdateError("нет сети")), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=""):
+            with self.assertRaises(updater.UpdateError) as ctx:
+                updater.check_for_update(force=True)
+        self.assertIn("GitHub", str(ctx.exception))
+
+    def test_rate_limit_falls_back_to_atom_feed(self):
+        limited = updater._RateLimited("0")
+
+        def fake_http(url, **kwargs):
+            if "api.github.com" in url:
+                raise limited
+            return 200, {}, b"<feed><entry><link rel=\"alternate\" href=\"https://github.com/SLEP-KOMP/HackicLab/releases/tag/v9.9.9\"/></entry></feed>"
+
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", side_effect=fake_http), \
+                mock.patch.object(updater, "_remote_size", return_value=0):
+            info = updater.check_for_update(force=True)
+        assert info is not None
+        self.assertEqual(info.version, "9.9.9")
+        self.assertEqual(info.asset_url,
+                         "https://github.com/SLEP-KOMP/HackicLab/releases/download/v9.9.9/HackicLab.exe")
+
+    def test_rate_limit_without_fallbacks_is_friendly(self):
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", side_effect=updater._RateLimited("0")), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=""):
+            with self.assertRaises(updater.UpdateError) as ctx:
+                updater.check_for_update(force=True)
+        text = str(ctx.exception)
+        self.assertIn("ограничил", text)
+        self.assertNotIn("403", text)
+
+    def test_cached_release_used_when_network_fails(self):
+        payload = json.dumps(release("9.9.8")).encode("utf-8")
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", return_value=(200, {}, payload)):
+            updater.check_for_update(force=True)
+        with mock.patch.object(updater, "_http", side_effect=updater.UpdateError("нет сети")), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=""):
+            info = updater.check_for_update(force=True)
+        assert info is not None
+        self.assertEqual(info.version, "9.9.8")
+
+    def test_cache_respected_without_network(self):
+        payload = json.dumps(release("9.9.7")).encode("utf-8")
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", return_value=(200, {}, payload)):
+            updater.check_for_update(force=True)
+        with mock.patch.object(updater, "_http") as http:
+            info = updater.check_for_update()
+        assert info is not None
+        self.assertEqual(info.version, "9.9.7")
+        http.assert_not_called()
+
+    def test_not_modified_uses_cache(self):
+        payload = json.dumps(release("9.9.6")).encode("utf-8")
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", return_value=(200, {}, payload)):
+            updater.check_for_update(force=True)
+        with mock.patch.object(updater, "_http", return_value=(304, {}, b"")):
+            info = updater.check_for_update(force=True)
+        assert info is not None
+        self.assertEqual(info.version, "9.9.6")
 
 
 class DownloadTests(unittest.TestCase):
@@ -142,6 +214,30 @@ class DownloadTests(unittest.TestCase):
         info = updater.UpdateInfo(version="1", tag="v1", notes="", page_url="", asset_url="")
         with self.assertRaises(RuntimeError):
             updater.download_update(info)
+
+    def test_digest_mismatch_rejected(self):
+        info = updater.UpdateInfo(
+            version="9.9.9", tag="v9.9.9", notes="", page_url="",
+            asset_url="https://example.com/HackicLab.exe", asset_size=None,
+            asset_digest="sha256:deadbeef",
+        )
+        with mock.patch.object(updater, "download_bytes", return_value=b"MZ" + b"0" * 64):
+            with self.assertRaises(updater.UpdateError) as ctx:
+                updater.download_update(info)
+        self.assertIn("не совпал", str(ctx.exception))
+
+    def test_same_build_is_not_downloaded_twice(self):
+        data = b"MZ" + b"0" * 64
+        digest = "sha256:" + __import__("hashlib").sha256(data).hexdigest()
+        info = updater.UpdateInfo(
+            version=updater.__version__, tag=f"v{updater.__version__}", notes="",
+            page_url="", asset_url="https://example.com/HackicLab.exe", asset_size=None,
+        )
+        with mock.patch.object(updater, "download_bytes", return_value=data), \
+                mock.patch.object(updater, "current_binary_digest", return_value=digest):
+            with self.assertRaises(updater.UpdateError) as ctx:
+                updater.download_update(info)
+        self.assertIn("уже установлена", str(ctx.exception))
 
 
 class ApplyUpdateTests(unittest.TestCase):
