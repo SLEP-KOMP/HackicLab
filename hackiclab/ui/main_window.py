@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import os
 import sys
 from pathlib import Path
 
@@ -2250,7 +2251,11 @@ class MainWindow(QMainWindow):
             self.upd_status.setText(tr.t("settings.updates_manual"))
             return
         self.upd_status.setText(tr.t("settings.updates_restarting"))
-        QTimer.singleShot(600, QApplication.quit)
+        updater.relaunch_self()
+        QTimer.singleShot(300, QApplication.quit)
+        # страховка: если цикл событий не завершился, выходим принудительно,
+        # иначе процесс останется висеть и заблокирует файл EXE
+        QTimer.singleShot(3000, lambda: os._exit(0))
 
     def _update_download_failed(self, err: str):
         self.upd_now_btn.setEnabled(True)
@@ -2750,6 +2755,8 @@ class MainWindow(QMainWindow):
 def run_app() -> int:
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    from .. import updater
+    updater.cleanup_old_binaries()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     state = uistate.load()

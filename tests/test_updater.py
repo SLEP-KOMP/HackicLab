@@ -144,13 +144,61 @@ class DownloadTests(unittest.TestCase):
             updater.download_update(info)
 
 
-class HelperScriptTests(unittest.TestCase):
-    def test_script_waits_and_replaces(self):
-        text = updater.helper_script(Path(r"C:\app\HackicLab.exe"),
-                                     Path(r"C:\tmp\new.exe"), 4242)
-        self.assertIn("PID eq 4242", text)
-        self.assertIn(r'copy /y "C:\tmp\new.exe" "C:\app\HackicLab.exe"', text)
-        self.assertIn("start", text)
+class ApplyUpdateTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        self.target = self.dir / "HackicLab.exe"
+        self.new = self.dir / "new.exe"
+        self.target.write_bytes(b"OLD")
+        self.new.write_bytes(b"NEWBYTES")
+
+    def test_replaces_running_binary_and_keeps_backup(self):
+        with mock.patch.object(updater.sys, "executable", str(self.target)), \
+                mock.patch.object(updater, "can_self_update", return_value=True):
+            self.assertTrue(updater.apply_update(self.new))
+        self.assertEqual(self.target.read_bytes(), b"NEWBYTES")
+        self.assertEqual((self.dir / "HackicLab.exe.old").read_bytes(), b"OLD")
+
+    def test_restores_binary_when_copy_fails(self):
+        with mock.patch.object(updater.sys, "executable", str(self.target)), \
+                mock.patch.object(updater, "can_self_update", return_value=True), \
+                mock.patch.object(updater.shutil, "copy2", side_effect=OSError("locked")):
+            self.assertFalse(updater.apply_update(self.new))
+        self.assertEqual(self.target.read_bytes(), b"OLD")
+
+    def test_apply_requires_frozen_build(self):
+        with mock.patch.object(updater, "can_self_update", return_value=False):
+            self.assertFalse(updater.apply_update(self.new))
+        self.assertEqual(self.target.read_bytes(), b"OLD")
+
+    def test_missing_source_is_rejected(self):
+        with mock.patch.object(updater.sys, "executable", str(self.target)), \
+                mock.patch.object(updater, "can_self_update", return_value=True):
+            self.assertFalse(updater.apply_update(self.dir / "absent.exe"))
+
+    def test_cleanup_removes_old_copy(self):
+        old = self.dir / "HackicLab.exe.old"
+        old.write_bytes(b"OLD")
+        with mock.patch.object(updater.sys, "frozen", True, create=True), \
+                mock.patch.object(updater.sys, "executable", str(self.target)):
+            updater.cleanup_old_binaries()
+        self.assertFalse(old.exists())
+
+    def test_cleanup_is_noop_for_source_runs(self):
+        old = self.dir / "HackicLab.exe.old"
+        old.write_bytes(b"OLD")
+        with mock.patch.object(updater.sys, "frozen", False, create=True), \
+                mock.patch.object(updater.sys, "executable", str(self.target)):
+            updater.cleanup_old_binaries()
+        self.assertTrue(old.exists())
+
+    def test_relaunch_starts_binary(self):
+        with mock.patch.object(updater.sys, "executable", str(self.target)), \
+                mock.patch.object(updater.subprocess, "Popen") as popen:
+            self.assertTrue(updater.relaunch_self())
+        self.assertEqual(popen.call_args[0][0], [str(self.target)])
 
     def test_can_self_update_only_for_frozen(self):
         with mock.patch.object(updater.sys, "frozen", False, create=True):

@@ -5,8 +5,10 @@
 предлагает скачать `HackicLab.exe` из вложений.
 
 Самообновление возможно только у собранного EXE: подменять работающий файл
-нельзя, поэтому скачанный образ кладётся рядом, а маленький cmd-скрипт ждёт
-закрытия процесса, заменяет файл и запускает новую версию.
+нельзя, но его можно переименовать. Текущий EXE уводится в «<имя>.old», на его
+место копируется новая сборка, после чего приложение перезапускается, а старая
+копия удаляется при следующем старте. Отдельный cmd-скрипт и консольное окно
+при этом не нужны.
 """
 
 from __future__ import annotations
@@ -14,9 +16,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
-import tempfile
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -181,50 +183,65 @@ def download_update(info: UpdateInfo, progress: Optional[Callable[[int], None]] 
     return target
 
 
-def helper_script(target_exe: Path, new_exe: Path, pid: int) -> str:
-    """Текст cmd-скрипта: ждёт закрытия процесса, подменяет EXE, запускает его."""
-    return f"""@echo off
-chcp 65001 >nul
-:wait
-tasklist /FI "PID eq {pid}" | find "{pid}" >nul
-if not errorlevel 1 (
-  timeout /t 1 /nobreak >nul
-  goto wait
-)
-:replace
-copy /y "{new_exe}" "{target_exe}" >nul 2>&1
-if errorlevel 1 (
-  timeout /t 1 /nobreak >nul
-  goto replace
-)
-start "" "{target_exe}"
-del "%~f0"
-"""
+OLD_SUFFIX = ".old"
 
 
 def apply_update(new_exe: Path) -> bool:
-    """Готовит подмену текущего EXE и запускает её отдельным процессом.
+    """Ставит скачанный EXE на место текущего.
 
-    Возвращает True, если скрипт запущен: вызывающему остаётся закрыть
-    приложение, иначе файл останется занятым.
+    Запущенный файл нельзя перезаписать, но можно переименовать: текущий EXE
+    уводится в «<имя>.old», на его место копируется новая сборка. Старая копия
+    удаляется при следующем запуске (см. cleanup_old_binaries).
+
+    Возвращает True, если файл подменён: вызывающему остаётся перезапустить
+    приложение.
     """
     if not can_self_update():
         return False
     target = Path(sys.executable).resolve()
-    script = Path(tempfile.gettempdir()) / f"hackiclab-update-{os.getpid()}.cmd"
-    script.write_text(
-        helper_script(target, Path(new_exe).resolve(), os.getpid()),
-        encoding="utf-8",
-    )
-    flags = 0
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        flags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-    subprocess.Popen(
-        ["cmd", "/c", str(script)],
-        creationflags=flags,
-        close_fds=True,
-    )
+    source = Path(new_exe).resolve()
+    if not source.is_file():
+        return False
+    backup = target.with_name(target.name + OLD_SUFFIX)
+    try:
+        if backup.exists():
+            backup.unlink()
+        os.replace(target, backup)
+    except OSError:
+        return False
+    try:
+        shutil.copy2(source, target)
+    except OSError:
+        try:
+            os.replace(backup, target)
+        except OSError:
+            pass
+        return False
     return True
+
+
+def relaunch_self() -> bool:
+    """Запускает обновлённый EXE отдельным процессом."""
+    exe = str(Path(sys.executable).resolve())
+    flags = 0
+    if hasattr(subprocess, "DETACHED_PROCESS"):
+        flags = subprocess.DETACHED_PROCESS
+    try:
+        subprocess.Popen([exe], close_fds=True, creationflags=flags)
+    except OSError:
+        return False
+    return True
+
+
+def cleanup_old_binaries() -> None:
+    """Удаляет «<имя>.old», оставшийся от прошлого обновления."""
+    if not getattr(sys, "frozen", False):
+        return
+    exe = Path(sys.executable)
+    try:
+        (exe.with_name(exe.name + OLD_SUFFIX)).unlink()
+    except OSError:
+        pass
 
 
 def open_release_page(url: str = RELEASES_PAGE) -> bool:
