@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer, QTranslator, QUrl, Signal
+from PySide6.QtCore import QCoreApplication, Qt, QThread, QTimer, QTranslator, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -2968,9 +2968,11 @@ class MainWindow(QMainWindow):
             self.val_last_label.setText(str(self.last_build_dir))
         log = f"target: {res.root}\n" + "\n".join(res.log)
         if res.stats:
-            log += "\n\n--- Итог ---"
+            log += f"\n\n--- {tr.t('build.log_summary')} ---"
             log += f"\nOpenCore: {res.stats.get('opencore', '—')}"
-            log += f"\nKexts (скачано {len(res.stats.get('kexts_downloaded', []))}): {', '.join(res.stats.get('kexts_downloaded', []))}"
+            kexts_done = res.stats.get("kexts_downloaded", []) or []
+            log += "\n" + tr.t("build.log_kexts").format(
+                count=len(kexts_done), list=", ".join(kexts_done))
             log += f"\nSSDT: {', '.join(res.stats.get('ssdt_placed', []) or [])}"
             log += f"\nSMBIOS: {res.stats.get('smbios', '')}"
             # ocvalidate
@@ -2979,11 +2981,12 @@ class MainWindow(QMainWindow):
             ocv_warn = res.stats.get("ocvalidate_warnings", [])
             log += "\n\n--- ocvalidate ---"
             if ocv_ok is None:
-                log += "\nне запускался"
+                log += "\n" + tr.t("build.log_ocv_skipped")
             elif ocv_ok:
-                log += "\nOK — config.plist валиден"
+                log += "\n" + tr.t("build.log_ocv_ok")
             else:
-                log += f"\nПРОБЛЕМЫ ({len(ocv_err)} error, {len(ocv_warn)} warn)"
+                log += "\n" + tr.t("build.log_ocv_problems").format(
+                    errors=len(ocv_err), warnings=len(ocv_warn))
                 for e in ocv_err[:25]:
                     log += f"\n  [err] {e}"
                 for w in ocv_warn[:15]:
@@ -2993,7 +2996,9 @@ class MainWindow(QMainWindow):
         self._render_rationale()
         # статус
         if res.stats and res.stats.get("ocvalidate_ok") is False:
-            self.statusBar().showMessage(f"ocvalidate: {len(res.stats.get('ocvalidate_errors', []))} ошибок", 6000)
+            self.statusBar().showMessage(
+                tr.t("build.ocv_status_errors").format(
+                    count=len(res.stats.get("ocvalidate_errors", []))), 6000)
         else:
             self.statusBar().showMessage(tr.t("build.done"), 4000)
 
@@ -3115,6 +3120,47 @@ class MainWindow(QMainWindow):
         self.issue_detail.setPlainText("\n\n".join(parts))
 
 
+def i18n_report() -> dict[str, object]:
+    """Снимок подписей интерфейса на обоих языках — для проверки сборки.
+
+    Запускается флагом ``--check-i18n``: окно создаётся программно, каждый
+    язык пересобирает страницы, подписи кнопок диалогов считываются с
+    реального QMessageBox.
+    """
+    report: dict[str, object] = {}
+    for lang in ("ru", "en"):
+        tr.set_lang(lang)
+        install_qt_translator(lang)
+        win = MainWindow()
+        page = win.stack.currentWidget()
+        titles = [w.text() for w in page.findChildren(QLabel) if w.objectName() == "h1"] if page else []
+        captured: list[str] = []
+
+        def capture(box: QMessageBox, sink: list[str] = captured) -> int:
+            sink.append(" > ".join(b.text() for b in box.buttons()))
+            return 0
+
+        original_exec = QMessageBox.exec
+        QMessageBox.exec = capture
+        try:
+            win._confirm("t", "t", tr.t("common.yes"), tr.t("common.no"))
+            win._confirm("t", "t", tr.t("settings.updates_now"), tr.t("settings.updates_later"))
+        finally:
+            QMessageBox.exec = original_exec
+        report[lang] = {
+            "nav": [win.nav.item(i).text().strip() for i in range(win.nav.count())],
+            "h1": titles,
+            "dialogs": captured,
+            "qt_yes": QCoreApplication.translate("QPlatformTheme", "&Yes"),
+            "filters": [tr.t("file.all_files"), tr.t("file.images"), tr.t("file.opencore_log")],
+        }
+        win.close()
+        win.deleteLater()
+    tr.set_lang(detect_system_language())
+    install_qt_translator(tr.current)
+    return report
+
+
 def run_app() -> int:
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
@@ -3130,6 +3176,20 @@ def run_app() -> int:
     saved_lang = str(uistate.get("language", "") or "")
     tr.set_lang(saved_lang if saved_lang in LANG_CODES else detect_system_language())
     install_qt_translator(tr.current)
+
+    # Диагностика локализации: печатает подписи обоих языков и выходит.
+    # Форма с путём нужна для сборки без консоли: --check-i18n=<файл>.
+    flag = next((a for a in sys.argv if a.startswith("--check-i18n")), "")
+    if flag:
+        import json
+
+        payload = json.dumps(i18n_report(), ensure_ascii=False, indent=2)
+        target = flag.split("=", 1)[1] if "=" in flag else ""
+        if target:
+            Path(target).write_text(payload, encoding="utf-8")
+        else:
+            print(payload)
+        return 0
 
     # Один экземпляр: второй процесс мешает обновлению и удалению временной
     # папки PyInstaller («Failed to remove temporary directory»).

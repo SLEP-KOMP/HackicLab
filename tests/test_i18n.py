@@ -190,6 +190,149 @@ class WindowsLanguageTests(unittest.TestCase):
             self.assertIsNone(i18n._windows_ui_language())
 
 
+class TranslationContentTests(unittest.TestCase):
+    """RU и EN не должны подменять друг друга: русский текст только в RU."""
+
+    CYRILLIC = re.compile(r"[А-Яа-яЁё]")
+
+    def test_russian_text_not_copied_into_english(self):
+        copied = []
+        for key, ru in T["ru"].items():
+            en = T["en"].get(key, "")
+            if self.CYRILLIC.search(ru) and self.CYRILLIC.search(en):
+                copied.append(key)
+        self.assertEqual(sorted(copied), [], f"в EN остался русский текст: {sorted(copied)}")
+
+    #: значения совпадают осознанно: имена продуктов, типов файлов и темы
+    SAME_ON_PURPOSE = {
+        "build.wifi_itlwm", "file.json", "file.markdown", "file.plist",
+        "settings.premium", "settings.theme_bigsur",
+    }
+
+    def test_english_text_not_copied_into_russian(self):
+        """Русский перевод не должен быть английской фразой целиком."""
+        suspicious = []
+        for key, ru in T["ru"].items():
+            en = T["en"].get(key, "")
+            if not ru.strip() or not en.strip():
+                continue
+            if self.CYRILLIC.search(ru):
+                continue
+            if key in self.SAME_ON_PURPOSE:
+                continue
+            if ru.strip() == en.strip() and len(ru.strip()) > 3 and " " in ru.strip():
+                suspicious.append(f"{key}={ru!r}")
+        self.assertEqual(sorted(suspicious), [],
+                         f"в RU английский текст: {sorted(suspicious)}")
+
+
+class UiLiteralTests(unittest.TestCase):
+    """Строки интерфейса берутся только из i18n, а не из литералов в коде."""
+
+    ROOT = _bootstrap.ROOT / "hackiclab" / "ui"
+    WIDGET_CALLS = (
+        "setText(", "showMessage(", "setToolTip(", "setPlaceholderText(",
+        "setWindowTitle(", "QLabel(", "QPushButton(", "QCheckBox(", "QGroupBox(",
+        "QRadioButton(", "addItem(", "addTab(", "setTitle(",
+    )
+    #: бренд, аргументы OpenCore и серийный шаблон — не переводятся
+    ALLOWED = {"HackicLab", "MacPro7,1", "HILC-XXXX-XXXX-XXXX", "-v debug=0x100 keepsyms=1"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.files = sorted(cls.ROOT.rglob("*.py"))
+
+    def _lines(self):
+        for path in self.files:
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith("#") or '"""' in line:
+                    continue
+                yield path.name, number, line
+
+    def test_no_hardcoded_russian_in_ui(self):
+        pattern = re.compile(r'"[^"\n]*[А-Яа-яЁё][^"\n]*"')
+        hits = [f"{name}:{number}: {line.strip()[:80]}" for name, number, line in self._lines()
+                if pattern.search(line)]
+        self.assertEqual(hits, [], "русский текст вне i18n: " + "; ".join(hits))
+
+    def test_widget_labels_come_from_i18n(self):
+        calls = "|".join(re.escape(c) for c in self.WIDGET_CALLS)
+        literal = re.compile(r'(?:%s)\s*f?"([^"\n]*[A-Za-z]{3,}[^"\n]*)"' % calls)
+        hits = []
+        for name, number, line in self._lines():
+            for match in literal.finditer(line):
+                text = match.group(1)
+                if "tr.t(" in text or "{" in text or text.startswith("%"):
+                    continue
+                if text.strip() in self.ALLOWED:
+                    continue
+                hits.append(f"{name}:{number}: {text[:60]}")
+        self.assertEqual(hits, [], "подписи вне i18n: " + "; ".join(hits))
+
+
+class DialogLanguageTests(unittest.TestCase):
+    """Подписи диалогов на обоих языках — как их увидит пользователь."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover - Qt нужен для UI-тестов
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_confirm_buttons_follow_language(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        from hackiclab.i18n import tr
+        from hackiclab.ui.main_window import MainWindow, install_qt_translator
+
+        captured: list[str] = []
+        original = QMessageBox.exec
+        QMessageBox.exec = lambda box: captured.append(
+            " > ".join(b.text() for b in box.buttons())) or 0
+        try:
+            for lang, yes_no, update in (("ru", "Да > Нет", "Обновить сейчас > Отложить"),
+                                         ("en", "Yes > No", "Update now > Later")):
+                tr.set_lang(lang)
+                install_qt_translator(lang)
+                window = MainWindow()
+                window._confirm("t", "t", tr.t("common.yes"), tr.t("common.no"))
+                window._confirm("t", "t", tr.t("settings.updates_now"),
+                                tr.t("settings.updates_later"))
+                window.close()
+                window.deleteLater()
+                self.assertEqual(captured[-2:], [yes_no, update], lang)
+        finally:
+            QMessageBox.exec = original
+            tr.set_lang("ru")
+            install_qt_translator("ru")
+
+
+class BuildLogLocalizationTests(unittest.TestCase):
+    """Сводка сборки и статус ocvalidate переводятся целиком."""
+
+    def test_build_log_keys_translated(self):
+        keys = ("build.log_summary", "build.log_kexts", "build.log_ocv_skipped",
+                "build.log_ocv_ok", "build.log_ocv_problems", "build.ocv_status_errors")
+        for lang in ("ru", "en"):
+            for key in keys:
+                self.assertIn(key, T[lang], f"{lang}:{key}")
+        tr = Tr("ru")
+        self.assertIn("Kexts (скачано 2)",
+                      tr.t("build.log_kexts").format(count=2, list="Lilu, WEG"))
+        tr.set_lang("en")
+        self.assertIn("Kexts (downloaded 2)",
+                      tr.t("build.log_kexts").format(count=2, list="Lilu, WEG"))
+        self.assertIn("3", tr.t("build.ocv_status_errors").format(count=3))
+
+    def test_no_russian_log_lines_left(self):
+        source = (_bootstrap.ROOT / "hackiclab" / "ui" / "main_window.py").read_text(encoding="utf-8")
+        for marker in ("--- Итог ---", "не запускался", "config.plist валиден", "ПРОБЛЕМЫ ("):
+            self.assertNotIn(marker, source, marker)
+
+
 class SystemDefaultLanguageTests(unittest.TestCase):
     def test_bundle_defaults_to_system_language(self):
         """Без сохранённого выбора язык берётся из системы, а не жёстко ru."""
