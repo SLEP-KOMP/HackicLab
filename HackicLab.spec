@@ -7,6 +7,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('hackiclab/assets/acpi', 'hackiclab/assets/acpi'),
+        ('hackiclab/assets/brands', 'hackiclab/assets/brands'),
+        ('hackiclab/assets/support', 'hackiclab/assets/support'),
     ],
     hiddenimports=[
         'psutil',

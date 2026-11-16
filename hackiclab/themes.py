@@ -309,6 +309,18 @@ QPushButton#ghost {{
 }}
 QPushButton#ghost:hover {{ background: {hover}; border-color: {p.accent}; }}
 QPushButton#ghost:disabled {{ background: transparent; color: {p.muted}; }}
+QPushButton#chip {{
+    background: {p.input_bg}; border: 1px solid {border}; color: {p.text};
+    border-radius: 15px; padding: 6px 16px; font-size: 12px; font-weight: 600;
+}}
+QPushButton#chip:hover {{ border-color: {p.accent}; color: {p.accent}; }}
+QFrame#logoPlate {{
+    background: #ffffff; border: 1px solid #d8dbe6; border-radius: 8px;
+}}
+QPushButton#chip:checked {{
+    border-color: {p.accent}; color: {p.accent};
+    background: {_rgba(p.accent, 0.14)};
+}}
 #card {{
     background: {surface}; border: 1px solid {border};
     border-radius: 14px;
