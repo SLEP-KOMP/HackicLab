@@ -159,9 +159,9 @@ def _palette_scheme() -> str | None:
         from PySide6.QtGui import QPalette
         from PySide6.QtWidgets import QApplication
         app = QApplication.instance()
-        if app is None:
+        if not isinstance(app, QApplication):
             return None
-        color = app.palette().color(QPalette.Window)
+        color = app.palette().color(QPalette.ColorRole.Window)
         return "dark" if color.lightness() < 128 else "light"
     except Exception:
         return None

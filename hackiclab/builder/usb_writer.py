@@ -747,6 +747,8 @@ def install_recovery_layer(target_letter: str, macos_name: str, log=None) -> str
     if version is None:
         # иначе берём последнюю поддерживаемую
         version = macos_version_by_name("macOS Sonoma")
+    if version is None:
+        raise RuntimeError("Не удалось определить версию macOS для recovery.")
 
     letter = target_letter.rstrip(":\\")
     dst_root = Path(f"{letter}:\\")

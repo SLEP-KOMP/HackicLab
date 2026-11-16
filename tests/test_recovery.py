@@ -35,6 +35,7 @@ class VersionTests(unittest.TestCase):
 
     def test_args_include_board_and_mlb(self):
         v = rec.macos_version_by_name("macOS Sonoma")
+        assert v is not None
         args = rec.macrecovery_args(v)
         self.assertIn("-b", args)
         self.assertIn(v.board_id, args)

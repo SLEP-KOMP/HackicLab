@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import IO, Optional, cast
 
 # URL официального macrecovery.py из Acidanthera OpenCorePkg
 MACRECOVERY_URL = (
@@ -196,7 +196,8 @@ def _run_macrecovery_inprocess(script: Path, args: list, dest: Path,
     try:
         sys.argv = [str(script), *list(args)]
         os.chdir(str(dest))
-        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+        with contextlib.redirect_stdout(cast("IO[str]", writer)), \
+                contextlib.redirect_stderr(cast("IO[str]", writer)):
             runpy.run_path(str(script), run_name="__main__")
     except SystemExit as e:
         try:
@@ -272,9 +273,13 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
             import queue as _queue
             import threading as _th
             line_q = _queue.Queue()
+            stdout = proc.stdout
+            if stdout is None:
+                proc.kill()
+                return False, "Не удалось перехватить вывод macrecovery."
 
             def _reader():
-                for line in proc.stdout:
+                for line in stdout:
                     line_q.put(line)
                 line_q.put(None)
 

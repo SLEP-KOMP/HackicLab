@@ -25,7 +25,7 @@ class MonitorButton(QAbstractButton):
         self.key = key
         self.setText(label)
         self.setCheckable(True)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(label)
         self.setAccessibleName(label)
 
@@ -45,13 +45,13 @@ class MonitorButton(QAbstractButton):
         return (
             QColor(top),
             QColor(bottom),
-            QColor(self.palette().color(QPalette.Highlight)),
-            QColor(self.palette().color(QPalette.WindowText)),
+            QColor(self.palette().color(QPalette.ColorRole.Highlight)),
+            QColor(self.palette().color(QPalette.ColorRole.WindowText)),
         )
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         width = self.width()
         bezel_w = min(width - 8, self.WIDTH - 10)
@@ -73,7 +73,7 @@ class MonitorButton(QAbstractButton):
         gradient = QLinearGradient(screen_x, 10, screen_x, 10 + screen_h)
         gradient.setColorAt(0.0, top_c)
         gradient.setColorAt(1.0, bottom_c)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
         painter.drawRoundedRect(int(screen_x), 10, int(screen_w), int(screen_h), 5, 5)
 
@@ -95,11 +95,11 @@ class MonitorButton(QAbstractButton):
         font.setBold(self.isChecked())
         painter.setFont(font)
         label_rect = self.rect().adjusted(0, int(bezel_h + 18), 0, 0)
-        painter.drawText(label_rect, Qt.AlignHCenter | Qt.AlignTop, self.text())
+        painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.text())
 
         # отметка выбора
         if self.isChecked():
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(accent)
             painter.drawEllipse(int(x + bezel_w - 20), 14, 14, 14)
             painter.setPen(QPen(QColor(255, 255, 255)))
@@ -107,6 +107,6 @@ class MonitorButton(QAbstractButton):
             font2.setPointSizeF(7.5)
             font2.setBold(True)
             painter.setFont(font2)
-            painter.drawText(int(x + bezel_w - 20), 14, 14, 14, Qt.AlignCenter, "✓")
+            painter.drawText(int(x + bezel_w - 20), 14, 14, 14, Qt.AlignmentFlag.AlignCenter, "✓")
 
         painter.end()

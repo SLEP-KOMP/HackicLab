@@ -54,6 +54,7 @@ class ParseReleaseTests(unittest.TestCase):
     def test_newer_release_with_asset(self):
         info = updater.parse_release(release("9.9.9"))
         self.assertIsNotNone(info)
+        assert info is not None
         self.assertEqual(info.version, "9.9.9")
         self.assertTrue(info.has_asset)
         self.assertEqual(info.asset_size, 1234)
@@ -65,6 +66,7 @@ class ParseReleaseTests(unittest.TestCase):
         info = updater.parse_release(
             release(updater.__version__, digest="sha256:new"), current_digest="sha256:old")
         self.assertIsNotNone(info)
+        assert info is not None
         self.assertTrue(info.is_rebuild)
         self.assertEqual(info.asset_digest, "sha256:new")
 
@@ -81,6 +83,7 @@ class ParseReleaseTests(unittest.TestCase):
     def test_release_without_asset(self):
         info = updater.parse_release(release("9.9.9", asset=False))
         self.assertIsNotNone(info)
+        assert info is not None
         self.assertFalse(info.has_asset)
 
     def test_release_without_tag(self):
@@ -90,6 +93,7 @@ class ParseReleaseTests(unittest.TestCase):
         payload = json.dumps(release("9.9.9")).encode("utf-8")
         with mock.patch.object(updater, "download_bytes", return_value=payload) as dl:
             info = updater.check_for_update()
+        assert info is not None
         self.assertEqual(info.version, "9.9.9")
         called_url = dl.call_args[0][0]
         self.assertIn("api.github.com", called_url)

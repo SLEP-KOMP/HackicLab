@@ -377,7 +377,7 @@ class MainWindow(QMainWindow):
             uistate.save(theme=theme)
         qss = get_qss(self._theme, getattr(self, "_theme_bg", ""))
         app = QApplication.instance()
-        if app:
+        if isinstance(app, QApplication):
             app.setStyleSheet(qss)
         self._sync_theme_tiles()
 
@@ -466,7 +466,7 @@ class MainWindow(QMainWindow):
         self._nav_keys = [k for k, _ in nav_items]
         for key, icon in nav_items:
             it = QListWidgetItem(f"{icon}  {tr.t(key)}")
-            it.setData(Qt.UserRole, key)
+            it.setData(Qt.ItemDataRole.UserRole, key)
             self.nav.addItem(it)
         self.nav.currentRowChanged.connect(self._on_nav)
         side_layout.addWidget(self.nav)
@@ -516,8 +516,8 @@ class MainWindow(QMainWindow):
         """Оборачивает страницу в прокрутку: контент не обрезается при малом окне."""
         area = QScrollArea()
         area.setWidgetResizable(True)
-        area.setFrameShape(QFrame.NoFrame)
-        area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         area.viewport().setAutoFillBackground(False)
         area.setWidget(page)
@@ -529,7 +529,7 @@ class MainWindow(QMainWindow):
         v.addWidget(_h1(page, tr.t("scan.title")))
         btn = QPushButton(tr.t("scan.button"))
         btn.clicked.connect(self._do_scan)
-        v.addWidget(btn, alignment=Qt.AlignLeft)
+        v.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.scan_progress = QProgressBar(); self.scan_progress.setMaximum(0); self.scan_progress.setVisible(False)
         v.addWidget(self.scan_progress)
@@ -619,7 +619,7 @@ class MainWindow(QMainWindow):
 
         build_btn = QPushButton(tr.t("build.button"))
         build_btn.clicked.connect(self._do_build)
-        v.addWidget(build_btn, alignment=Qt.AlignLeft)
+        v.addWidget(build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.build_progress = QProgressBar(); self.build_progress.setMaximum(0); self.build_progress.setVisible(False)
         v.addWidget(self.build_progress)
@@ -721,7 +721,7 @@ class MainWindow(QMainWindow):
 
         qsave = QPushButton(tr.t("validate.quick_save"))
         qsave.clicked.connect(self._save_quick)
-        qv.addWidget(qsave, alignment=Qt.AlignRight)
+        qv.addWidget(qsave, alignment=Qt.AlignmentFlag.AlignRight)
         quick.setEnabled(False)
         v.addWidget(quick)
 
@@ -746,7 +746,7 @@ class MainWindow(QMainWindow):
         v.addWidget(self.val_progress)
 
         # --- детальный свод ocvalidate по категориям ---
-        splitter = QSplitter(Qt.Vertical)
+        splitter = QSplitter(Qt.Orientation.Vertical)
         self.val_missing = QPlainTextEdit(); self.val_missing.setReadOnly(True)
         self.val_schema = QPlainTextEdit(); self.val_schema.setReadOnly(True)
         self.val_warn = QPlainTextEdit(); self.val_warn.setReadOnly(True)
@@ -872,8 +872,9 @@ class MainWindow(QMainWindow):
         """config.plist для проверки: ручной выбор или последняя сборка."""
         if self.val_config_path and self.val_config_path.is_file():
             return self.val_config_path
-        if self.profile and getattr(self, "last_build_dir", None):
-            cand = self.last_build_dir / "EFI" / "OC" / "config.plist"
+        build_dir = getattr(self, "last_build_dir", None)
+        if self.profile and build_dir:
+            cand = Path(build_dir) / "EFI" / "OC" / "config.plist"
             if cand.is_file():
                 return cand
         return None
@@ -928,10 +929,10 @@ class MainWindow(QMainWindow):
             return
         p = self.profile
         # чистим
-        while self.val_hw_box.count():
-            it = self.val_hw_box.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
+        while (it := self.val_hw_box.takeAt(0)) is not None:
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
         w = (p.net.wifi_chipset or "")
         if w == "mediatek":
             self.val_hw_card.setVisible(True)
@@ -1122,7 +1123,7 @@ class MainWindow(QMainWindow):
         self.usb_empty.setVisible(True)
         self.usb_list_worker = UsbListWorker(self)
         self.usb_list_worker.done.connect(self._usb_fill)
-        self.usb_list_worker.failed.connect(self._usb_failed)
+        self.usb_list_worker.failed.connect(self._usb_list_failed)
         self.usb_list_worker.finished.connect(
             lambda: self.usb_refresh_btn.setEnabled(True))
         self.usb_list_worker.start()
@@ -1171,7 +1172,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             tr.t("usb.log_saved").format(path=path), 4000)
 
-    def _usb_failed(self, err: str):
+    def _usb_list_failed(self, err: str):
         self.usb_devices = []
         self.usb_combo.clear()
         self.usb_combo.setEnabled(False)
@@ -1189,7 +1190,7 @@ class MainWindow(QMainWindow):
             entries = []
         if not entries:
             it = QListWidgetItem(tr.t("history.empty"))
-            it.setFlags(Qt.NoItemFlags)
+            it.setFlags(Qt.ItemFlag.NoItemFlags)
             self.history_list.addItem(it)
             return
         for e in entries:
@@ -1197,14 +1198,14 @@ class MainWindow(QMainWindow):
             text = (f"{e.created_at} · {e.smbios or '—'} · "
                     f"{e.opencore or '—'} · ocvalidate: {ocv}")
             it = QListWidgetItem(text)
-            it.setData(Qt.UserRole, e)
+            it.setData(Qt.ItemDataRole.UserRole, e)
             if not e.exists:
                 it.setForeground(QColor("#f38ba8"))
             self.history_list.addItem(it)
 
     def _history_selected(self):
         it = self.history_list.currentItem()
-        return it.data(Qt.UserRole) if it else None
+        return it.data(Qt.ItemDataRole.UserRole) if it else None
 
     def _history_open(self):
         entry = self._history_selected()
@@ -1225,8 +1226,8 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle(title)
         box.setText(text)
-        yes = box.addButton(tr.t("common.yes"), QMessageBox.YesRole)
-        box.addButton(tr.t("common.no"), QMessageBox.NoRole)
+        yes = box.addButton(tr.t("common.yes"), QMessageBox.ButtonRole.YesRole)
+        box.addButton(tr.t("common.no"), QMessageBox.ButtonRole.NoRole)
         box.setDefaultButton(yes)
         box.exec()
         return box.clickedButton() is yes
@@ -1386,8 +1387,8 @@ class MainWindow(QMainWindow):
         btns = QDialogButtonBox()
         ok_btn = QPushButton(tr.t("usb.proceed"))
         cancel_btn = QPushButton(tr.t("usb.cancel"))
-        btns.addButton(ok_btn, QDialogButtonBox.AcceptRole)
-        btns.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        btns.addButton(ok_btn, QDialogButtonBox.ButtonRole.AcceptRole)
+        btns.addButton(cancel_btn, QDialogButtonBox.ButtonRole.RejectRole)
         dlgv.addWidget(btns)
 
         def _try_accept():
@@ -1400,7 +1401,7 @@ class MainWindow(QMainWindow):
         ok_btn.clicked.connect(_try_accept)
         cancel_btn.clicked.connect(dlg.reject)
 
-        if dlg.exec() == QDialog.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             self._usb_run(device, mode, planned, self.usb_make_map.isChecked())
 
     def _ensure_admin(self) -> bool:
@@ -1414,9 +1415,9 @@ class MainWindow(QMainWindow):
             return True
         ans = QMessageBox.question(
             self, tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
         )
-        if ans != QMessageBox.Yes:
+        if ans != QMessageBox.StandardButton.Yes:
             QMessageBox.warning(self, tr.t("usb.admin_title"),
                                 tr.t("usb.admin_manual"))
             return False
@@ -1485,11 +1486,11 @@ class MainWindow(QMainWindow):
         for key in ("usb.bios1", "usb.bios2", "usb.bios3", "usb.bios4", "usb.bios5"):
             it = QListWidgetItem("→  " + tr.t(key))
             lst.addItem(it)
-        lst.setSelectionMode(QListWidget.NoSelection)
+        lst.setSelectionMode(QListWidget.SelectionMode.NoSelection)
         dlgv.addWidget(lst)
         btn = QPushButton(tr.t("usb.bios_finish"))
         btn.clicked.connect(dlg.accept)
-        dlgv.addWidget(btn, alignment=Qt.AlignRight)
+        dlgv.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
         dlg.exec()
 
     def _build_ports(self):
@@ -1629,7 +1630,7 @@ class MainWindow(QMainWindow):
         w = QWidget(parent)
         lv = QVBoxLayout(w); lv.setContentsMargins(0, 2, 0, 2); lv.setSpacing(1)
         a = QLabel(w)
-        a.setTextFormat(Qt.RichText)
+        a.setTextFormat(Qt.TextFormat.RichText)
         a.setText(
             f'<a href="{src.url}" style="color:#89b4fa; text-decoration:none;">'
             f'{html.escape(title_of(src, tr.current))}</a>'
@@ -1648,7 +1649,7 @@ class MainWindow(QMainWindow):
         page = QWidget()
         outer = QVBoxLayout(page); outer.setContentsMargins(0, 0, 0, 0)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         v = QVBoxLayout(inner); v.setContentsMargins(28, 24, 28, 24); v.setSpacing(10)
         v.addWidget(_h1(inner, tr.t("sources.title")))
@@ -1766,7 +1767,7 @@ class MainWindow(QMainWindow):
 
     def _mini_link(self, parent, text: str, url: str) -> QLabel:
         a = QLabel(parent)
-        a.setTextFormat(Qt.RichText)
+        a.setTextFormat(Qt.TextFormat.RichText)
         a.setText(
             f'<a href="{html.escape(url)}" style="color:#89b4fa; text-decoration:none;">'
             f'{html.escape(text)} ↗</a>'
@@ -1896,7 +1897,7 @@ class MainWindow(QMainWindow):
             btn = QPushButton(tr.t("sources.unknown_suggest"))
             btn.setObjectName("ghost")
             btn.clicked.connect(self._suggest_config)
-            lay.addWidget(btn, alignment=Qt.AlignLeft)
+            lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
         # специфичные ссылки
         skip = {"oc_guide", "insanelymac", "tonymacx86"}
         picked = [s for s in sources_for(prof) if s.key not in skip]
@@ -1934,7 +1935,7 @@ class MainWindow(QMainWindow):
 
         run = QPushButton(tr.t("analyze.button"))
         run.clicked.connect(self._do_analyze)
-        v.addWidget(run, alignment=Qt.AlignLeft)
+        v.addWidget(run, alignment=Qt.AlignmentFlag.AlignLeft)
 
         # Проверка лога OpenCore
         gb_log = QGroupBox(tr.t("oclog.title"))
@@ -1958,7 +1959,7 @@ class MainWindow(QMainWindow):
         self.an_progress = QProgressBar(); self.an_progress.setMaximum(0); self.an_progress.setVisible(False)
         v.addWidget(self.an_progress)
 
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         self.issue_list = QListWidget(); self.issue_list.setObjectName("issueList")
         self.issue_detail = QTextEdit(); self.issue_detail.setReadOnly(True)
         splitter.addWidget(self.issue_list)
@@ -2010,7 +2011,7 @@ class MainWindow(QMainWindow):
         root = QWidget()
         outer = QVBoxLayout(root); outer.setContentsMargins(0, 0, 0, 0)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         page = inner
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
@@ -2203,9 +2204,9 @@ class MainWindow(QMainWindow):
             answer = QMessageBox.question(
                 self, tr.t("settings.updates"),
                 f"{text}\n\n{tr.t('settings.updates_warning')}",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
             )
-            if answer == QMessageBox.Yes:
+            if answer == QMessageBox.StandardButton.Yes:
                 self._install_update()
             else:
                 self._postpone_update()
@@ -2420,6 +2421,8 @@ class MainWindow(QMainWindow):
         }
         while self.stack.count():
             w = self.stack.widget(0)
+            if w is None:
+                break
             self.stack.removeWidget(w)
             w.deleteLater()
         self._create_pages()
@@ -2483,10 +2486,10 @@ class MainWindow(QMainWindow):
         if getattr(self, "_worker_scan", None) and self._worker_scan.isRunning():
             return
         # очистим сетку
-        while self.hw_grid.count():
-            it = self.hw_grid.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
+        while (it := self.hw_grid.takeAt(0)) is not None:
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
         self.scan_progress.setVisible(True)
         self._worker_scan = ScanWorker()
         self._worker_scan.done.connect(self._scan_done)
@@ -2502,10 +2505,10 @@ class MainWindow(QMainWindow):
         except Exception:
             self._last_hw_record = None
         self._refresh_validate_hw()
-        while self.hw_grid.count():
-            it = self.hw_grid.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
+        while (it := self.hw_grid.takeAt(0)) is not None:
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
         rows = [
             ("scan.cpu", f"{profile.cpu.name} / {profile.cpu.codename} / {profile.cpu.generation} gen" if profile.cpu.name else "—"),
             ("scan.gpu", ", ".join([g.name for g in [profile.igpu, profile.dgpu] if g]) or "—"),
@@ -2656,8 +2659,9 @@ class MainWindow(QMainWindow):
         if not text.strip():
             return
         default = ""
-        if getattr(self, "last_build_dir", None):
-            default = str(Path(self.last_build_dir) / "REASONING.md")
+        build_dir = getattr(self, "last_build_dir", None)
+        if build_dir:
+            default = str(Path(build_dir) / "REASONING.md")
         path, _ = QFileDialog.getSaveFileName(
             self, tr.t("build.rationale_save"), default,
             "Markdown (*.md);;Text (*.txt)")
@@ -2709,7 +2713,7 @@ class MainWindow(QMainWindow):
             icon = self._SEV.get(int(iss.severity), "ℹ")
             title = _issue_title(iss)
             it = QListWidgetItem(f"{icon} {title}")
-            it.setData(Qt.UserRole, iss)
+            it.setData(Qt.ItemDataRole.UserRole, iss)
             it.setForeground(QColor(self._SEV_COLOR.get(int(iss.severity), "#cdd6f4")))
             self.issue_list.addItem(it)
         n_err = sum(1 for i in issues if int(i.severity) == 2)
@@ -2726,7 +2730,7 @@ class MainWindow(QMainWindow):
         if not cur:
             self.issue_detail.clear()
             return
-        iss = cur.data(Qt.UserRole)
+        iss = cur.data(Qt.ItemDataRole.UserRole)
         if not iss:
             self.issue_detail.clear()
             return

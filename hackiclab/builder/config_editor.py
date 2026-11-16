@@ -244,7 +244,7 @@ def suggest_framebuffers(profile: HardwareProfile) -> list[tuple[str, str]]:
         if not raw:
             continue
         value = int.from_bytes(raw, "little")
-        out.append((f"0x{value:08X}", _FB_LABELS.get(key, key)))
+        out.append((f"0x{value:08X}", str(_FB_LABELS.get(key) or key)))
     return out
 
 

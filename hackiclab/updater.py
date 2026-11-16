@@ -38,7 +38,7 @@ class UpdateInfo:
     notes: str            # текст релиза
     page_url: str         # страница релиза
     asset_url: str        # прямая ссылка на EXE (может быть пустой)
-    asset_size: int = 0
+    asset_size: int | None = 0
     asset_digest: str = ""   # sha256 вложения по данным GitHub
     is_rebuild: bool = False  # та же версия, но другое содержимое сборки
 

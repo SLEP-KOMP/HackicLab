@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from typing import cast
 from unittest import mock
 
 import _bootstrap  # noqa: F401  (добавляет корень проекта в sys.path)
@@ -79,10 +80,10 @@ class ConfirmPhraseTests(unittest.TestCase):
             from hackiclab.ui.main_window import MainWindow
         except Exception as exc:  # PySide6 отсутствует — тест не применим
             self.skipTest(f"PySide6 недоступен: {exc}")
-        self.assertEqual(MainWindow._confirm_phrase(None, "f:"), "WRITE F:")
-        self.assertEqual(MainWindow._confirm_phrase(None, "DISK12"), "WRITE DISK 12")
-        self.assertEqual(MainWindow._confirm_phrase(None, "RAWDISK7"), "WRITE DISK 7")
-        self.assertEqual(MainWindow._confirm_phrase(None, "F:", "9"), "WRITE F:")
+        self.assertEqual(MainWindow._confirm_phrase(cast(MainWindow, None), "f:"), "WRITE F:")
+        self.assertEqual(MainWindow._confirm_phrase(cast(MainWindow, None), "DISK12"), "WRITE DISK 12")
+        self.assertEqual(MainWindow._confirm_phrase(cast(MainWindow, None), "RAWDISK7"), "WRITE DISK 7")
+        self.assertEqual(MainWindow._confirm_phrase(cast(MainWindow, None), "F:", "9"), "WRITE F:")
 
 
 if __name__ == "__main__":

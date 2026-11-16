@@ -63,6 +63,9 @@ class EFIBuilder:
             self._log("OpenCore: не найден zip")
             return None
         name = zip_asset.get("name")
+        if not name:
+            self._log("OpenCore: у zip-ассета нет имени")
+            return None
         zip_path = download_asset(release, name, dest, cache_name="opencore")
         if not zip_path:
             return None
