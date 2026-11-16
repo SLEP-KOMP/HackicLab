@@ -51,7 +51,7 @@ from ..builder import (
     BuildPlan,
     EFIBuilder,
 )
-from ..i18n import LANGS, detect_system_language, tr
+from ..i18n import LANG_CODES, LANGS, detect_system_language, tr
 from ..knowledge.configs import (
     STATUS_LIMITED,
     STATUS_NATIVE,
@@ -75,6 +75,12 @@ from ..knowledge.sources import (
 from ..scanner import HardwareProfile, WindowsScanner
 from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
 from .theme_tiles import MonitorButton
+
+#: Имя локального сервера для проверки «программа уже запущена».
+SINGLE_INSTANCE = "hackiclab-single-instance"
+
+#: Ссылка на сервер живёт весь запуск — иначе Qt соберёт его как мусор.
+_SINGLE_SERVER: object | None = None
 
 
 def _h1(parent, text):
@@ -1285,7 +1291,6 @@ class MainWindow(QMainWindow):
         if not path.exists():
             QMessageBox.warning(self, tr.t("history.title"), tr.t("history.missing"))
             return
-        import os
         try:
             os.startfile(str(path))
         except Exception as e:
@@ -2087,8 +2092,17 @@ class MainWindow(QMainWindow):
     _DONATE_WALLET = "4100115796556073"
 
     def _asset(self, *parts) -> Path:
-        """Путь к ассету пакета — работает и в собранном EXE."""
-        return Path(__file__).resolve().parent.parent / "assets" / Path(*parts)
+        """Путь к ассету пакета — работает и в собранном EXE.
+
+        В onefile-сборке ``__file__`` модуля из PYZ бывает относительным,
+        поэтому базой служит ``sys._MEIPASS``.
+        """
+        bundled = getattr(sys, "_MEIPASS", None)
+        if bundled:
+            base = Path(bundled) / "hackiclab" / "assets"
+        else:
+            base = Path(__file__).resolve().parents[2] / "hackiclab" / "assets"
+        return base / Path(*parts)
 
     def _rounded_photo(self, path: Path, width: int, height: int, radius: int) -> QPixmap:
         """Кадрирует фото под пропорции карточки и скругляет углы."""
@@ -2198,18 +2212,21 @@ class MainWindow(QMainWindow):
         methods = self._card(page)
         mv = QVBoxLayout(methods)
         mv.addWidget(_h2(page, tr.t("donate.methods_title")))
-        logo_row = QHBoxLayout(); logo_row.setSpacing(10)
-        for name, height in (("yoomoney.png", 20), ("mir.png", 18), ("sbp.png", 20)):
-            plate = QFrame(page)
-            plate.setObjectName("logoPlate")
-            plate.setFixedHeight(height + 18)
-            pl = QHBoxLayout(plate); pl.setContentsMargins(10, 0, 10, 0)
+        logo_row = QHBoxLayout(); logo_row.setSpacing(0)
+        strip = QFrame(page)
+        strip.setObjectName("logoStrip")
+        strip.setFixedHeight(44)
+        strip_fixed = strip.sizePolicy()
+        strip_fixed.setHorizontalPolicy(strip_fixed.Policy.Maximum)
+        strip.setSizePolicy(strip_fixed)
+        sl = QHBoxLayout(strip); sl.setContentsMargins(16, 0, 16, 0); sl.setSpacing(22)
+        for name, height in (("yoomoney.png", 20), ("mir.png", 18), ("sbp.png", 19)):
             lbl = QLabel()
             pix = self._logo_pixmap(name, height)
             if not pix.isNull():
                 lbl.setPixmap(pix)
-            pl.addWidget(lbl)
-            logo_row.addWidget(plate, 0, Qt.AlignmentFlag.AlignVCenter)
+            sl.addWidget(lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        logo_row.addWidget(strip, 0, Qt.AlignmentFlag.AlignLeft)
         logo_row.addStretch()
         mv.addLayout(logo_row)
         for key in ("donate.methods_text", "donate.limits_text",
@@ -2531,10 +2548,9 @@ class MainWindow(QMainWindow):
             return
         self.upd_status.setText(tr.t("settings.updates_restarting"))
         updater.relaunch_self()
+        # Штатный выход: PyInstaller сам удаляет временную папку _MEI.
+        # Принудительный os._exit оставлял её и давал предупреждение при старте.
         QTimer.singleShot(300, QApplication.quit)
-        # страховка: если цикл событий не завершился, выходим принудительно,
-        # иначе процесс останется висеть и заблокирует файл EXE
-        QTimer.singleShot(3000, lambda: os._exit(0))
 
     def _update_download_failed(self, err: str):
         self.upd_now_btn.setEnabled(True)
@@ -3046,15 +3062,31 @@ def run_app() -> int:
     from .. import updater
 
     updater.cleanup_old_binaries()
-    # язык: явный выбор пользователя, иначе — язык системы (ru/en)
-    saved_lang = str(uistate.get("language", "") or "")
-    if saved_lang:
-        tr.set_lang(saved_lang)
-    else:
-        tr.set_lang(detect_system_language())
-        uistate.save(language=tr.current)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    # Язык: явный выбор пользователя, иначе — язык системы. Определяем его
+    # только после создания QApplication: до этого QLocale отдаёт «C»/en-US
+    # и русская Windows получала английский интерфейс.
+    saved_lang = str(uistate.get("language", "") or "")
+    tr.set_lang(saved_lang if saved_lang in LANG_CODES else detect_system_language())
+
+    # Один экземпляр: второй процесс мешает обновлению и удалению временной
+    # папки PyInstaller («Failed to remove temporary directory»).
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+
+    probe = QLocalSocket()
+    probe.connectToServer(SINGLE_INSTANCE)
+    if probe.waitForConnected(300):
+        probe.disconnectFromServer()
+        return 0
+    global _SINGLE_SERVER
+
+    QLocalServer.removeServer(SINGLE_INSTANCE)
+    server = QLocalServer()
+    server.listen(SINGLE_INSTANCE)
+    _SINGLE_SERVER = server
+
     state = uistate.load()
     app.setStyleSheet(
         get_qss(str(state.get("theme") or "system"), str(state.get("background") or ""))

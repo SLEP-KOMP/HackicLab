@@ -47,6 +47,14 @@ class TranslationTests(unittest.TestCase):
 
 
 class DetectLanguageTests(unittest.TestCase):
+    def setUp(self):
+        """Qt-ветку проверяем отдельно: на Windows приоритет у системного API."""
+        from unittest import mock
+
+        patcher = mock.patch("hackiclab.i18n._windows_ui_language", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _fake_qt(self, langs):
         from unittest import mock
 
@@ -88,6 +96,53 @@ class DetectLanguageTests(unittest.TestCase):
         with mock.patch("PySide6.QtCore.QLocale", _Broken), \
                 mock.patch("locale.getlocale", return_value=("ru_RU", "UTF-8")):
             self.assertEqual(detect_system_language(), "ru")
+
+
+class WindowsLanguageTests(unittest.TestCase):
+    """Windows-детект не зависит от Qt и срабатывает до создания QApplication."""
+
+    def _fake_win(self, lang_id):
+        from unittest import mock
+
+        class _Kernel:
+            @staticmethod
+            def GetUserDefaultUILanguage():
+                return lang_id
+
+            @staticmethod
+            def GetSystemDefaultUILanguage():
+                return lang_id
+
+        class _Windll:
+            kernel32 = _Kernel
+
+        class _Ctypes:
+            windll = _Windll
+
+        return mock.patch.dict("sys.modules", {"ctypes": _Ctypes}), \
+            mock.patch("hackiclab.i18n.sys.platform", "win32")
+
+    def test_russian_ui_language_id(self):
+        from hackiclab import i18n
+
+        p1, p2 = self._fake_win(0x419)
+        with p1, p2:
+            self.assertEqual(i18n._windows_ui_language(), "ru")
+
+    def test_english_ui_language_id(self):
+        from hackiclab import i18n
+
+        p1, p2 = self._fake_win(0x409)
+        with p1, p2:
+            self.assertEqual(i18n._windows_ui_language(), "en")
+
+    def test_non_windows_returns_none(self):
+        from unittest import mock
+
+        from hackiclab import i18n
+
+        with mock.patch("hackiclab.i18n.sys.platform", "linux"):
+            self.assertIsNone(i18n._windows_ui_language())
 
 
 class SystemDefaultLanguageTests(unittest.TestCase):

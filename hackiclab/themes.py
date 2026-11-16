@@ -314,8 +314,8 @@ QPushButton#chip {{
     border-radius: 15px; padding: 6px 16px; font-size: 12px; font-weight: 600;
 }}
 QPushButton#chip:hover {{ border-color: {p.accent}; color: {p.accent}; }}
-QFrame#logoPlate {{
-    background: #ffffff; border: 1px solid #d8dbe6; border-radius: 8px;
+QFrame#logoStrip {{
+    background: #ffffff; border: 1px solid #d8dbe6; border-radius: 9px;
 }}
 QPushButton#chip:checked {{
     border-color: {p.accent}; color: {p.accent};

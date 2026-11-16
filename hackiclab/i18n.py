@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 
@@ -965,6 +966,27 @@ ISSUE_EN = {
 }
 
 
+def _windows_ui_language() -> str | None:
+    """Язык интерфейса Windows по данным системы, без зависимости от Qt.
+
+    Qt до создания QApplication отдаёт «C»/«en-US», поэтому при запуске
+    основным источником служит GetUserDefaultUILanguage.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        kernel = ctypes.windll.kernel32
+        lang_id = int(kernel.GetUserDefaultUILanguage())
+        if not lang_id:
+            lang_id = int(kernel.GetSystemDefaultUILanguage())
+    except Exception:
+        return None
+    primary = lang_id & 0x3FF
+    return "ru" if primary == 0x19 else "en"
+
+
 def detect_system_language() -> str:
     """Язык интерфейса по системе: русский для ru-локалей, иначе английский.
 
@@ -972,6 +994,9 @@ def detect_system_language() -> str:
     английский интерфейс. Явный выбор в настройках важнее — он проверяется до
     этой функции.
     """
+    forced = _windows_ui_language()
+    if forced is not None:
+        return forced
     try:
         from PySide6.QtCore import QLocale
 

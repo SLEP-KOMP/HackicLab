@@ -47,7 +47,13 @@ class MacOSVersion:
         return int(self.version.split(".")[0])
 
 
-RECOVERY_CACHE_DIR = Path.home() / ".hackiclab" / "cache" / "recovery"
+def _recovery_cache_dir() -> Path:
+    from .cache_manager import app_home
+
+    return app_home() / "cache" / "recovery"
+
+
+RECOVERY_CACHE_DIR = _recovery_cache_dir()
 
 
 MACOS_VERSIONS: list[MacOSVersion] = [

@@ -22,7 +22,11 @@ DEFAULTS: dict[str, Any] = {
     "check_updates": True,
     "postponed_update": "",
     "skipped_version": "",
+    "ui_schema": 2,
 }
+
+#: Версия схемы настроек: 2 — тема «Системная» и язык системы по умолчанию.
+UI_SCHEMA = 2
 
 
 def _file() -> Path:
@@ -40,6 +44,17 @@ def load() -> dict[str, Any]:
         for key in DEFAULTS:
             if key in raw:
                 data[key] = raw[key]
+        if int(raw.get("ui_schema") or 0) < UI_SCHEMA:
+            # Настройки от старой версии: тогда тема и язык были жёсткими,
+            # поэтому один раз возвращаем их к системным значениям.
+            data["theme"] = "system"
+            data["language"] = ""
+            data["ui_schema"] = UI_SCHEMA
+            try:
+                _file().write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
     return data
 
 
