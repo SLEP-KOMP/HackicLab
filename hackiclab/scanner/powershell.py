@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
+
+from ..proc import run as hidden_run
 
 
 class PowerShell:
@@ -17,7 +18,7 @@ class PowerShell:
         """Выполняет PowerShell-скрипт, возвращает stdout как текст (UTF-8)."""
         wrapped = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; " + script
         try:
-            r = subprocess.run(
+            r = hidden_run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", wrapped],
                 capture_output=True, timeout=timeout,
             )

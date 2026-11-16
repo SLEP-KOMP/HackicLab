@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from ..proc import run as hidden_run
 
 
 @dataclass
@@ -118,8 +119,8 @@ def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVR
                          warnings=["ocvalidate не найден — валидация пропущена"],
                          tool_missing=True)
     try:
-        r = subprocess.run([str(tool), str(config_path)],
-                           capture_output=True, text=True, timeout=60)
+        r = hidden_run([str(tool), str(config_path)],
+                       capture_output=True, text=True, timeout=60)
     except Exception as e:
         return OCVResult(ok=False, errors=[f"ocvalidate не запустился: {e}"])
     out = (r.stdout or "") + "\n" + (r.stderr or "")

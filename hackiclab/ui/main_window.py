@@ -79,6 +79,9 @@ from .theme_tiles import MonitorButton
 #: Имя локального сервера для проверки «программа уже запущена».
 SINGLE_INSTANCE = "hackiclab-single-instance"
 
+#: Ширина центральной колонки контента — как у «Параметров» Windows.
+COLUMN_MAX_WIDTH = 1280
+
 #: Перевод стандартных кнопок Qt (Yes/No, OK) — живёт весь запуск.
 _QT_TRANSLATOR: QTranslator | None = None
 
@@ -584,14 +587,27 @@ class MainWindow(QMainWindow):
         layout.addLayout(head)
 
     def _scroll_page(self, page: QWidget) -> QScrollArea:
-        """Оборачивает страницу в прокрутку: контент не обрезается при малом окне."""
+        """Прокрутка и центральная колонка: поля слева и справа одинаковые.
+
+        Как в «Параметрах» Windows: на широком мониторе контент не растягивается
+        на всю ширину, а стоит колонкой ``COLUMN_MAX_WIDTH`` по центру.
+        """
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
         area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         area.viewport().setAutoFillBackground(False)
-        area.setWidget(page)
+        page.setMaximumWidth(COLUMN_MAX_WIDTH)
+        shell = QWidget()
+        shell.setObjectName("pageShell")
+        row = QHBoxLayout(shell)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        row.addStretch(1)
+        row.addWidget(page, 1000)
+        row.addStretch(1)
+        area.setWidget(shell)
         return area
 
     def _build_scan(self):
@@ -2187,16 +2203,9 @@ class MainWindow(QMainWindow):
         и не выглядят огромными.
         """
         page = QWidget()
-        shell = QHBoxLayout(page)
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.addStretch(1)
-        column = QWidget()
-        column.setMaximumWidth(1280)
-        v = QVBoxLayout(column)
-        v.setContentsMargins(24, 22, 24, 24)
-        shell.addWidget(column, 20)
-        shell.addStretch(1)
-        self._page_header(column, v, "donate.title", "donate.subtitle")
+        v = QVBoxLayout(page)
+        v.setContentsMargins(28, 24, 28, 24)
+        self._page_header(page, v, "donate.title", "donate.subtitle")
 
         cols = QHBoxLayout(); cols.setSpacing(18)
         left = QVBoxLayout(); left.setSpacing(14)
@@ -2320,7 +2329,7 @@ class MainWindow(QMainWindow):
         av.addWidget(thanks)
         av.addStretch(1)
         cols.addWidget(author, 2, Qt.AlignmentFlag.AlignTop)
-        cols_box = QWidget(column)
+        cols_box = QWidget(page)
         cols_box.setLayout(cols)
         v.addWidget(cols_box, 0, Qt.AlignmentFlag.AlignTop)
 

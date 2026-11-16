@@ -9,10 +9,10 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 from typing import Optional
 
+from ..proc import run as hidden_run
 from ..scanner.models import HardwareProfile
 
 # URL стабильной Windows-сборки iasl (ACPI spec compiler) для автозагрузки.
@@ -220,7 +220,7 @@ def get_template(name: str) -> str:
 
 def _iasl_available() -> bool:
     try:
-        r = subprocess.run(["iasl", "--version"], capture_output=True, timeout=10)
+        r = hidden_run(["iasl", "--version"], capture_output=True, timeout=10)
         return r.returncode == 0
     except Exception:
         return False
@@ -272,7 +272,7 @@ def compile_dsl(dsl_text: str, out_dir: Path, name: str) -> Optional[Path]:
     dsl_path = out_dir / f"{name}.dsl"
     dsl_path.write_text(dsl_text, encoding="utf-8")
     try:
-        subprocess.run(
+        hidden_run(
             [str(iasl), "-p", str(out_dir / name), str(dsl_path)],
             capture_output=True, timeout=30,
         )

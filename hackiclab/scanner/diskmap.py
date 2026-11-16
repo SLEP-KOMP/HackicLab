@@ -11,10 +11,11 @@ Linux/GRUB, rEFInd), а также предупреждает о конфлик�
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from ..proc import run as hidden_run
 
 _EFI_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 
@@ -65,7 +66,7 @@ def _powershell(script: str, timeout: int = 30) -> str:
         + script
     )
     try:
-        r = subprocess.run(
+        r = hidden_run(
             ["powershell", "-NoProfile", "-Command", wrapper],
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=timeout,

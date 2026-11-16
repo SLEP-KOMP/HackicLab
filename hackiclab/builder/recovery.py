@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Optional, cast
 
+from ..proc import popen as hidden_popen
+
 # URL официального macrecovery.py из Acidanthera OpenCorePkg
 MACRECOVERY_URL = (
     "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/"
@@ -272,7 +274,7 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
 
         last_lines: list = []
         try:
-            proc = subprocess.Popen(
+            proc = hidden_popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             )
 

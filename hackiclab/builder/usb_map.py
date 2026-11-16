@@ -17,11 +17,12 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
 from typing import Optional
+
+from ..proc import run as hidden_run
 
 MAP_BUNDLE_IDENTIFIER = "com.dhinakg.USBToolBox.map"
 DRIVER_BUNDLE_IDENTIFIER = "com.dhinakg.USBToolBox.kext"
@@ -243,7 +244,7 @@ def decompile_dsdt(dsdt_path: Path, work_dir: Path, log=None) -> Optional[str]:
         local_aml = Path(dsdt_path)
 
     try:
-        subprocess.run([str(iasl), "-d", str(local_aml)],
+        hidden_run([str(iasl), "-d", str(local_aml)],
                        cwd=str(work), capture_output=True, timeout=60)
     except Exception:
         return None
@@ -413,7 +414,7 @@ def extract_usbdump(zip_path: Path, dest_dir: Path) -> Optional[Path]:
 
 def _run_usbdump(usbdump_exe: Path) -> Optional[list]:
     try:
-        result = subprocess.run([str(usbdump_exe)], capture_output=True, timeout=30)
+        result = hidden_run([str(usbdump_exe)], capture_output=True, timeout=30)
         return json.loads(result.stdout.decode(errors="replace"))
     except Exception:
         return None

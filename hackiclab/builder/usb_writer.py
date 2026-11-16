@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from ..proc import run as hidden_run
+
 
 @dataclass
 class USBDevice:
@@ -48,7 +50,7 @@ class USBWriteResult:
 
 def _powershell(script: str, timeout: int = 15) -> str:
     try:
-        r = subprocess.run(
+        r = hidden_run(
             ["powershell", "-NoProfile", "-Command", script],
             capture_output=True, text=True, timeout=timeout,
         )
@@ -294,7 +296,7 @@ def _run_diskpart(script_text: str) -> tuple[int, str]:
     p = Path(tmp_name)
     p.write_text(script_text, encoding="utf-8")
     try:
-        r = subprocess.run(
+        r = hidden_run(
             ["diskpart", "/s", str(p)],
             capture_output=True, timeout=120,
         )

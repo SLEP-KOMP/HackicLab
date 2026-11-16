@@ -271,6 +271,51 @@ class UiLiteralTests(unittest.TestCase):
         self.assertEqual(hits, [], "подписи вне i18n: " + "; ".join(hits))
 
 
+class PageColumnLayoutTests(unittest.TestCase):
+    """Все вкладки стоят центральной колонкой, как «Параметры» Windows."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_every_page_centered(self):
+        from PySide6.QtWidgets import QScrollArea
+
+        from hackiclab.ui.main_window import COLUMN_MAX_WIDTH, MainWindow
+
+        window = MainWindow()
+        try:
+            self.assertGreater(window.stack.count(), 1)
+            for index in range(window.stack.count()):
+                area = window.stack.widget(index)
+                if not isinstance(area, QScrollArea):
+                    self.fail(f"вкладка {index}: нет прокручиваемой области")
+                    continue
+                shell = area.widget()
+                self.assertIsNotNone(shell, f"вкладка {index}: прокрутка пуста")
+                if shell is None:
+                    continue
+                self.assertEqual(shell.objectName(), "pageShell", f"вкладка {index}")
+                layout = shell.layout()
+                if layout is None:
+                    self.fail(f"вкладка {index}: нет раскладки")
+                    continue
+                self.assertEqual(layout.count(), 3, f"вкладка {index}: колонка не по центру")
+                item = layout.itemAt(1)
+                column = item.widget() if item is not None else None
+                if column is None:
+                    self.fail(f"вкладка {index}: нет колонки")
+                    continue
+                self.assertEqual(column.maximumWidth(), COLUMN_MAX_WIDTH, f"вкладка {index}")
+        finally:
+            window.close()
+            window.deleteLater()
+
+
 class DialogLanguageTests(unittest.TestCase):
     """Подписи диалогов на обоих языках — как их увидит пользователь."""
 
