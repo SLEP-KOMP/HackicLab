@@ -98,6 +98,51 @@ class DetectLanguageTests(unittest.TestCase):
             self.assertEqual(detect_system_language(), "ru")
 
 
+class LocalizationAuditTests(unittest.TestCase):
+    """Диалоги и файловые фильтры не должны оставаться на английском."""
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+
+        cls.ui_source = (
+            Path(__file__).resolve().parents[1] / "hackiclab" / "ui" / "main_window.py"
+        ).read_text(encoding="utf-8")
+
+    def test_no_standard_yes_no_buttons(self):
+        self.assertNotIn("StandardButton.Yes", self.ui_source)
+        self.assertNotIn("QMessageBox.question(", self.ui_source)
+
+    def test_confirm_dialog_is_localized(self):
+        self.assertIn("def _confirm(", self.ui_source)
+        self.assertIn('tr.t("settings.updates_now")', self.ui_source)
+        self.assertIn('tr.t("settings.updates_later")', self.ui_source)
+
+    def test_file_dialog_filters_come_from_i18n(self):
+        self.assertNotIn('"All files (*)"', self.ui_source)
+        for key in ("file.all_files", "file.plist", "file.opencore_log",
+                    "file.images", "file.markdown", "file.json", "file.text"):
+            self.assertIn(key, self.ui_source, key)
+
+    def test_qt_translator_installed_on_start_and_switch(self):
+        self.assertIn("def install_qt_translator(", self.ui_source)
+        self.assertGreaterEqual(self.ui_source.count("install_qt_translator("), 3,
+                                "переводчик должен ставиться при старте и смене языка")
+
+
+class FileFilterKeyTests(unittest.TestCase):
+    """Ключи фильтров есть на обоих языках и не пустые."""
+
+    def test_filters_present_in_ru_and_en(self):
+        from hackiclab import i18n
+
+        for lang in ("ru", "en"):
+            i18n.tr.set_lang(lang)
+            for key in ("file.all_files", "file.plist", "file.images", "file.opencore_log"):
+                self.assertTrue(i18n.tr.t(key).strip(), f"{lang}:{key}")
+        i18n.tr.set_lang("ru")
+
+
 class WindowsLanguageTests(unittest.TestCase):
     """Windows-детект не зависит от Qt и срабатывает до создания QApplication."""
 

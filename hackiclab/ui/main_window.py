@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, QTranslator, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -78,6 +78,40 @@ from .theme_tiles import MonitorButton
 
 #: Имя локального сервера для проверки «программа уже запущена».
 SINGLE_INSTANCE = "hackiclab-single-instance"
+
+#: Перевод стандартных кнопок Qt (Yes/No, OK) — живёт весь запуск.
+_QT_TRANSLATOR: QTranslator | None = None
+
+
+def install_qt_translator(lang: str) -> None:
+    """Подключает qtbase_<lang>.qm, чтобы кнопки диалогов были на языке UI.
+
+    Файлы переводов лежат в PySide6/translations; в собранном EXE путь
+    подсказывает ``sys._MEIPASS``. Если файла нет, диалоги останутся на
+    английском, поэтому приложение дополнительно задаёт подписи само.
+    """
+    global _QT_TRANSLATOR
+    app = QApplication.instance()
+    if not isinstance(app, QApplication):
+        return
+    if _QT_TRANSLATOR is not None:
+        app.removeTranslator(_QT_TRANSLATOR)
+        _QT_TRANSLATOR = None
+    from PySide6.QtCore import QLibraryInfo
+
+    folders = [Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))]
+    bundled = getattr(sys, "_MEIPASS", None)
+    if bundled:
+        folders.append(Path(bundled) / "PySide6" / "translations")
+    for folder in folders:
+        qm = folder / f"qtbase_{lang}.qm"
+        if not qm.exists():
+            continue
+        translator = QTranslator()
+        if translator.load(str(qm)):
+            app.installTranslator(translator)
+            _QT_TRANSLATOR = translator
+            return
 
 #: Ссылка на сервер живёт весь запуск — иначе Qt соберёт его как мусор.
 _SINGLE_SERVER: object | None = None
@@ -843,7 +877,7 @@ class MainWindow(QMainWindow):
 
     def _pick_config(self):
         d, _ = QFileDialog.getOpenFileName(self, tr.t("validate.pick_config"), "",
-                                           "config.plist (*.plist);;All files (*)")
+                                           f"{tr.t('file.plist')};;{tr.t('file.all_files')}")
         if d:
             self.val_config_path = Path(d)
             self.val_path_label.setText(d)
@@ -1239,7 +1273,7 @@ class MainWindow(QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(
             self, tr.t("usb.log_save"), "HackicLab-usb-log.txt",
-            "Text (*.txt);;All files (*)")
+            f"{tr.t('file.text')};;{tr.t('file.all_files')}")
         if not path:
             return
         try:
@@ -1298,16 +1332,25 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, tr.t("history.title"), str(e))
 
-    def _ask_yes_no(self, title: str, text: str) -> bool:
-        """Локализованный диалог Да/Нет вместо стандартных Yes/No."""
+    def _confirm(self, title: str, text: str, yes_text: str, no_text: str) -> bool:
+        """Диалог подтверждения с явными подписями кнопок на языке интерфейса.
+
+        Стандартные Yes/No из QMessageBox берут перевод из qtbase_*.qm, а его
+        может не быть в сборке — поэтому подписи задаём сами.
+        """
         box = QMessageBox(self)
         box.setWindowTitle(title)
+        box.setIcon(QMessageBox.Icon.Question)
         box.setText(text)
-        yes = box.addButton(tr.t("common.yes"), QMessageBox.ButtonRole.YesRole)
-        box.addButton(tr.t("common.no"), QMessageBox.ButtonRole.NoRole)
+        yes = box.addButton(yes_text, QMessageBox.ButtonRole.YesRole)
+        box.addButton(no_text, QMessageBox.ButtonRole.NoRole)
         box.setDefaultButton(yes)
         box.exec()
         return box.clickedButton() is yes
+
+    def _ask_yes_no(self, title: str, text: str) -> bool:
+        """Локализованный диалог Да/Нет вместо стандартных Yes/No."""
+        return self._confirm(title, text, tr.t("common.yes"), tr.t("common.no"))
 
     def _history_clear(self):
         if not self._ask_yes_no(
@@ -1322,7 +1365,7 @@ class MainWindow(QMainWindow):
     def _history_save(self):
         path, _ = QFileDialog.getSaveFileName(
             self, tr.t("history.save"), "HackicLab-history.json",
-            "JSON (*.json);;All files (*)")
+            f"{tr.t('file.json')};;{tr.t('file.all_files')}")
         if not path:
             return
         try:
@@ -1490,11 +1533,10 @@ class MainWindow(QMainWindow):
             return False
         if is_admin():
             return True
-        ans = QMessageBox.question(
-            self, tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
-        )
-        if ans != QMessageBox.StandardButton.Yes:
+        if not self._confirm(
+            tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
+            tr.t("common.yes"), tr.t("common.no"),
+        ):
             QMessageBox.warning(self, tr.t("usb.admin_title"),
                                 tr.t("usb.admin_manual"))
             return False
@@ -2055,7 +2097,7 @@ class MainWindow(QMainWindow):
     def _do_oclog(self):
         path, _ = QFileDialog.getOpenFileName(
             self, tr.t("oclog.check"), "",
-            "OpenCore log (*.txt);;All files (*)")
+            f"{tr.t('file.opencore_log')};;{tr.t('file.all_files')}")
         if not path:
             return
         self.oclog_btn.setEnabled(False)
@@ -2515,12 +2557,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(text, 8000)
         if getattr(self, "_upd_silent", False) and info.has_asset:
             # предложение при старте: обновиться сейчас или отложить с напоминанием
-            answer = QMessageBox.question(
-                self, tr.t("settings.updates"),
+            if self._confirm(
+                tr.t("settings.updates"),
                 f"{text}\n\n{tr.t('settings.updates_warning')}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
-            )
-            if answer == QMessageBox.StandardButton.Yes:
+                tr.t("settings.updates_now"), tr.t("settings.updates_later"),
+            ):
                 self._install_update()
             else:
                 self._postpone_update()
@@ -2594,7 +2635,7 @@ class MainWindow(QMainWindow):
         """Выбор фонового изображения для темы «Моя тема»."""
         path, _ = QFileDialog.getOpenFileName(
             self, tr.t("settings.theme_bg_pick"), "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;All files (*)")
+            f"{tr.t('file.images')};;{tr.t('file.all_files')}")
         if not path:
             return
         self._theme_bg = path
@@ -2684,6 +2725,7 @@ class MainWindow(QMainWindow):
             return
         tr.set_lang(code)
         uistate.save(language=code)
+        install_qt_translator(code)
         # пересобираем страницы после выхода из обработчика сигнала
         QTimer.singleShot(0, self._rebuild_pages)
 
@@ -2985,7 +3027,7 @@ class MainWindow(QMainWindow):
             default = str(Path(build_dir) / "REASONING.md")
         path, _ = QFileDialog.getSaveFileName(
             self, tr.t("build.rationale_save"), default,
-            "Markdown (*.md);;Text (*.txt)")
+            f"{tr.t('file.markdown')};;{tr.t('file.text')}")
         if not path:
             return
         try:
@@ -3087,6 +3129,7 @@ def run_app() -> int:
     # и русская Windows получала английский интерфейс.
     saved_lang = str(uistate.get("language", "") or "")
     tr.set_lang(saved_lang if saved_lang in LANG_CODES else detect_system_language())
+    install_qt_translator(tr.current)
 
     # Один экземпляр: второй процесс мешает обновлению и удалению временной
     # папки PyInstaller («Failed to remove temporary directory»).

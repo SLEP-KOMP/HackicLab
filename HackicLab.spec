@@ -1,5 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+# Переводы Qt (qtbase_*.qm): без них стандартные кнопки остаются на английском
+from PySide6.QtCore import QLibraryInfo
+
+QT_TRANSLATIONS = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+
 
 a = Analysis(
     ['main.py'],
@@ -9,6 +14,7 @@ a = Analysis(
         ('hackiclab/assets/acpi', 'hackiclab/assets/acpi'),
         ('hackiclab/assets/brands', 'hackiclab/assets/brands'),
         ('hackiclab/assets/support', 'hackiclab/assets/support'),
+        (QT_TRANSLATIONS + '/qtbase_ru.qm', 'PySide6/translations'),
     ],
     hiddenimports=[
         'psutil',
