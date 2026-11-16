@@ -123,6 +123,20 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "CpuPlug", 0x00003000)
 }}
 '''
 
+_TEMPLATES["SSDT-PLUG-AMD"] = '''
+DefinitionBlock ("", "SSDT", 2, "CORP", "CpuPlug", 0x00003000)
+{{
+    External (_SB_.PR00, ProcessorObj)
+    Scope (_SB)
+    {{
+        Processor (PR00, 0x01, 0x00001810, 0x06)
+        {{
+            Name (_DSM, Buffer (0x04) {{ 0x00, 0x00, 0x00, 0x00 }})
+        }}
+    }}
+}}
+'''
+
 _TEMPLATES["SSDT-EC"] = '''
 DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtEc", 0x00001000)
 {{
@@ -308,7 +322,8 @@ class SSDTFactory:
           2) встроенный готовый .aml      -> bundled
           3) только шаблон .dsl (без бинарника) -> template-only
         """
-        names = ["SSDT-PLUG", "SSDT-EC", "SSDT-USBX", "SSDT-AWAC",
+        names = ["SSDT-PLUG-AMD" if self.profile.cpu.vendor == "amd" else "SSDT-PLUG",
+                 "SSDT-EC", "SSDT-USBX", "SSDT-AWAC",
                  "SSDT-PMC", "SSDT-GPI0"]
         if self.profile.platform == "laptop":
             names += ["SSDT-PNLF", "SSDT-EC-USBX", "SSDT-HPET", "SSDT-XOSI"]

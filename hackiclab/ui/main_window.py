@@ -1717,6 +1717,53 @@ class MainWindow(QMainWindow):
         )
         return badge
 
+    def _support_report(self, cfg):
+        """Кэшированный вердикт «соберётся ли EFI» для записи каталога."""
+        cache = getattr(self, "_sup_cache", None)
+        if cache is None:
+            cache = {}
+            self._sup_cache = cache
+        if cfg.key not in cache:
+            from ..knowledge.support import support_report
+            cache[cfg.key] = support_report(cfg)
+        return cache[cfg.key]
+
+    def _support_badge(self, parent, cfg) -> QLabel:
+        rep = self._support_report(cfg)
+        colors = {
+            "full": ("#a6e3a1", "rgba(166,227,161,0.16)"),
+            "partial": ("#f9e2af", "rgba(249,226,175,0.16)"),
+            "none": ("#f38ba8", "rgba(243,139,168,0.16)"),
+        }
+        fg, bg = colors.get(rep.level, colors["partial"])
+        badge = QLabel(tr.t("support.level." + rep.level), parent)
+        badge.setStyleSheet(
+            f"color:{fg}; background:{bg}; border-radius:9px; "
+            f"padding:2px 9px; font-size:11px; font-weight:600;"
+        )
+        reasons = [tr.t(key) for key in rep.failed]
+        tip = tr.t("support.tooltip")
+        if reasons:
+            tip += "\n- " + "\n- ".join(reasons)
+        badge.setToolTip(tip)
+        return badge
+
+    def _suggest_config(self):
+        """Открывает issue с обезличенным описанием просканированного железа."""
+        from ..knowledge import registry as hw_registry
+        prof = getattr(self, "profile", None)
+        if not prof:
+            return
+        try:
+            record = hw_registry.find(prof) or hw_registry.register(prof)
+        except Exception:
+            record = None
+        if record and hw_registry.open_issue(record):
+            self.statusBar().showMessage(tr.t("sources.unknown_opened"), 6000)
+            return
+        QMessageBox.information(self, tr.t("sources.title"),
+                                tr.t("sources.unknown_failed"))
+
     def _mini_link(self, parent, text: str, url: str) -> QLabel:
         a = QLabel(parent)
         a.setTextFormat(Qt.RichText)
@@ -1734,6 +1781,7 @@ class MainWindow(QMainWindow):
         head = QHBoxLayout()
         title = _h2(card, cfg.heading(tr.current)); title.setWordWrap(True)
         head.addWidget(title, 1)
+        head.addWidget(self._support_badge(card, cfg))
         head.addWidget(self._status_badge(card, cfg.status))
         cv.addLayout(head)
 
@@ -1830,7 +1878,8 @@ class MainWindow(QMainWindow):
             return
         lay.addWidget(_h2(page, tr.t("sources.for_hw")))
         # ближайшие записи каталога
-        for cfg in similar_configs(prof, limit=2):
+        sim = similar_configs(prof, limit=2)
+        for cfg in sim:
             row = QHBoxLayout()
             title = _val(page, cfg.heading(tr.current)); title.setWordWrap(True)
             row.addWidget(title, 1)
@@ -1839,6 +1888,15 @@ class MainWindow(QMainWindow):
             meta = _muted(page, f"{cfg.cpu} · {cfg.gpu} · macOS: {cfg.macos}")
             meta.setWordWrap(True)
             lay.addWidget(meta)
+        if not sim:
+            warn = _val(page, tr.t("sources.unknown_title")); warn.setWordWrap(True)
+            lay.addWidget(warn)
+            hint = _muted(page, tr.t("sources.unknown_hint")); hint.setWordWrap(True)
+            lay.addWidget(hint)
+            btn = QPushButton(tr.t("sources.unknown_suggest"))
+            btn.setObjectName("ghost")
+            btn.clicked.connect(self._suggest_config)
+            lay.addWidget(btn, alignment=Qt.AlignLeft)
         # специфичные ссылки
         skip = {"oc_guide", "insanelymac", "tonymacx86"}
         picked = [s for s in sources_for(prof) if s.key not in skip]
@@ -2424,6 +2482,11 @@ class MainWindow(QMainWindow):
     def _scan_done(self, profile):
         self.scan_progress.setVisible(False)
         self.profile = profile
+        try:
+            from ..knowledge import registry as hw_registry
+            self._last_hw_record = hw_registry.register(profile)
+        except Exception:
+            self._last_hw_record = None
         self._refresh_validate_hw()
         while self.hw_grid.count():
             it = self.hw_grid.takeAt(0)

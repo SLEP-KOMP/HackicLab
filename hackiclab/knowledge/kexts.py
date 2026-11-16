@@ -38,6 +38,7 @@ _reg({
     "NVMeFix": KextEntry("NVMeFix", "acidanthera/NVMeFix", "NVMeFix-", "Power management NVMe + APST"),
     "DebugEnhancer": KextEntry("DebugEnhancer", "acidanthera/DebugEnhancer", "DebugEnhancer-", "Отладочное логирование"),
     "CryptexFixup": KextEntry("CryptexFixup", "acidanthera/CryptexFixup", "CryptexFixup-", "Криптекс Ventura+ на старом/AMD железе"),
+    "AppleMCEReporterDisabler": KextEntry("AppleMCEReporterDisabler", "acidanthera/AppleMCEReporterDisabler", "AppleMCEReporterDisabler", "Отключает AppleMCEReporter — обязателен на AMD"),
 
     "SMCBatteryManager": KextEntry("SMCBatteryManager", "acidanthera/VirtualSMC", "VirtualSMC-", "Батарея", internal=True),
     "SMCProcessor": KextEntry("SMCProcessor", "acidanthera/VirtualSMC", "VirtualSMC-", "Температуры CPU", internal=True),

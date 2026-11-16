@@ -10,6 +10,7 @@ import plistlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
+from ..knowledge.kexts import smbios_model_for
 from ..scanner.models import HardwareProfile
 
 if TYPE_CHECKING:
@@ -156,6 +157,12 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
     if options.custom_smbios:
         _apply_smbios(cfg, options.custom_smbios)
+    else:
+        # без полного SMBIOS конфиг не проходит ocvalidate («unknown model»),
+        # поэтому всегда подставляем модель, поддерживающую целевую macOS
+        model = smbios_model_for(profile, options.target_macos)
+        if model:
+            cfg["PlatformInfo"]["Generic"]["SystemProductName"] = model
 
     return plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
 
@@ -407,7 +414,24 @@ def _base_config() -> dict:
                 "ResetTrafficClass": False, "SetupDelay": 0,
             },
             "ConnectDrivers": True,
-            "Drivers": [],
+            "Drivers": [
+                {
+                    "Path": "OpenRuntime.efi",
+                    "Enabled": True,
+                    "Comment": "Runtime services: NVRAM, slide, boot var routing",
+                    "Arguments": "",
+                    "HideVerbose": False,
+                    "LoadEarly": False,
+                },
+                {
+                    "Path": "OpenHfsPlus.efi",
+                    "Enabled": True,
+                    "Comment": "HFS+ driver for recovery and installers",
+                    "Arguments": "",
+                    "HideVerbose": False,
+                    "LoadEarly": False,
+                },
+            ],
             "Input": {
                 "KeyFiltering": False, "KeyForgetThreshold": 5,
                 "KeySupport": False, "KeySupportMode": "Auto",

@@ -23,6 +23,9 @@ class SSDTSpec:
 
 SSDT_DB: list[SSDTSpec] = [
     SSDTSpec("SSDT-PLUG", "Power management (plugin-type)", "Включает CPU power management — нужен почти всем Intel.", template=True, bundled=True),
+    SSDTSpec("SSDT-PLUG-AMD", "Power management (AMD)", "Plugin-type для Ryzen: собирается из DSL-шаблона, готового .aml нет.", template=True, bundled=False),
+    SSDTSpec("SSDT-GPRW", "Sleep fix (GPRW)", "Патч GPRW/PRW — сон и пробуждение ноутбуков.", template=False, bundled=True),
+    SSDTSpec("SSDT-IMEI", "IMEI device", "Добавляет IMEI на платах без него (Sandy/Ivy Bridge).", template=False, bundled=True),
     SSDTSpec("SSDT-EC", "Fake EC (desktop)", "Фейковый Embedded Controller для desktop — обязателен.", template=True, bundled=True),
     SSDTSpec("SSDT-EC-USBX", "Fake EC + USB power (laptop)", "Фейковый EC + силы USB для ноутбуков.", template=True, bundled=True),
     SSDTSpec("SSDT-PNLF", "Backlight (laptop)", "Управление яркостью экрана — только для ноутбуков.", template=True, bundled=True),

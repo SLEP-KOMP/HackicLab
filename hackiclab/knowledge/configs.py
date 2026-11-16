@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 # --- категории ---
 CAT_DESKTOP_INTEL = "desktop_intel"
@@ -52,6 +52,14 @@ class HwConfig:
     note_en: str = ""
     sources: tuple[str, ...] = ()
     url: str = ""
+    # --- структурированные данные: нужны проверке поддержки и подбору ---
+    vendor: str = "intel"          # intel / amd
+    generation: int = 0            # поколение Intel или семейство Zen
+    platform: str = "desktop"      # desktop / laptop / mini / workstation
+    igpu: str = ""                 # device-id iGPU, hex
+    dgpu: str = ""                 # device-id dGPU, hex
+    macos_min: str = ""            # самая старая рабочая версия
+    macos_max: str = ""            # потолок платформы
 
     def text(self, lang: str = "ru") -> str:
         return self.note_en if lang == "en" else self.note
@@ -293,7 +301,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="Catalina 10.15 – Sonoma 14",
         status=STATUS_PATCHED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi",
-               "itlwm + HeliPort или AirportItlwm"),
+               "itlwm", "AirportItlwm"),
         ssdts=("SSDT-PLUG", "SSDT-EC-USBX", "SSDT-PNLF не нужен"),
         quirks=("DeviceProperties: ig-platform-id 0x3EA50009",),
         note="Популярный «маленький мак». Слот M.2 освобождается под второй диск с "
@@ -363,6 +371,53 @@ CONFIGS: tuple[HwConfig, ...] = (
         url="https://forum.amd-osx.com/",
     ),
 )
+
+
+# Структурированные поля для уже описанных связок: нужны проверке поддержки.
+# Значения сверены с официальным списком Mac и потолками из oc_platforms.
+_STRUCT: dict[str, dict] = {
+    "intel_coffee_lake": {"vendor": "intel", "generation": 9, "platform": "desktop",
+                              "igpu": "3E92", "dgpu": "67DF", "macos_min": "Ventura",
+                              "macos_max": "Sequoia"},
+    "intel_skylake": {"vendor": "intel", "generation": 6, "platform": "desktop",
+                          "igpu": "1912", "macos_min": "Big Sur", "macos_max": "Monterey"},
+    "intel_comet_lake": {"vendor": "intel", "generation": 10, "platform": "desktop",
+                             "igpu": "9BC5", "dgpu": "73FF", "macos_min": "Monterey",
+                             "macos_max": "Sequoia"},
+    "intel_haswell": {"vendor": "intel", "generation": 4, "platform": "desktop",
+                          "igpu": "0412", "macos_min": "Catalina", "macos_max": "Monterey"},
+    "amd_ryzen_3600": {"vendor": "amd", "generation": 10, "platform": "desktop",
+                           "dgpu": "73FF", "macos_min": "Ventura", "macos_max": "Sequoia"},
+    "amd_ryzen_5800x": {"vendor": "amd", "generation": 12, "platform": "desktop",
+                            "dgpu": "73BF", "macos_min": "Monterey", "macos_max": "Sequoia"},
+    "amd_ryzen_2600": {"vendor": "amd", "generation": 9, "platform": "desktop",
+                           "dgpu": "67DF", "macos_min": "Catalina", "macos_max": "Sequoia"},
+    "laptop_thinkpad_t480": {"vendor": "intel", "generation": 8, "platform": "laptop",
+                                 "igpu": "5916", "macos_min": "Catalina",
+                                 "macos_max": "Sonoma"},
+    "laptop_xps_9360": {"vendor": "intel", "generation": 7, "platform": "laptop",
+                            "igpu": "5916", "macos_min": "Big Sur", "macos_max": "Ventura"},
+    "laptop_thinkpad_x230": {"vendor": "intel", "generation": 3, "platform": "laptop",
+                                 "igpu": "0166", "macos_min": "Catalina",
+                                 "macos_max": "Catalina"},
+    "laptop_ideapad_3": {"vendor": "amd", "generation": 9, "platform": "laptop",
+                             "macos_min": "", "macos_max": ""},
+    "mini_nuc8": {"vendor": "intel", "generation": 8, "platform": "mini",
+                      "igpu": "3EA5", "macos_min": "Catalina", "macos_max": "Sonoma"},
+    "mini_nuc10": {"vendor": "intel", "generation": 10, "platform": "mini",
+                       "igpu": "9BC8", "macos_min": "Big Sur", "macos_max": "Sequoia"},
+    "ws_xeon_e5_v3": {"vendor": "intel", "generation": 4, "platform": "workstation",
+                          "dgpu": "73FF", "macos_min": "Monterey", "macos_max": "Monterey"},
+    "ws_threadripper": {"vendor": "amd", "generation": 8, "platform": "workstation",
+                            "dgpu": "67DF", "macos_min": "Catalina", "macos_max": "Ventura"},
+}
+
+CONFIGS = tuple(replace(c, **_STRUCT[c.key]) for c in CONFIGS if c.key in _STRUCT) + tuple(
+    c for c in CONFIGS if c.key not in _STRUCT
+)
+
+# Новые записи каталога: старые платформы, свежие десктопы и ещё ноутбуки.
+CONFIGS = (*CONFIGS, HwConfig("intel_sandy_desktop", CAT_DESKTOP_INTEL, "Intel Sandy Bridge · i5-2500K + HD 3000", "Intel Sandy Bridge · i5-2500K + HD 3000", cpu="Intel Core i5-2500K / i7-2600K", gpu="HD Graphics 3000", macos="High Sierra 10.13", status=STATUS_LIMITED, kexts=("FakeSMC", "WhateverGreen", "AppleALC", "IntelMausiEthernet"), ssdts=("SSDT-EC",), quirks=("Kernel: AppleCpuPmCfgLock, AppleXcpmCfgLock",), note="Только High Sierra: драйвер HD 3000 в более новых системах удалён. " "Для Sandy Bridge используется FakeSMC, а не VirtualSMC.", note_en="High Sierra only: the HD 3000 driver was removed later. Sandy Bridge " "uses FakeSMC instead of VirtualSMC.", sources=("oc_guide", "gpu_guide"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/sandy-bridge.html", vendor="intel", generation=2, platform="desktop", igpu="0126", macos_min="High Sierra", macos_max="High Sierra"), HwConfig("intel_ivy_desktop", CAT_DESKTOP_INTEL, "Intel Ivy Bridge · i5-3570K + HD 4000", "Intel Ivy Bridge · i5-3570K + HD 4000", cpu="Intel Core i5-3570K / i7-3770K", gpu="HD Graphics 4000", macos="Mojave 10.14 – Catalina 10.15", status=STATUS_LIMITED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausiEthernet"), ssdts=("SSDT-EC", "SSDT-PLUG"), quirks=("Kernel: AppleCpuPmCfgLock",), note="Catalina — последняя система с драйвером HD 4000. Big Sur и новее " "только через OCLP и без аппаратного ускорения графики.", note_en="Catalina is the last release with an HD 4000 driver. Big Sur and " "newer only via OCLP and without graphics acceleration.", sources=("oc_guide", "gpu_guide", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/ivy-bridge.html", vendor="intel", generation=3, platform="desktop", igpu="0162", macos_min="Mojave", macos_max="Catalina"), HwConfig("intel_kaby_desktop", CAT_DESKTOP_INTEL, "Intel Kaby Lake · i5-7600K + HD 630", "Intel Kaby Lake · i5-7600K + HD 630", cpu="Intel Core i5-7600K / i7-7700K", gpu="HD Graphics 630", macos="Big Sur 11 – Ventura 13", status=STATUS_NATIVE, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("DeviceProperties: AAPL,ig-platform-id 0x59120000",), note="Стабильный десктоп без дискретной карты: HD 630 тянет интерфейс, " "SMBIOS — iMac18,3. Sonoma требует OCLP из-за платформы 2017 года.", note_en="A stable desktop without a dGPU: HD 630 drives the UI, SMBIOS " "iMac18,3. Sonoma needs OCLP because the platform is 2017-era.", sources=("oc_guide", "gpu_guide", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/kaby-lake.html", vendor="intel", generation=7, platform="desktop", igpu="5912", macos_min="Big Sur", macos_max="Ventura"), HwConfig("intel_raptor_desktop", CAT_DESKTOP_INTEL, "Intel Raptor Lake · i5-13600K + RX 6600", "Intel Raptor Lake · i5-13600K + RX 6600", cpu="Intel Core i5-13600K / i7-13700K", gpu="Radeon RX 6600 (iGPU не поддерживается)", macos="Ventura 13 – Sonoma 14", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi", "CpuTopologyRebuild", "RestrictEvents"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("Kernel: ProvideCurrentCpuInfo", "Booter: ResizeAppleGpuBars=0"), note="Нужны патчи топологии P+E ядер (CpuTopologyRebuild) и dGPU: iGPU " "Alder/Raptor не имеет драйвера. SMBIOS — MacPro7,1.", note_en="P+E core topology patches (CpuTopologyRebuild) and a dGPU are " "required: Alder/Raptor iGPUs have no driver. Use MacPro7,1 SMBIOS.", sources=("oc_guide", "gpu_amd", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/comet-lake.html", vendor="intel", generation=13, platform="desktop", dgpu="73FF", macos_min="Ventura", macos_max="Sonoma"), HwConfig("amd_zen1_1600", CAT_DESKTOP_AMD, "AMD Ryzen 5 1600 · B350 + RX 570", "AMD Ryzen 5 1600 · B350 + RX 570", cpu="AMD Ryzen 5 1600 (Zen)", gpu="Radeon RX 570 (Polaris)", macos="Catalina 10.15 – Ventura 13", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"), ssdts=("SSDT-EC-USBX", "SSDT-PLUG"), quirks=("Kernel: AMD Vanilla (Zen)",), note="Zen первого поколения капризнее Zen 2/3: патчи подбираются под " "конкретное число ядер, а часть плат требует RebuildAppleMemoryMap.", note_en="First-gen Zen is pickier than Zen 2/3: patches depend on the core " "count and some boards need RebuildAppleMemoryMap.", sources=("oc_amd", "amd_osx", "efi_subhead"), url="https://dortania.github.io/OpenCore-Install-Guide/AMD/zen.html", vendor="amd", generation=8, platform="desktop", dgpu="67DF", macos_min="Catalina", macos_max="Ventura"), HwConfig("laptop_thinkpad_t440p", CAT_LAPTOP, "Lenovo ThinkPad T440p · i5-4300M + HD 4600", "Lenovo ThinkPad T440p · i5-4300M + HD 4600", cpu="Intel Core i5-4300M (Haswell)", gpu="HD Graphics 4600", macos="Catalina 10.15 – Monterey 12", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "VoodooPS2Controller", "SMCBatteryManager"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX", "SSDT-PNLF"), quirks=("Kernel: AppleCpuPmCfgLock",), note="Классический Haswell-ноутбук: работает до Monterey, дальше нужен OCLP. " "Аккуратно с Wi-Fi: штатный Intel 7260 требует itlwm.", note_en="A classic Haswell laptop: works up to Monterey, then OCLP. Mind the " "Wi-Fi: the stock Intel 7260 needs itlwm.", sources=("oc_guide", "laptop_guide", "itlwm_compat"), url="https://dortania.github.io/OpenCore-Install-Guide/config-laptop.plist/haswell.html", vendor="intel", generation=4, platform="laptop", igpu="0416", macos_min="Catalina", macos_max="Monterey"), HwConfig("mini_nuc7", CAT_MINI, "Intel NUC7i5BNH · i5-7260U + Iris Plus 640", "Intel NUC7i5BNH · i5-7260U + Iris Plus 640", cpu="Intel Core i5-7260U (Kaby Lake-U)", gpu="Iris Plus 640", macos="Big Sur 11 – Ventura 13", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi", "itlwm"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("DeviceProperties: ig-platform-id 0x59260000",), note="Компактный вариант под macOS без дискретной карты. Wi-Fi Intel 8265 " "работает через itlwm + HeliPort, Bluetooth — через IntelBluetoothFirmware.", note_en="A compact macOS box without a dGPU. The Intel 8265 Wi-Fi works via " "itlwm + HeliPort, Bluetooth via IntelBluetoothFirmware.", sources=("oc_guide", "itlwm_compat"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/kaby-lake.html", vendor="intel", generation=7, platform="mini", igpu="5926", macos_min="Big Sur", macos_max="Ventura"), HwConfig("ws_x299_skylake_x", CAT_WORKSTATION, "Intel Core i9-7900X · X299 + RX 580", "Intel Core i9-7900X · X299 + RX 580", cpu="Intel Core i9-7900X (Skylake-X)", gpu="Radeon RX 580", macos="Monterey 12 – Sonoma 14", status=STATUS_NATIVE, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("Kernel: AppleXcpmCfgLock",), note="Skylake-X поддерживается iMac Pro 2017 вплоть до Sonoma/Sequoia: " "SMBIOS iMacPro1,1, ускорение только через dGPU.", note_en="Skylake-X is covered by the 2017 iMac Pro up to Sonoma/Sequoia: use " "iMacPro1,1 SMBIOS, acceleration only via the dGPU.", sources=("oc_guide", "gpu_guide", "tonymacx86"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/skylake.html", vendor="intel", generation=6, platform="workstation", dgpu="67DF", macos_min="Monterey", macos_max="Sequoia"))
 
 
 def all_configs() -> tuple[HwConfig, ...]:
