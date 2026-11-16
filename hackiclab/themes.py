@@ -1,129 +1,221 @@
-"""Темы оформления HackicLab (тёмная, светлая, системная)."""
+"""Темы оформления HackicLab.
+
+Темы строятся из палитр, а не из трёх независимых QSS-простыней: так проще
+добавлять новые оформления и подмешивать пользовательский фон.
+
+- ``system`` — следует теме Windows (реестр AppsUseLightTheme);
+- ``light`` / ``dark`` — базовые;
+- ``custom`` — фирменная тема с возможностью подставить своё изображение;
+- ``aqua``, ``graphite``, ``sonoma``, ``bigsur`` — встроенные оформления
+  в духе macOS. Это собственные градиенты и цвета, без ассетов Apple.
+"""
 
 from __future__ import annotations
 
-DARK_QSS = """
-QWidget { background-color: #1e1e2e; color: #cdd6f4; font-family: 'Segoe UI'; font-size: 13px; }
-QMainWindow { background-color: #1e1e2e; }
-#sidebar { background-color: #181825; border-right: 1px solid #313244; }
-#sidebar QLabel#logo { color: #f5c2e7; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }
-#sidebar QLabel#sub { color: #7f849c; font-size: 11px; padding: 0 12px 12px 12px; }
-#navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: #a6adc8; }
-#navList::item:hover { background: #313244; color: #cdd6f4; }
-#navList::item:selected { background: #8839ef; color: white; font-weight: 600; }
-QPushButton { background: #8839ef; color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }
-QPushButton:hover { background: #9d4ef0; }
-QPushButton:disabled { background: #45475a; color: #7f849c; }
-QPushButton#ghost { background: transparent; border: 1px solid #45475a; color: #cdd6f4; }
-QPushButton#ghost:hover { background: #313244; }
-#card { background: #181825; border: 1px solid #313244; border-radius: 12px; padding: 14px; }
-QLabel#h1 { font-size: 20px; font-weight: 700; color: #cdd6f4; }
-QLabel#h2 { font-size: 14px; font-weight: 600; color: #a6adc8; }
-QLabel#val { font-size: 13px; color: #e1e3ec; }
-QLabel#muted { color: #7f849c; font-size: 12px; }
-QLabel#kv { color: #7f849c; font-size: 12px; }
-QGroupBox { border: 1px solid #313244; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: #a6adc8; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
-QProgressBar { background: #313244; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }
-QProgressBar::chunk { background: #8839ef; border-radius: 6px; }
-QTextEdit, QPlainTextEdit { background: #11111b; border: 1px solid #313244; border-radius: 8px; color: #cdd6f4; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }
-QListWidget { background: #181825; border: 1px solid #313244; border-radius: 8px; }
-QListWidget::item { padding: 8px; }
-QListWidget#issueList::item { border-bottom: 1px solid #252536; padding: 6px; }
-QComboBox { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 6px 10px; }
-QComboBox QAbstractItemView { background: #181825; selection-background-color: #8839ef; }
-QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 2px solid #45475a; background: #181825; }
-QCheckBox::indicator:checked { background: #8839ef; border-color: #8839ef; }
-QSplitter::handle { background: #313244; }
-QLineEdit { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 6px 10px; }
-"""
+import sys
+from dataclasses import dataclass
 
-LIGHT_QSS = """
-QWidget { background-color: #f4f5f7; color: #1f2328; font-family: 'Segoe UI'; font-size: 13px; }
-QMainWindow { background-color: #f4f5f7; }
-#sidebar { background-color: #e8eaed; border-right: 1px solid #d0d3d8; }
-#sidebar QLabel#logo { color: #8839ef; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }
-#sidebar QLabel#sub { color: #6c7278; font-size: 11px; padding: 0 12px 12px 12px; }
-#navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: #444b53; }
-#navList::item:hover { background: #d0d3d8; color: #1f2328; }
-#navList::item:selected { background: #8839ef; color: white; font-weight: 600; }
-QPushButton { background: #8839ef; color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }
-QPushButton:hover { background: #9d4ef0; }
-QPushButton:disabled { background: #c3c8ce; color: #6c7278; }
-QPushButton#ghost { background: transparent; border: 1px solid #c3c8ce; color: #1f2328; }
-QPushButton#ghost:hover { background: #e0e3e6; }
-#card { background: #ffffff; border: 1px solid #d0d3d8; border-radius: 12px; padding: 14px; }
-QLabel#h1 { font-size: 20px; font-weight: 700; color: #1f2328; }
-QLabel#h2 { font-size: 14px; font-weight: 600; color: #444b53; }
-QLabel#val { font-size: 13px; color: #1f2328; }
-QLabel#muted { color: #6c7278; font-size: 12px; }
-QLabel#kv { color: #6c7278; font-size: 12px; }
-QGroupBox { border: 1px solid #d0d3d8; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: #444b53; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
-QProgressBar { background: #d0d3d8; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }
-QProgressBar::chunk { background: #8839ef; border-radius: 6px; }
-QTextEdit, QPlainTextEdit { background: #ffffff; border: 1px solid #d0d3d8; border-radius: 8px; color: #1f2328; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }
-QListWidget { background: #ffffff; border: 1px solid #d0d3d8; border-radius: 8px; }
-QListWidget::item { padding: 8px; }
-QListWidget#issueList::item { border-bottom: 1px solid #eceef0; padding: 6px; }
-QComboBox { background: #ffffff; border: 1px solid #d0d3d8; border-radius: 8px; padding: 6px 10px; }
-QComboBox QAbstractItemView { background: #ffffff; selection-background-color: #8839ef; }
-QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 2px solid #c3c8ce; background: #ffffff; }
-QCheckBox::indicator:checked { background: #8839ef; border-color: #8839ef; }
-QSplitter::handle { background: #d0d3d8; }
-QLineEdit { background: #ffffff; border: 1px solid #d0d3d8; border-radius: 8px; padding: 6px 10px; }
-"""
 
-# Собственная "фирменная" тема HackicLab — тёмная с бирюзово-фиолетовыми акцентами
-CUSTOM_QSS = """
-QWidget { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI'; font-size: 13px; }
-QMainWindow { background-color: #0f172a; }
-#sidebar { background-color: #0b1120; border-right: 1px solid #1e293b; }
-#sidebar QLabel#logo { color: #22d3ee; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }
-#sidebar QLabel#sub { color: #64748b; font-size: 11px; padding: 0 12px 12px 12px; }
-#navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: #94a3b8; }
-#navList::item:hover { background: #1e293b; color: #e2e8f0; }
-#navList::item:selected { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #06b6d4, stop:1 #8b5cf6); color: white; font-weight: 600; }
-QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #06b6d4, stop:1 #8b5cf6); color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }
-QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #22d3ee, stop:1 #a78bfa); }
-QPushButton:disabled { background: #334155; color: #64748b; }
-QPushButton#ghost { background: transparent; border: 1px solid #334155; color: #e2e8f0; }
-QPushButton#ghost:hover { background: #1e293b; }
-#card { background: #0b1120; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; }
-QLabel#h1 { font-size: 20px; font-weight: 700; color: #e2e8f0; }
-QLabel#h2 { font-size: 14px; font-weight: 600; color: #94a3b8; }
-QLabel#val { font-size: 13px; color: #f1f5f9; }
-QLabel#muted { color: #64748b; font-size: 12px; }
-QLabel#kv { color: #64748b; font-size: 12px; }
-QGroupBox { border: 1px solid #1e293b; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: #94a3b8; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
-QProgressBar { background: #1e293b; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }
-QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #06b6d4, stop:1 #8b5cf6); border-radius: 6px; }
-QTextEdit, QPlainTextEdit { background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; color: #e2e8f0; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }
-QListWidget { background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; }
-QListWidget::item { padding: 8px; }
-QListWidget#issueList::item { border-bottom: 1px solid #1a2537; padding: 6px; }
-QComboBox { background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 10px; }
-QComboBox QAbstractItemView { background: #0b1120; selection-background-color: #8b5cf6; }
-QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 2px solid #334155; background: #0b1120; }
-QCheckBox::indicator:checked { background: #06b6d4; border-color: #06b6d4; }
-QSplitter::handle { background: #1e293b; }
-QLineEdit { background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 10px; }
-"""
+@dataclass(frozen=True)
+class Palette:
+    name: str
+    bg: str
+    panel: str
+    border: str
+    text: str
+    muted: str
+    accent: str
+    accent_hover: str
+    accent_text: str
+    input_bg: str
+    code_bg: str
+    hover: str
+    gradient: str = ""          # градиент для кнопок и выделения
 
-THEMES = {
-    "dark": DARK_QSS,
-    "light": LIGHT_QSS,
-    "system": DARK_QSS,      # временно: системная = тёмная, пока не подключим Qt system palette
-    "custom": CUSTOM_QSS,
+
+DARK = Palette(
+    "dark", "#1e1e2e", "#181825", "#313244", "#cdd6f4", "#7f849c",
+    "#8839ef", "#9d4ef0", "#ffffff", "#181825", "#11111b", "#313244",
+)
+
+LIGHT = Palette(
+    "light", "#f4f5f7", "#ffffff", "#d0d3d8", "#1f2328", "#6c7278",
+    "#8839ef", "#9d4ef0", "#ffffff", "#ffffff", "#ffffff", "#e0e3e6",
+)
+
+CUSTOM = Palette(
+    "custom", "#0f172a", "#0b1120", "#1e293b", "#e2e8f0", "#64748b",
+    "#06b6d4", "#22d3ee", "#ffffff", "#0b1120", "#0b1120", "#1e293b",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #06b6d4, stop:1 #8b5cf6)",
+)
+
+AQUA = Palette(
+    "aqua", "#eef5fb", "#ffffff", "#c7d9ea", "#10243a", "#5b7591",
+    "#0a84ff", "#3d9bff", "#ffffff", "#ffffff", "#f6fafd", "#dbe8f4",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #0a84ff, stop:1 #64b5ff)",
+)
+
+GRAPHITE = Palette(
+    "graphite", "#232427", "#1b1c1f", "#33353a", "#e8e9ec", "#8b8e96",
+    "#8e9198", "#a8abb3", "#101114", "#1b1c1f", "#17181b", "#2c2e33",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6f747d, stop:1 #a8abb3)",
+)
+
+SONOMA = Palette(
+    "sonoma", "#1c1420", "#241a29", "#3a2b41", "#f7e9f0", "#b39bab",
+    "#ff7ab6", "#ff9bc8", "#2b0f1c", "#241a29", "#180f1d", "#34243c",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7ab6, stop:1 #ffb454)",
+)
+
+BIGSUR = Palette(
+    "bigsur", "#0b1226", "#111a33", "#223055", "#e6ecfb", "#8b9bc4",
+    "#4f8cff", "#7aa6ff", "#ffffff", "#111a33", "#0a1020", "#1b2647",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #4f8cff, stop:1 #9d6bff)",
+)
+
+PALETTES: dict[str, Palette] = {
+    p.name: p for p in (DARK, LIGHT, CUSTOM, AQUA, GRAPHITE, SONOMA, BIGSUR)
 }
 
+#: Темы, которые можно выбрать плиткой. Порядок важен для интерфейса.
+BUILTIN_THEMES: tuple[str, ...] = ("aqua", "graphite", "sonoma", "bigsur")
+BASE_THEMES: tuple[str, ...] = ("system", "light", "dark", "custom")
 
-def get_qss(theme: str) -> str:
-    return THEMES.get(theme, DARK_QSS)
+
+def detect_system_scheme() -> str:
+    """Возвращает «light» или «dark» по настройкам Windows.
+
+    На других ОС используется оформление Qt, а при полном отсутствии данных —
+    тёмная схема (историческое оформление HackicLab).
+    """
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "light" if int(value) else "dark"
+        except Exception:
+            pass
+    try:  # Qt 6.5+: реальная схема оформления
+        from PySide6.QtGui import QGuiApplication
+        hints = QGuiApplication.styleHints()
+        scheme = hints.colorScheme()
+        name = getattr(scheme, "name", "").lower()
+        if "light" in name:
+            return "light"
+        if "dark" in name:
+            return "dark"
+    except Exception:
+        pass
+    return "dark"
+
+
+def resolve(theme: str) -> str:
+    """Имя темы → конкретная палитра (для system подставляется текущая схема)."""
+    if theme == "system":
+        return detect_system_scheme()
+    return theme if theme in PALETTES else "dark"
+
+
+def palette(theme: str) -> Palette:
+    return PALETTES.get(resolve(theme), DARK)
+
+
+def _rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha:g})"
+
+
+def _accent(p: Palette) -> str:
+    return p.gradient or p.accent
+
+
+def _accent_hover(p: Palette) -> str:
+    return p.accent_hover
+
+
+def build_qss(theme: str, background: str = "") -> str:
+    """Собирает QSS для темы. ``background`` — путь к картинке своей темы."""
+    p = palette(theme)
+    translucent = bool(background)
+    bg = _rgba(p.bg, 0.88) if translucent else p.bg
+    panel = _rgba(p.panel, 0.86) if translucent else p.panel
+    card = _rgba(p.panel, 0.82) if translucent else p.panel
+    field = _rgba(p.input_bg, 0.84) if translucent else p.input_bg
+    code = _rgba(p.code_bg, 0.86) if translucent else p.code_bg
+    border = _rgba(p.border, 0.75) if translucent else p.border
+    hover = _rgba(p.hover, 0.9) if translucent else p.hover
+
+    bg_image = ""
+    if background:
+        safe = background.replace("\\", "/").replace('"', '\\"')
+        bg_image = (
+            f'background-image: url("{safe}"); '
+            "background-position: center; background-repeat: no-repeat;"
+        )
+
+    return f"""
+QWidget {{ background-color: {bg}; color: {p.text}; font-family: 'Segoe UI'; font-size: 13px; }}
+QMainWindow {{ background-color: {p.bg}; {bg_image} }}
+QScrollArea {{ background: transparent; border: none; }}
+#sidebar {{ background-color: {panel}; border-right: 1px solid {border}; }}
+#sidebar QLabel#logo {{ color: {p.accent}; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }}
+#sidebar QLabel#sub {{ color: {p.muted}; font-size: 11px; padding: 0 12px 12px 12px; }}
+#navList {{ background: transparent; border: none; outline: none; }}
+#navList::item {{ padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: {p.muted}; }}
+#navList::item:hover {{ background: {hover}; color: {p.text}; }}
+#navList::item:selected {{ background: {_accent(p)}; color: {p.accent_text}; font-weight: 600; }}
+QPushButton {{ background: {_accent(p)}; color: {p.accent_text}; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }}
+QPushButton:hover {{ background: {_accent_hover(p)}; }}
+QPushButton:disabled {{ background: {border}; color: {p.muted}; }}
+QPushButton#ghost {{ background: transparent; border: 1px solid {border}; color: {p.text}; }}
+QPushButton#ghost:hover {{ background: {hover}; }}
+#card {{ background: {card}; border: 1px solid {border}; border-radius: 12px; padding: 14px; }}
+QLabel#h1 {{ font-size: 20px; font-weight: 700; color: {p.text}; }}
+QLabel#h2 {{ font-size: 14px; font-weight: 600; color: {p.text}; }}
+QLabel#val {{ font-size: 13px; color: {p.text}; }}
+QLabel#muted {{ color: {p.muted}; font-size: 12px; }}
+QLabel#kv {{ color: {p.muted}; font-size: 12px; }}
+QGroupBox {{ border: 1px solid {border}; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: {p.muted}; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; }}
+QProgressBar {{ background: {border}; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }}
+QProgressBar::chunk {{ background: {_accent(p)}; border-radius: 6px; }}
+QTextEdit, QPlainTextEdit {{ background: {code}; border: 1px solid {border}; border-radius: 8px; color: {p.text}; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }}
+QListWidget {{ background: {card}; border: 1px solid {border}; border-radius: 8px; }}
+QListWidget::item {{ padding: 8px; }}
+QListWidget#issueList::item {{ border-bottom: 1px solid {border}; padding: 6px; }}
+QComboBox {{ background: {field}; border: 1px solid {border}; border-radius: 8px; padding: 6px 10px; }}
+QComboBox QAbstractItemView {{ background: {field}; selection-background-color: {p.accent}; }}
+QCheckBox {{ spacing: 8px; }}
+QCheckBox::indicator {{ width: 18px; height: 18px; border-radius: 5px; border: 2px solid {border}; background: {field}; }}
+QCheckBox::indicator:checked {{ background: {p.accent}; border-color: {p.accent}; }}
+QSplitter::handle {{ background: {border}; }}
+QLineEdit {{ background: {field}; border: 1px solid {border}; border-radius: 8px; padding: 6px 10px; }}
+QToolTip {{ background-color: {p.panel}; color: {p.text}; border: 1px solid {border}; }}
+"""
+
+
+def get_qss(theme: str, background: str = "") -> str:
+    """QSS выбранной темы; для ``custom`` можно передать картинку фона."""
+    if theme not in ("custom",) and theme not in PALETTES and theme != "system":
+        theme = "dark"
+    return build_qss(theme, background if theme == "custom" else "")
+
+
+def preview(theme: str) -> tuple[str, str]:
+    """Два цвета для плитки-превью: верх и низ «экрана монитора»."""
+    p = palette(theme)
+    return p.panel, p.accent
+
+
+# Совместимость со старым API: тема → готовый QSS.
+THEMES: dict[str, str] = {
+    name: build_qss(name) for name in ("dark", "light", "system", "custom",
+                                       *BUILTIN_THEMES)
+}

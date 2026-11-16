@@ -21,6 +21,9 @@ class TranslationTests(unittest.TestCase):
         for path in (_bootstrap.ROOT / "hackiclab").rglob("*.py"):
             text = path.read_text(encoding="utf-8", errors="ignore")
             used |= set(re.findall(r"""\.t\(\s*['"]([^'"]+)['"]""", text))
+        # ключи вида "sources.cat." + category собираются на месте:
+        # проверяем только полные ключи, префиксы пропускаем
+        used = {k for k in used if not k.endswith(".")}
         missing = sorted(k for k in used if k not in T["ru"] or k not in T["en"])
         self.assertEqual(missing, [], f"ключи без перевода: {missing}")
 

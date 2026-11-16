@@ -63,6 +63,15 @@ SOURCES: dict[str, Source] = {
         "Список обязательных и опциональных кекстов, включая сетевые",
         "Required and optional kexts, network drivers included",
     ),
+    "laptop_guide": Source(
+        "laptop_guide",
+        "https://dortania.github.io/OpenCore-Install-Guide/config-laptop.plist/",
+        GROUP_GUIDES,
+        "Гайд для ноутбуков",
+        "Laptop guide",
+        "Тачпад, яркость, батарея, сон и патчи для мобильных платформ",
+        "Touchpad, brightness, battery, sleep and mobile-platform patches",
+    ),
 
     # --- совместимость железа ---
     "gpu_guide": Source(
@@ -138,6 +147,15 @@ SOURCES: dict[str, Source] = {
         "mikigal/ryzen-hackintosh",
         "Рабочий пример EFI для Ryzen: сверять порядок кекстов и quirks",
         "Working Ryzen EFI example: compare kext order and quirks",
+    ),
+    "oclp": Source(
+        "oclp",
+        "https://github.com/dortania/OpenCore-Legacy-Patcher",
+        GROUP_EFI,
+        "OpenCore Legacy Patcher",
+        "OpenCore Legacy Patcher",
+        "Запуск новых macOS на снятом с поддержки железе (Ivy Bridge, Skylake, BCM4360)",
+        "Running newer macOS on dropped hardware (Ivy Bridge, Skylake, BCM4360)",
     ),
     "efi_subhead": Source(
         "efi_subhead",

@@ -7,9 +7,10 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -34,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
+from .. import __version__, uistate
 from ..analyzer import Analyzer
 from ..builder import (
     BuildOptions,
@@ -42,56 +43,29 @@ from ..builder import (
     EFIBuilder,
 )
 from ..i18n import LANGS, tr
+from ..knowledge.configs import (
+    STATUS_LIMITED,
+    STATUS_NATIVE,
+    STATUS_PATCHED,
+    by_category,
+    categories_of,
+    search_configs,
+    similar_configs,
+)
 from ..knowledge.sources import (
     GROUP_COMMUNITY,
     GROUP_EFI,
     GROUP_GUIDES,
     GROUP_HARDWARE,
+    SOURCES,
     note_of,
     sources_by_group,
     sources_for,
     title_of,
 )
 from ..scanner import HardwareProfile, WindowsScanner
-from ..themes import get_qss
-
-# ---- Тёмная тема (QSS) ----
-DARK_QSS = """
-QWidget { background-color: #1e1e2e; color: #cdd6f4; font-family: 'Segoe UI'; font-size: 13px; }
-QMainWindow { background-color: #1e1e2e; }
-#sidebar { background-color: #181825; border-right: 1px solid #313244; }
-#sidebar QLabel#logo { color: #f5c2e7; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }
-#sidebar QLabel#sub { color: #7f849c; font-size: 11px; padding: 0 12px 12px 12px; }
-#navList { background: transparent; border: none; outline: none; }
-#navList::item { padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: #a6adc8; }
-#navList::item:hover { background: #313244; color: #cdd6f4; }
-#navList::item:selected { background: #8839ef; color: white; font-weight: 600; }
-QPushButton { background: #8839ef; color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }
-QPushButton:hover { background: #9d4ef0; }
-QPushButton:disabled { background: #45475a; color: #7f849c; }
-QPushButton#ghost { background: transparent; border: 1px solid #45475a; color: #cdd6f4; }
-QPushButton#ghost:hover { background: #313244; }
-#card { background: #181825; border: 1px solid #313244; border-radius: 12px; padding: 14px; }
-QLabel#h1 { font-size: 20px; font-weight: 700; color: #cdd6f4; }
-QLabel#h2 { font-size: 14px; font-weight: 600; color: #a6adc8; }
-QLabel#val { font-size: 13px; color: #e1e3ec; }
-QLabel#muted { color: #7f849c; font-size: 12px; }
-QLabel#kv { color: #7f849c; font-size: 12px; }
-QGroupBox { border: 1px solid #313244; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: #a6adc8; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
-QProgressBar { background: #313244; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }
-QProgressBar::chunk { background: #8839ef; border-radius: 6px; }
-QTextEdit, QPlainTextEdit { background: #11111b; border: 1px solid #313244; border-radius: 8px; color: #cdd6f4; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }
-QListWidget { background: #181825; border: 1px solid #313244; border-radius: 8px; }
-QListWidget::item { padding: 8px; }
-QListWidget#issueList::item { border-bottom: 1px solid #252536; padding: 6px; }
-QComboBox { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 6px 10px; }
-QComboBox QAbstractItemView { background: #181825; selection-background-color: #8839ef; }
-QCheckBox { spacing: 8px; }
-QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 2px solid #45475a; background: #181825; }
-QCheckBox::indicator:checked { background: #8839ef; border-color: #8839ef; }
-QSplitter::handle { background: #313244; }
-"""
+from ..themes import BASE_THEMES, BUILTIN_THEMES, get_qss
+from .theme_tiles import MonitorButton
 
 
 def _h1(parent, text):
@@ -308,6 +282,41 @@ class UsbListWorker(QThread):
             self.failed.emit(str(e))
 
 
+class UpdateCheckWorker(QThread):
+    """Проверка последнего релиза на GitHub в фоне."""
+    found = Signal(object)
+    up_to_date = Signal()
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            from .. import updater
+            info = updater.check_for_update()
+            if info is None:
+                self.up_to_date.emit()
+            else:
+                self.found.emit(info)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class UpdateDownloadWorker(QThread):
+    """Скачивание EXE обновления в фоне."""
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, info):
+        super().__init__()
+        self.info = info
+
+    def run(self):
+        try:
+            from .. import updater
+            self.done.emit(updater.download_update(self.info))
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 def _has_cyrillic(text: str) -> bool:
     return any("\u0400" <= ch <= "\u04FF" for ch in (text or ""))
 
@@ -345,17 +354,51 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(880, 560)
         self._fit_to_screen()
         self.profile: HardwareProfile | None = None
-        self._theme = "dark"
+        state = uistate.load()
+        self._theme = str(state.get("theme") or "system")
+        self._theme_bg = str(state.get("background") or "")
+        self._system_hooked = False
         self._build()
+        self.apply_theme()
+        self._hook_system_theme()
+        QTimer.singleShot(3000, self._auto_check_updates)
 
     def apply_theme(self, theme: str | None = None):
-        """Применяет тему оформления."""
+        """Применяет тему оформления и сохраняет выбор пользователя."""
         if theme is not None:
             self._theme = theme
-        qss = get_qss(self._theme)
+            uistate.save(theme=theme)
+        qss = get_qss(self._theme, getattr(self, "_theme_bg", ""))
         app = QApplication.instance()
         if app:
             app.setStyleSheet(qss)
+        self._sync_theme_tiles()
+
+    def _sync_theme_tiles(self):
+        """Отмечает плитку, соответствующую текущей теме."""
+        tiles = getattr(self, "_theme_tiles", None)
+        if not tiles:
+            return
+        for key, btn in tiles.items():
+            btn.blockSignals(True)
+            btn.setChecked(key == self._theme)
+            btn.update()
+            btn.blockSignals(False)
+
+    def _hook_system_theme(self):
+        """Следит за сменой системной темы Windows, если выбрана «Системная»."""
+        if getattr(self, "_system_hooked", False):
+            return
+        try:
+            hints = QGuiApplication.styleHints()
+            hints.colorSchemeChanged.connect(self._on_system_scheme_changed)
+            self._system_hooked = True
+        except Exception:
+            self._system_hooked = False
+
+    def _on_system_scheme_changed(self, *_args):
+        if self._theme == "system":
+            self.apply_theme()
 
     def _fit_to_screen(self):
         """Подгоняет стартовое окно под экран: важно для ноутбуков и масштаба Windows."""
@@ -1586,20 +1629,161 @@ class MainWindow(QMainWindow):
 
     def _build_sources(self):
         page = QWidget()
-        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("sources.title")))
-        hint = _muted(page, tr.t("sources.hint")); hint.setWordWrap(True)
+        outer = QVBoxLayout(page); outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner); v.setContentsMargins(28, 24, 28, 24); v.setSpacing(10)
+        v.addWidget(_h1(inner, tr.t("sources.title")))
+        hint = _muted(inner, tr.t("sources.hint")); hint.setWordWrap(True)
         v.addWidget(hint)
 
-        self._src_ctx_page = page
-        self._src_ctx = QVBoxLayout(); self._src_ctx.setSpacing(2)
-        v.addLayout(self._src_ctx)
+        # --- под ваше железо ---
+        self._src_ctx_page = inner
+        ctx_card = self._card(inner)
+        cv = QVBoxLayout(ctx_card); cv.setContentsMargins(14, 10, 14, 10); cv.setSpacing(4)
+        self._src_ctx = QVBoxLayout(); self._src_ctx.setSpacing(4)
+        cv.addLayout(self._src_ctx)
+        v.addWidget(ctx_card)
 
-        for group, key in ((GROUP_HARDWARE, "sources.hardware"),
-                           (GROUP_GUIDES, "sources.guides"),
-                           (GROUP_EFI, "sources.efi"),
-                           (GROUP_COMMUNITY, "sources.community")):
+        # --- поиск и фильтр ---
+        row = QHBoxLayout()
+        self.src_query = QLineEdit()
+        self.src_query.setPlaceholderText(tr.t("sources.search"))
+        self.src_query.setClearButtonEnabled(True)
+        self.src_query.textChanged.connect(self._refresh_sources)
+        row.addWidget(self.src_query, 2)
+        self.src_cat = QComboBox()
+        self.src_cat.currentIndexChanged.connect(self._refresh_sources)
+        row.addWidget(self.src_cat, 1)
+        v.addLayout(row)
+
+        self.src_count = _muted(inner, "")
+        v.addWidget(self.src_count)
+
+        self._src_results = QVBoxLayout(); self._src_results.setSpacing(8)
+        v.addLayout(self._src_results)
+
+        v.addStretch()
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
+        self._refill_source_categories()
+        self._fill_sources_ctx()
+        self._refresh_sources()
+        return page
+
+    def _refill_source_categories(self):
+        combo = getattr(self, "src_cat", None)
+        if combo is None:
+            return
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr.t("sources.all"), "")
+        for cat in categories_of():
+            combo.addItem(f"{tr.t('sources.cat.' + cat)} ({len(by_category(cat))})", cat)
+        idx = combo.findData(current) if current else 0
+        combo.setCurrentIndex(max(0, idx))
+        combo.blockSignals(False)
+
+    def _status_badge(self, parent, status: str) -> QLabel:
+        colors = {
+            STATUS_NATIVE: ("#a6e3a1", "rgba(166,227,161,0.16)"),
+            STATUS_PATCHED: ("#f9e2af", "rgba(249,226,175,0.16)"),
+            STATUS_LIMITED: ("#f38ba8", "rgba(243,139,168,0.16)"),
+        }
+        fg, bg = colors.get(status, ("#a6adc8", "rgba(166,173,200,0.16)"))
+        badge = QLabel(tr.t("sources.status." + status), parent)
+        badge.setStyleSheet(
+            f"color:{fg}; background:{bg}; border-radius:9px; "
+            f"padding:2px 9px; font-size:11px; font-weight:600;"
+        )
+        return badge
+
+    def _mini_link(self, parent, text: str, url: str) -> QLabel:
+        a = QLabel(parent)
+        a.setTextFormat(Qt.RichText)
+        a.setText(
+            f'<a href="{html.escape(url)}" style="color:#89b4fa; text-decoration:none;">'
+            f'{html.escape(text)} ↗</a>'
+        )
+        a.setOpenExternalLinks(True)
+        a.setToolTip(url)
+        return a
+
+    def _config_card(self, parent, cfg) -> QWidget:
+        card = self._card(parent)
+        cv = QVBoxLayout(card); cv.setContentsMargins(14, 12, 14, 12); cv.setSpacing(4)
+        head = QHBoxLayout()
+        title = _h2(card, cfg.heading(tr.current)); title.setWordWrap(True)
+        head.addWidget(title, 1)
+        head.addWidget(self._status_badge(card, cfg.status))
+        cv.addLayout(head)
+
+        meta = _muted(
+            card,
+            f"{tr.t('sources.cat.' + cfg.category)} · {cfg.cpu} · {cfg.gpu} · "
+            f"macOS: {cfg.macos}",
+        )
+        meta.setWordWrap(True)
+        cv.addWidget(meta)
+
+        for prefix, values in (("kexts", cfg.kexts), ("SSDT", cfg.ssdts), ("quirks", cfg.quirks)):
+            if values:
+                line = _muted(card, f"{prefix}: " + ", ".join(values))
+                line.setWordWrap(True)
+                cv.addWidget(line)
+
+        note = _val(card, cfg.text(tr.current)); note.setWordWrap(True)
+        cv.addWidget(note)
+
+        links = QHBoxLayout(); links.setSpacing(14)
+        for key in cfg.sources:
+            src = SOURCES.get(key)
+            if src is not None:
+                links.addWidget(self._mini_link(card, title_of(src, tr.current), src.url))
+        if cfg.url:
+            links.addWidget(self._mini_link(card, tr.t("sources.details"), cfg.url))
+        links.addStretch()
+        cv.addLayout(links)
+        return card
+
+    def _clear_layout(self, lay):
+        while lay.count():
+            it = lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+
+    def _refresh_sources(self):
+        """Перестраивает выдачу по строке поиска и выбранной категории."""
+        lay = getattr(self, "_src_results", None)
+        page = getattr(self, "_src_ctx_page", None)
+        if lay is None or page is None:
+            return
+        query = self.src_query.text() if hasattr(self, "src_query") else ""
+        cat = self.src_cat.currentData() if hasattr(self, "src_cat") else ""
+        self._clear_layout(lay)
+
+        found = search_configs(query, cat or "")
+        if found:
+            lay.addWidget(_h2(page, tr.t("sources.configs")))
+            for cfg in found:
+                lay.addWidget(self._config_card(page, cfg))
+
+        q = (query or "").strip().lower()
+        groups = ((GROUP_HARDWARE, "sources.hardware"),
+                  (GROUP_GUIDES, "sources.guides"),
+                  (GROUP_EFI, "sources.efi"),
+                  (GROUP_COMMUNITY, "sources.community"))
+        shown_links = 0
+        for group, key in groups:
             items = sources_by_group(group, tr.current)
+            if q:
+                items = [
+                    s for s in items
+                    if q in f"{s.title} {s.title_en} {s.note} {s.note_en}".lower()
+                ]
             if not items:
                 continue
             card = self._card(page)
@@ -1607,33 +1791,40 @@ class MainWindow(QMainWindow):
             cv.addWidget(_h2(page, tr.t(key)))
             for src in items:
                 cv.addWidget(self._link_label(page, src))
-            v.addWidget(card)
-        v.addStretch()
-        self._fill_sources_ctx()
-        return page
+                shown_links += 1
+            lay.addWidget(card)
+
+        if hasattr(self, "src_count"):
+            self.src_count.setText(
+                tr.t("sources.found").format(configs=len(found), links=shown_links)
+            )
 
     def _fill_sources_ctx(self):
-        """Ссылки под текущий профиль: после сканирования и при смене языка."""
+        """Ссылки и ближайшие конфигурации под текущий профиль."""
         lay = getattr(self, "_src_ctx", None)
         page = getattr(self, "_src_ctx_page", None)
         if lay is None or page is None:
             return
-        while lay.count():
-            it = lay.takeAt(0)
-            w = it.widget()
-            if w is not None:
-                w.deleteLater()
+        self._clear_layout(lay)
         prof = getattr(self, "profile", None)
         if not prof:
             lbl = _muted(page, tr.t("sources.no_profile")); lbl.setWordWrap(True)
             lay.addWidget(lbl)
             return
-        # общие ссылки уже есть в блоках ниже — в контексте только специфика
+        lay.addWidget(_h2(page, tr.t("sources.for_hw")))
+        # ближайшие записи каталога
+        for cfg in similar_configs(prof, limit=2):
+            row = QHBoxLayout()
+            title = _val(page, cfg.heading(tr.current)); title.setWordWrap(True)
+            row.addWidget(title, 1)
+            row.addWidget(self._status_badge(page, cfg.status))
+            lay.addLayout(row)
+            meta = _muted(page, f"{cfg.cpu} · {cfg.gpu} · macOS: {cfg.macos}")
+            meta.setWordWrap(True)
+            lay.addWidget(meta)
+        # специфичные ссылки
         skip = {"oc_guide", "insanelymac", "tonymacx86"}
         picked = [s for s in sources_for(prof) if s.key not in skip]
-        if not picked:
-            return
-        lay.addWidget(_h2(page, tr.t("sources.for_hw")))
         for src in picked:
             lay.addWidget(self._link_label(page, src))
 
@@ -1758,23 +1949,67 @@ class MainWindow(QMainWindow):
         lg.addWidget(self.settings_lang, 1)
         v.addWidget(gb_lang)
 
-        # Тема оформления
+        # Тема оформления — плитки-мониторы
         gb_theme = QGroupBox(tr.t("settings.theme"))
         tv = QVBoxLayout(gb_theme)
-        theme_row = QHBoxLayout()
-        theme_row.addWidget(_h2(page, tr.t("settings.theme")))
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItem(tr.t("settings.theme_dark"), "dark")
-        self.theme_combo.addItem(tr.t("settings.theme_light"), "light")
-        self.theme_combo.addItem(tr.t("settings.theme_system"), "system")
-        self.theme_combo.addItem(tr.t("settings.theme_custom"), "custom")
-        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(self._theme)))
-        self.theme_combo.currentIndexChanged.connect(self._on_theme)
-        theme_row.addWidget(self.theme_combo, 1)
-        tv.addLayout(theme_row)
         theme_desc = _muted(page, tr.t("settings.theme_descr")); theme_desc.setWordWrap(True)
         tv.addWidget(theme_desc)
+
+        self._theme_group = QButtonGroup(self)
+        self._theme_group.setExclusive(True)
+        self._theme_tiles: dict[str, MonitorButton] = {}
+        base_labels = {
+            "system": "settings.theme_system",
+            "light": "settings.theme_light",
+            "dark": "settings.theme_dark",
+            "custom": "settings.theme_custom",
+        }
+        base_row = QHBoxLayout(); base_row.setSpacing(10)
+        for key in BASE_THEMES:
+            btn = MonitorButton(key, tr.t(base_labels[key]), gb_theme)
+            self._theme_group.addButton(btn)
+            self._theme_tiles[key] = btn
+            base_row.addWidget(btn)
+        base_row.addStretch()
+        tv.addLayout(base_row)
+
+        tv.addWidget(_h2(page, tr.t("settings.theme_builtin")))
+        preset_labels = {
+            "aqua": "settings.theme_aqua",
+            "graphite": "settings.theme_graphite",
+            "sonoma": "settings.theme_sonoma",
+            "bigsur": "settings.theme_bigsur",
+        }
+        preset_row = QHBoxLayout(); preset_row.setSpacing(10)
+        for key in BUILTIN_THEMES:
+            btn = MonitorButton(key, tr.t(preset_labels[key]), gb_theme)
+            self._theme_group.addButton(btn)
+            self._theme_tiles[key] = btn
+            preset_row.addWidget(btn)
+        preset_row.addStretch()
+        tv.addLayout(preset_row)
+        self._theme_group.buttonClicked.connect(self._on_theme_tile)
+
+        # Свой фон для темы «Моя тема»
+        bg_row = QHBoxLayout()
+        bg_row.addWidget(_h2(page, tr.t("settings.theme_bg")))
+        self.bg_label = _muted(
+            page,
+            self._theme_bg or tr.t("settings.theme_bg_none"),
+        )
+        self.bg_label.setWordWrap(True)
+        bg_row.addWidget(self.bg_label, 1)
+        pick_bg = QPushButton(tr.t("settings.theme_bg_pick"))
+        pick_bg.setObjectName("ghost")
+        pick_bg.clicked.connect(self._pick_theme_bg)
+        bg_row.addWidget(pick_bg)
+        reset_bg = QPushButton(tr.t("settings.theme_bg_reset"))
+        reset_bg.setObjectName("ghost")
+        reset_bg.clicked.connect(self._reset_theme_bg)
+        bg_row.addWidget(reset_bg)
+        tv.addLayout(bg_row)
         v.addWidget(gb_theme)
+        self._sync_theme_tiles()
 
         # Лицензия / Premium (переводится через i18n)
         gb_lic = QGroupBox(tr.t("settings.premium"))
@@ -1794,13 +2029,175 @@ class MainWindow(QMainWindow):
         lv.addLayout(key_row)
         v.addWidget(gb_lic)
 
+        # Обновления
+        gb_upd = QGroupBox(tr.t("settings.updates"))
+        uv = QVBoxLayout(gb_upd)
+        self.upd_version = _val(page, f"{tr.t('settings.updates_version')}: {__version__}")
+        uv.addWidget(self.upd_version)
+        self.upd_auto = QCheckBox(tr.t("settings.updates_auto"))
+        self.upd_auto.setChecked(bool(uistate.get("check_updates", True)))
+        self.upd_auto.toggled.connect(
+            lambda on: uistate.save(check_updates=bool(on)))
+        uv.addWidget(self.upd_auto)
+
+        upd_row = QHBoxLayout()
+        self.upd_check_btn = QPushButton(tr.t("settings.updates_check"))
+        self.upd_check_btn.clicked.connect(self._check_updates)
+        upd_row.addWidget(self.upd_check_btn)
+        self.upd_status = _muted(page, tr.t("settings.updates_idle"))
+        self.upd_status.setWordWrap(True)
+        upd_row.addWidget(self.upd_status, 1)
+        uv.addLayout(upd_row)
+
+        self.upd_notes = QPlainTextEdit()
+        self.upd_notes.setReadOnly(True)
+        self.upd_notes.setMaximumHeight(150)
+        self.upd_notes.setVisible(False)
+        uv.addWidget(self.upd_notes)
+
+        self.upd_actions = QWidget(page)
+        av = QHBoxLayout(self.upd_actions); av.setContentsMargins(0, 0, 0, 0)
+        self.upd_now_btn = QPushButton(tr.t("settings.updates_now"))
+        self.upd_now_btn.clicked.connect(self._install_update)
+        self.upd_later_btn = QPushButton(tr.t("settings.updates_later"))
+        self.upd_later_btn.setObjectName("ghost")
+        self.upd_later_btn.clicked.connect(self._postpone_update)
+        av.addWidget(self.upd_now_btn)
+        av.addWidget(self.upd_later_btn)
+        av.addStretch()
+        self.upd_actions.setVisible(False)
+        uv.addWidget(self.upd_actions)
+
+        self.upd_warning = _muted(page, tr.t("settings.updates_warning"))
+        self.upd_warning.setWordWrap(True)
+        self.upd_warning.setVisible(False)
+        uv.addWidget(self.upd_warning)
+        v.addWidget(gb_upd)
+        self._pending_update = None
+
         v.addStretch()
         return page
 
-    def _on_theme(self):
-        theme = self.theme_combo.currentData() or "dark"
-        self._theme = theme
-        self.apply_theme(theme)
+    # ---- обновления ----
+    def _check_updates(self, silent: bool = False):
+        """Запускает проверку релиза на GitHub в фоновом потоке."""
+        if getattr(self, "_upd_worker", None) and self._upd_worker.isRunning():
+            return
+        if not hasattr(self, "upd_check_btn"):
+            return
+        self.upd_check_btn.setEnabled(False)
+        self.upd_status.setText(tr.t("settings.updates_checking"))
+        self.upd_warning.setVisible(False)
+        worker = UpdateCheckWorker()
+        self._upd_worker = worker
+        worker.found.connect(self._updates_found)
+        worker.up_to_date.connect(self._updates_up_to_date)
+        worker.failed.connect(self._updates_failed)
+        worker.finished.connect(lambda: self.upd_check_btn.setEnabled(True))
+        worker.start()
+
+    def _auto_check_updates(self):
+        if bool(uistate.get("check_updates", True)):
+            self._check_updates(silent=True)
+
+    def _updates_found(self, info):
+        self._pending_update = info
+        uistate.save(postponed_update="")
+        self.upd_status.setText(
+            tr.t("settings.updates_available").format(version=info.version))
+        notes = (info.notes or "").strip()
+        self.upd_notes.setPlainText(notes)
+        self.upd_notes.setVisible(bool(notes))
+        self.upd_now_btn.setText(
+            tr.t("settings.updates_now") if info.has_asset
+            else tr.t("settings.updates_open_page"))
+        self.upd_actions.setVisible(True)
+        self.statusBar().showMessage(
+            tr.t("settings.updates_available").format(version=info.version), 8000)
+
+    def _updates_up_to_date(self):
+        self._pending_update = None
+        self.upd_status.setText(tr.t("settings.updates_latest"))
+        self.upd_notes.setVisible(False)
+        self.upd_actions.setVisible(False)
+
+    def _updates_failed(self, err: str):
+        self._pending_update = None
+        self.upd_status.setText(tr.t("settings.updates_failed").format(error=str(err)))
+        self.upd_actions.setVisible(False)
+
+    def _install_update(self):
+        """Скачивает новую сборку и запускает подмену EXE."""
+        from .. import updater
+        info = getattr(self, "_pending_update", None)
+        if info is None:
+            return
+        if not (info.has_asset and updater.can_self_update()):
+            updater.open_release_page(info.page_url)
+            self.upd_status.setText(tr.t("settings.updates_browser"))
+            return
+        if getattr(self, "_upd_dl", None) and self._upd_dl.isRunning():
+            return
+        self.upd_now_btn.setEnabled(False)
+        self.upd_status.setText(tr.t("settings.updates_downloading"))
+        worker = UpdateDownloadWorker(info)
+        self._upd_dl = worker
+        worker.done.connect(self._update_downloaded)
+        worker.failed.connect(self._update_download_failed)
+        worker.start()
+
+    def _update_downloaded(self, path):
+        from .. import updater
+        self.upd_now_btn.setEnabled(True)
+        if not updater.apply_update(Path(path)):
+            self.upd_status.setText(tr.t("settings.updates_manual"))
+            return
+        self.upd_status.setText(tr.t("settings.updates_restarting"))
+        QTimer.singleShot(600, QApplication.quit)
+
+    def _update_download_failed(self, err: str):
+        self.upd_now_btn.setEnabled(True)
+        self.upd_status.setText(tr.t("settings.updates_failed").format(error=str(err)))
+
+    def _postpone_update(self):
+        info = getattr(self, "_pending_update", None)
+        version = info.version if info else ""
+        uistate.save(postponed_update=version, skipped_version=version)
+        self.upd_actions.setVisible(False)
+        self.upd_warning.setText(tr.t("settings.updates_postponed"))
+        self.upd_warning.setVisible(True)
+
+    def _on_theme_tile(self, btn):
+        key = getattr(btn, "key", "")
+        if not key:
+            return
+        self.apply_theme(key)
+        self._hook_system_theme()
+        if key == "custom" and not self._theme_bg:
+            self.statusBar().showMessage(tr.t("settings.theme_bg_hint"), 5000)
+
+    def _pick_theme_bg(self):
+        """Выбор фонового изображения для темы «Моя тема»."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr.t("settings.theme_bg_pick"), "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;All files (*)")
+        if not path:
+            return
+        self._theme_bg = path
+        self._theme = "custom"
+        uistate.save(background=path, theme="custom")
+        self.apply_theme()
+        if hasattr(self, "bg_label"):
+            self.bg_label.setText(path)
+        self._hook_system_theme()
+
+    def _reset_theme_bg(self):
+        """Убирает пользовательский фон, оставляя фирменную тему."""
+        self._theme_bg = ""
+        uistate.save(background="")
+        self.apply_theme()
+        if hasattr(self, "bg_label"):
+            self.bg_label.setText(tr.t("settings.theme_bg_none"))
 
     def _activate_license(self):
         from ..license import LicenseManager
@@ -1880,7 +2277,8 @@ class MainWindow(QMainWindow):
         self._rebuild_pages()
 
     _WORKER_ATTRS = ("_worker_scan", "_worker_build", "_usb_worker", "_worker_usb",
-                     "_worker_val", "_worker_audit", "_worker_an")
+                     "_worker_val", "_worker_audit", "_worker_an",
+                     "_upd_worker", "_upd_dl")
 
     def _workers_running(self) -> bool:
         for name in self._WORKER_ATTRS:
@@ -1981,6 +2379,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(max(0, min(idx, self.stack.count() - 1)))
         self.nav.setCurrentRow(self.stack.currentIndex())
         self._sync_lang_combos()
+        self._sync_theme_tiles()
         self.statusBar().showMessage(tr.t("app.lang_changed"), 2500)
 
     # ---- scan ----
@@ -2248,7 +2647,10 @@ def run_app() -> int:
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    app.setStyleSheet(DARK_QSS)
+    state = uistate.load()
+    app.setStyleSheet(
+        get_qss(str(state.get("theme") or "system"), str(state.get("background") or ""))
+    )
     win = MainWindow()
     win.show()
     return app.exec()
