@@ -1,0 +1,51 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HackicLab: запуск",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "HackicLab: запуск (остановка на всех исключениях)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Тесты: все",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": ["discover", "-s", "tests", "-t", "tests", "-v"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Тесты: текущий файл",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": ["${fileBasenameNoExtension}", "-v"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/tests",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  ]
+}

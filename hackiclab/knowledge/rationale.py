@@ -14,9 +14,9 @@ import plistlib
 from dataclasses import dataclass
 from typing import Optional
 
-from ..scanner.models import HardwareProfile
-from .kexts import KEXT_DB, select_kexts, smbios_model_for
 from ..builder.config_gen import BuildOptions, generate_config_plist
+from ..scanner.models import HardwareProfile
+from .kexts import select_kexts, smbios_model_for
 
 GUIDE = "https://dortania.github.io/OpenCore-Install-Guide/"
 CONFIG_DOC = GUIDE + "config.plist/"

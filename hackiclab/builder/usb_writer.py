@@ -9,9 +9,9 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -396,7 +396,7 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     )
 
     last_detail = ""
-    for attempt in range(3):
+    for _attempt in range(3):
         code, detail = _run_diskpart(create_script)
         if code != 0:
             last_detail = detail
@@ -527,6 +527,7 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
 def _ensure_usbtoolbox(target_letter: str, log=None) -> bool:
     """Кладёт USBToolBox.kext на флешку и регистрирует его в config.plist."""
     import plistlib
+
     from ..knowledge.kexts import KEXT_DB
 
     def _log(msg: str):
@@ -595,7 +596,8 @@ def _ensure_usbtoolbox(target_letter: str, log=None) -> bool:
 def inject_usb_map(target_letter: str, log=None) -> bool:
     """Создаёт UTBMap.kext на флешке и регистрирует его в config.plist."""
     import plistlib
-    from .usb_map import generate_auto_map, write_map_kext, summarise
+
+    from .usb_map import generate_auto_map, summarise, write_map_kext
 
     def _log(msg: str):
         if log:
@@ -737,7 +739,7 @@ def install_recovery_layer(target_letter: str, macos_name: str, log=None) -> str
         if log:
             log(msg)
 
-    from .recovery import macos_version_by_name, download_recovery
+    from .recovery import download_recovery, macos_version_by_name
 
     if macos_name is None or not str(macos_name).strip():
         macos_name = "macOS Sonoma"

@@ -8,16 +8,16 @@
 
 from .engine import (
     AnalysisIssue,
-    Severity,
     Analyzer,
+    Severity,
     analyze_folders,
     analyze_profile,
 )
 
 __all__ = [
     "AnalysisIssue",
-    "Severity",
     "Analyzer",
+    "Severity",
     "analyze_folders",
     "analyze_profile",
 ]

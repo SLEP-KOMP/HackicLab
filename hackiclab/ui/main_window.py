@@ -6,30 +6,54 @@ import html
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QStackedWidget, QListWidget, QListWidgetItem,
-    QFileDialog, QMessageBox, QProgressBar, QTextEdit, QGroupBox,
-    QCheckBox, QComboBox, QPlainTextEdit, QSplitter, QFrame, QLineEdit,
-    QSpinBox, QScrollArea,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QStackedWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QSize, QTimer
-from PySide6.QtGui import QFont, QIcon, QColor
 
-from ..i18n import tr, LANGS
-from ..themes import get_qss, THEMES
 from .. import __version__
-from ..scanner import WindowsScanner, HardwareProfile
-from ..builder import (
-    BuildPlan, BuildOptions, generate_config_plist, EFIBuilder,
-    generate_smbios,
-)
-from ..knowledge.kexts import smbios_model_for, select_kexts
-from ..knowledge.sources import (
-    GROUP_COMMUNITY, GROUP_EFI, GROUP_GUIDES, GROUP_HARDWARE,
-    note_of, sources_by_group, sources_for, title_of,
-)
 from ..analyzer import Analyzer
+from ..builder import (
+    BuildOptions,
+    BuildPlan,
+    EFIBuilder,
+)
+from ..i18n import LANGS, tr
+from ..knowledge.sources import (
+    GROUP_COMMUNITY,
+    GROUP_EFI,
+    GROUP_GUIDES,
+    GROUP_HARDWARE,
+    note_of,
+    sources_by_group,
+    sources_for,
+    title_of,
+)
+from ..scanner import HardwareProfile, WindowsScanner
+from ..themes import get_qss
 
 # ---- Тёмная тема (QSS) ----
 DARK_QSS = """
@@ -70,15 +94,15 @@ QSplitter::handle { background: #313244; }
 """
 
 
-def _h1(parent, text): 
+def _h1(parent, text):
     l = QLabel(text, parent); l.setObjectName("h1"); return l
-def _h2(parent, text): 
+def _h2(parent, text):
     l = QLabel(text, parent); l.setObjectName("h2"); return l
-def _muted(parent, text): 
+def _muted(parent, text):
     l = QLabel(text, parent); l.setObjectName("muted"); return l
-def _kv(parent, text): 
+def _kv(parent, text):
     l = QLabel(text, parent); l.setObjectName("kv"); return l
-def _val(parent, text): 
+def _val(parent, text):
     l = QLabel(text, parent); l.setObjectName("val"); return l
 
 
@@ -158,7 +182,7 @@ class ValidateWorker(QThread):
 
     def run(self):
         try:
-            from ..builder.ocvalidate import run_ocvalidate, find_ocvalidate
+            from ..builder.ocvalidate import find_ocvalidate, run_ocvalidate
             tool = find_ocvalidate()
             res = run_ocvalidate(self.config_path, ocvalidate=tool)
             res_dict = {
@@ -241,7 +265,11 @@ class DiskMapWorker(QThread):
     def run(self):
         try:
             from ..scanner.diskmap import (
-                scan_disks, scan_all_bootloaders, check_conflicts, build_disk_tree)
+                build_disk_tree,
+                check_conflicts,
+                scan_all_bootloaders,
+                scan_disks,
+            )
             disks = scan_disks()
             bootloaders = scan_all_bootloaders(disks)
             self.done.emit(build_disk_tree(disks, bootloaders),
@@ -320,7 +348,7 @@ class MainWindow(QMainWindow):
         self._theme = "dark"
         self._build()
 
-    def apply_theme(self, theme: str = None):
+    def apply_theme(self, theme: str | None = None):
         """Применяет тему оформления."""
         if theme is not None:
             self._theme = theme
@@ -494,7 +522,7 @@ class MainWindow(QMainWindow):
         mrow = QHBoxLayout()
         mrow.addWidget(_h2(page, tr.t("build.macos")))
         self.macos_combo = QComboBox()
-        from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
+        from ..knowledge.oc_platforms import MACOS_VERSIONS
         self.macos_combo.addItem(tr.t("build.macos_auto"), "")
         for mver in MACOS_VERSIONS:
             self.macos_combo.addItem(mver["name"], mver["name"])
@@ -1242,7 +1270,7 @@ class MainWindow(QMainWindow):
 
     def _usb_confirm(self, device: str):
         """Экран/диалог подтверждения: ввод фразы WRITE <device>."""
-        from PySide6.QtWidgets import QDialog, QLineEdit, QDialogButtonBox, QPushButton, QLabel
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLineEdit, QPushButton
         if not self._ensure_admin():
             return
         mode = self.usb_mode.currentData() or "full"
@@ -1348,7 +1376,6 @@ class MainWindow(QMainWindow):
         self.usb_log.clear()
         self.usb_log.appendPlainText(tr.t("usb.running"))
         source = Path(self.usb_source.text())
-        from ..builder.usb_writer import write_efi_to_usb
         skip_format = (mode in ("formatted", "repair"))
         recovery_macos = ""
         if getattr(self, "usb_recovery_chk", None) and self.usb_recovery_chk.isChecked():
@@ -1379,11 +1406,16 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"{tr.t('usb.done')} → {target_letter}", 5000)
         # BIOS-чеклист
-        warn = "⚠  " + tr.t("usb.warn_erase") if False else ""
         self._usb_bios_dialog()
 
     def _usb_bios_dialog(self):
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QDialogButtonBox, QListWidgetItem
+        from PySide6.QtWidgets import (
+            QDialog,
+            QListWidget,
+            QListWidgetItem,
+            QPushButton,
+            QVBoxLayout,
+        )
         dlg = QDialog(self)
         dlg.setWindowTitle(tr.t("usb.bios_title"))
         dlg.setMinimumWidth(520)
@@ -1773,7 +1805,7 @@ class MainWindow(QMainWindow):
     def _activate_license(self):
         from ..license import LicenseManager
         mgr = LicenseManager()
-        ok, res = mgr.activate_premium(self.lic_key.text())
+        ok, _ = mgr.activate_premium(self.lic_key.text())
         if ok:
             self.statusBar().showMessage(tr.t("settings.premium_activated"), 4000)
             self.lic_status.setText(f"{tr.t('settings.premium_edition')}: {tr.t('settings.premium_edition_premium')}")
@@ -2003,6 +2035,7 @@ class MainWindow(QMainWindow):
             return
         try:
             import json
+
             from ..builder.cache_manager import profiles_dir
             p = profiles_dir() / "profile.json"
             p.write_text(json.dumps(self.profile.to_dict(), ensure_ascii=False, indent=2))
@@ -2020,9 +2053,7 @@ class MainWindow(QMainWindow):
             return
         from ..knowledge.oc_platforms import MAX_MACOS_BY_GEN
         max_ver = MAX_MACOS_BY_GEN.get(p.cpu.generation, "Sonoma")
-        if "unsupported" in max_ver.lower():
-            txt = tr.t("build.macos_maybe_incompat")
-        elif target and target != max_ver and _macos_newer(target, max_ver):
+        if "unsupported" in max_ver.lower() or (target and target != max_ver and _macos_newer(target, max_ver)):
             txt = tr.t("build.macos_maybe_incompat")
         else:
             txt = ""
@@ -2071,7 +2102,7 @@ class MainWindow(QMainWindow):
             self.val_last_label.setText(str(self.last_build_dir))
         log = f"target: {res.root}\n" + "\n".join(res.log)
         if res.stats:
-            log += f"\n\n--- Итог ---"
+            log += "\n\n--- Итог ---"
             log += f"\nOpenCore: {res.stats.get('opencore', '—')}"
             log += f"\nKexts (скачано {len(res.stats.get('kexts_downloaded', []))}): {', '.join(res.stats.get('kexts_downloaded', []))}"
             log += f"\nSSDT: {', '.join(res.stats.get('ssdt_placed', []) or [])}"
@@ -2080,7 +2111,7 @@ class MainWindow(QMainWindow):
             ocv_ok = res.stats.get("ocvalidate_ok")
             ocv_err = res.stats.get("ocvalidate_errors", [])
             ocv_warn = res.stats.get("ocvalidate_warnings", [])
-            log += f"\n\n--- ocvalidate ---"
+            log += "\n\n--- ocvalidate ---"
             if ocv_ok is None:
                 log += "\nне запускался"
             elif ocv_ok:

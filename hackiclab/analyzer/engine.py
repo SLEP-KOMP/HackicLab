@@ -8,15 +8,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-from ..scanner.models import HardwareProfile
 from ..knowledge.kexts import (
-    KEXT_DB, KextEntry, select_kexts, smbios_model_for,
+    KEXT_DB,
+    select_kexts,
 )
-from ..knowledge.oc_platforms import MAX_MACOS_BY_GEN
-from .models import AnalysisIssue, Severity
+from ..scanner.models import HardwareProfile
 from .efi_health import audit as audit_efi_root
+from .models import AnalysisIssue, Severity
 
 
 class Analyzer:
@@ -173,7 +172,6 @@ class Analyzer:
         p = self.profile
         self._check_gpu()
         self._check_network_notes()
-        name = p.cpu.name.lower()
         if p.cpu.vendor == "amd" and p.platform == "laptop":
             self.issues.append(AnalysisIssue(
                 Severity.ERROR, "amd_laptop",

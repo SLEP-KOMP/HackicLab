@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
 import json
+import subprocess
 from functools import lru_cache
 
 

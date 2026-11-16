@@ -9,9 +9,6 @@ import random
 import string
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
-
-from .cache_manager import app_home
 
 
 @dataclass
@@ -40,7 +37,7 @@ _MIXED = _ALPHA + _DIGITS
 def _serial_for(model: str) -> str:
     """Серийник Apple: 11-12 символов, формат региональный+сборка."""
     # Формат: XXY ZZZZ Z // префикс + год-неделя (2) + код завода (1) + рандом
-    prefix = "C02" if model.startswith(("Mac", "iMac")) else "C02"
+    prefix = "C02"
     year_week = random.choice(string.digits) + random.choice(string.digits + _ALPHA)
     line = random.choice("ABCDEFGHJKMNP")
     mid = "".join(random.choice(_MIXED) for _ in range(4))

@@ -141,11 +141,9 @@ class DisplayProfile:
 
     def has_macos_accel(self, cpu_gen: int) -> bool:
         """Есть ли хоть одна поддерживаемая macOS GPU с аппаратным ускорением."""
-        if self.dgpu and self.dgpu.vendor == "amd":
-            return True
-        if self.igpu and self.igpu.vendor == "intel" and cpu_gen < 11:
-            return True
-        return False
+        amd_dgpu = bool(self.dgpu and self.dgpu.vendor == "amd")
+        intel_igpu = bool(self.igpu and self.igpu.vendor == "intel" and cpu_gen < 11)
+        return amd_dgpu or intel_igpu
 
 
 @dataclass

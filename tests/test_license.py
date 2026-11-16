@@ -6,7 +6,7 @@ import subprocess
 import sys
 import unittest
 
-import _bootstrap  # noqa: F401
+import _bootstrap
 
 from hackiclab import license as lic
 

@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-import tempfile
-import urllib.request
-import ssl
 from pathlib import Path
 from typing import Optional
 
@@ -82,8 +79,8 @@ def _download_iasl() -> Optional[Path]:
     релизов; если их не нашли — берём стабильный legacy-архив corpnewt.
     Принимаем только PE (MZ): ELF в кэше «молча» ломает компиляцию.
     """
-    from ..builder.fetcher import download_bytes
     from ..builder.cache_manager import cache_dir
+    from ..builder.fetcher import download_bytes
     dest = cache_dir() / "tools"
     dest.mkdir(parents=True, exist_ok=True)
     exe = dest / "iasl.exe"
@@ -261,7 +258,7 @@ def compile_dsl(dsl_text: str, out_dir: Path, name: str) -> Optional[Path]:
     dsl_path = out_dir / f"{name}.dsl"
     dsl_path.write_text(dsl_text, encoding="utf-8")
     try:
-        r = subprocess.run(
+        subprocess.run(
             [str(iasl), "-p", str(out_dir / name), str(dsl_path)],
             capture_output=True, timeout=30,
         )

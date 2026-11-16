@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import plistlib
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from ..scanner.models import HardwareProfile, GPUInfo
-from ..knowledge.kexts import smbios_model_for
-from ..knowledge.oc_platforms import oc_platform_for
+from ..scanner.models import HardwareProfile
+
+if TYPE_CHECKING:
+    from .smbios_gen import SMBIOSData
 
 # ig-platform-id по поколению/форм-фактору
 IG_PLATFORM_IDS = {

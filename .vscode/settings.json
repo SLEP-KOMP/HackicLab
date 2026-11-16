@@ -1,0 +1,38 @@
+{
+  "python.defaultInterpreterPath": "python",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": "none"
+  },
+  "python.testing.unittestEnabled": true,
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    "tests",
+    "-t",
+    "tests",
+    "-p",
+    "test_*.py"
+  ],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+  "ruff.importStrategy": "fromEnvironment",
+  "files.encoding": "utf8",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "search.exclude": {
+    "**/build": true,
+    "**/dist": true,
+    "**/__pycache__": true,
+    "**/.git": true
+  }
+}

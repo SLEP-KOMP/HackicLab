@@ -172,9 +172,7 @@ def _scan_efi_dir(root: Path, info: BootloaderInfo) -> bool:
                     info.linux_grub = True
                 else:
                     info.other.append(name)
-            elif name == "systemd" and (sub / "systemd-bootx64.efi").exists():
-                info.linux_efi = True
-            elif name == "Linux":
+            elif (name == "systemd" and (sub / "systemd-bootx64.efi").exists()) or name == "Linux":
                 info.linux_efi = True
             elif name == "OC" and (sub / "OpenCore.efi").exists():
                 info.opencore = True

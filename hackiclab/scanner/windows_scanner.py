@@ -7,17 +7,20 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
+from .classify import (
+    ALC_LAYOUTS,
+    INTEL_IGPU_GENERATIONS,
+    cpu_brand,
+    detect_amd_gen,
+    infer_intel_gen,
+    parse_intel_model,
+)
 from .models import (
-    HardwareProfile, CPUInfo, GPUInfo, AudioInfo, NetInfo, StorageInfo,
+    GPUInfo,
+    HardwareProfile,
 )
 from .powershell import ps
-from .classify import (
-    INTEL_IGPU_GENERATIONS, parse_intel_model, infer_intel_gen,
-    detect_amd_gen, cpu_brand, ALC_LAYOUTS,
-)
-
 
 # ALC codec по HD audio device-id (subsystem)
 _ALC_BY_ID: dict[str, str] = {
@@ -58,11 +61,6 @@ class WindowsScanner:
 
     # --- system ---
     def _detect_system(self, p: HardwareProfile):
-        if ps.run_json('Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model,HypervisorPresent'):
-            try:
-                info = ps.run_json('Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model | ConvertTo-Json -Compress')
-            except Exception:
-                info = None
         env = ps.run(
             '(Get-CimInstance Win32_SystemEnclosure).ChassisTypes | ForEach-Object { $_.ToString() }'
         )
@@ -201,10 +199,9 @@ class WindowsScanner:
                 elif igpu is None and ("amd" in low or "radeon" in low):
                     igpu = GPUInfo(name=name, vendor="amd", device_id=did,
                                    is_integrated=True, vram_mb=vram)
-            elif vid in ("10de", "10b4") or "nvidia" in low or "geforce" in low:
-                if dgpu is None:
-                    dgpu = GPUInfo(name=name, vendor="nvidia", device_id=did,
-                                   is_integrated=False, vram_mb=vram)
+            elif (vid in ("10de", "10b4") or "nvidia" in low or "geforce" in low) and dgpu is None:
+                dgpu = GPUInfo(name=name, vendor="nvidia", device_id=did,
+                               is_integrated=False, vram_mb=vram)
         return igpu, dgpu
 
     # --- audio ---

@@ -10,14 +10,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from ..scanner.models import HardwareProfile
 from ..knowledge.kexts import select_kexts, smbios_model_for
 from ..knowledge.ssdt_logics import required_ssdts
-from .config_gen import generate_config_plist, BuildOptions
+from ..scanner.models import HardwareProfile
+from .config_gen import BuildOptions, generate_config_plist
+from .efi_layout import EFIBuildResult, EFILayout
+from .fetcher import GitHubFetcher, download_asset
 from .smbios_gen import SMBIOSData, generate_smbios
 from .ssdt_factory import SSDTFactory, find_iasl
-from .efi_layout import EFILayout, EFIBuildResult
-from .fetcher import GitHubFetcher, download_asset
 
 
 @dataclass
@@ -103,7 +103,8 @@ class EFIBuilder:
         if oc_zip:
             self._log("Распаковываю OpenCore…")
             try:
-                import zipfile, shutil
+                import shutil
+                import zipfile
                 extract = tmp / "oc_extracted"
                 if extract.exists():
                     shutil.rmtree(str(extract), ignore_errors=True)

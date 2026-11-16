@@ -117,6 +117,7 @@ def ensure_macrecovery() -> Path:
     """Возвращает путь к macrecovery.py (скачивает при необходимости)."""
     if MACRECOVERY_PATH.exists() and MACRECOVERY_PATH.stat().st_size > 1024:
         return MACRECOVERY_PATH
+    import ssl
     import urllib.request
 
     ctx = ssl.create_default_context()
@@ -193,7 +194,7 @@ def _run_macrecovery_inprocess(script: Path, args: list, dest: Path,
     writer = _LineWriter(progress_cb)
     code = 0
     try:
-        sys.argv = [str(script)] + list(args)
+        sys.argv = [str(script), *list(args)]
         os.chdir(str(dest))
         with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
             runpy.run_path(str(script), run_name="__main__")
@@ -260,7 +261,7 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
             return False, f"macrecovery завершился с кодом {code}"
     else:
         STALL_TIMEOUT = 120
-        cmd = [sys.executable, str(script)] + script_args
+        cmd = [sys.executable, str(script), *script_args]
 
         last_lines: list = []
         try:

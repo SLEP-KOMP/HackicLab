@@ -6,7 +6,6 @@ import shutil
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -81,7 +80,8 @@ class EFILayout:
         return p
 
     def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
-                               driver_names: list = None, kernel_patches: list = None) -> Path:
+                               driver_names: list | None = None,
+                               kernel_patches: list | None = None) -> Path:
         """Записывает config.plist, заполняя Kernel/Add реальными kext и UEFI/Drivers.
 
         Порядок Kernel/Add важен для загрузчика: Lilu и VirtualSMC должны идти

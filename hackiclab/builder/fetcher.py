@@ -7,8 +7,8 @@ OpCore-Simplify (gathering_files.py). Использует GitHub API для р�
 from __future__ import annotations
 
 import json
-import urllib.request
 import ssl
+import urllib.request
 from pathlib import Path
 from typing import Optional
 

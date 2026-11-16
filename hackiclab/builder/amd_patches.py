@@ -7,8 +7,8 @@ CPUID/MSR. Патчи берутся из официального репози�
 
 from __future__ import annotations
 
-import time
 import plistlib
+import time
 from pathlib import Path
 
 _URL = "https://raw.githubusercontent.com/AMD-OSX/AMD_Vanilla/master/patches.plist"

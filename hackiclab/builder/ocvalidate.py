@@ -84,6 +84,7 @@ def ensure_ocvalidate() -> Optional[Path]:
         return tool
     try:
         import zipfile
+
         from .cache_manager import cache_dir
         from .downloader import Downloader
 
@@ -141,7 +142,7 @@ def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVR
             version_note = s
             continue
         low = s.lower()
-        if low.startswith("missing key") or low.startswith("osbs:"):
+        if low.startswith(("missing key", "osbs:")):
             missing.append(s)
         elif low.startswith("ocvalidate") and "compatible" in low:
             version_note = s

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import re
 import unittest
-from pathlib import Path
 
-import _bootstrap  # noqa: F401
+import _bootstrap
 
-from hackiclab.i18n import T, ISSUE_EN, Tr
+from hackiclab.i18n import ISSUE_EN, T, Tr
 
 
 class TranslationTests(unittest.TestCase):

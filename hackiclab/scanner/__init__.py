@@ -1,24 +1,24 @@
 """Модуль сканирования и модели аппаратного профиля."""
 
 from .models import (
-    HardwareProfile,
-    CPUInfo,
-    GPUInfo,
     AudioInfo,
+    CPUInfo,
+    DisplayProfile,
+    GPUInfo,
+    HardwareProfile,
     NetInfo,
     StorageInfo,
-    DisplayProfile,
 )
 from .windows_scanner import WindowsScanner, scan_hardware
 
 __all__ = [
-    "HardwareProfile",
-    "CPUInfo",
-    "GPUInfo",
     "AudioInfo",
+    "CPUInfo",
+    "DisplayProfile",
+    "GPUInfo",
+    "HardwareProfile",
     "NetInfo",
     "StorageInfo",
-    "DisplayProfile",
     "WindowsScanner",
     "scan_hardware",
 ]

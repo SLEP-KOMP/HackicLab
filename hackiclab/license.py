@@ -13,11 +13,10 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import secrets
 from dataclasses import dataclass, field
-from pathlib import Path
 from enum import Enum
 
 from .builder.cache_manager import app_home
@@ -49,9 +48,8 @@ class License:
         """
         if self.is_premium:
             return True
-        if feature in ("autodownload", "autobuild_full", "cloud"):
-            return False  # задел под будущую монетизацию
-        return True
+        # задел под будущую монетизацию
+        return feature not in ("autodownload", "autobuild_full", "cloud")
 
 
 PREMIUM_FEATURES = {

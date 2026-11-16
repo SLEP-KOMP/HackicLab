@@ -7,15 +7,14 @@
 
 from __future__ import annotations
 
-import json
 import re
 import zipfile
 from pathlib import Path
 from typing import Optional
 
-from .fetcher import GitHubFetcher, download_bytes, _ssl_contexts
+from ..knowledge.kexts import KextEntry
 from .cache_manager import cache_dir
-from ..knowledge.kexts import KEXT_DB, KextEntry
+from .fetcher import GitHubFetcher, download_bytes
 
 
 class Downloader:
@@ -109,7 +108,6 @@ class Downloader:
 
     def _extract_assets(self, html: str, pattern: str) -> list[str]:
         """Имена файлов assets со страницы релиза (из ссылок /releases/download/)."""
-        import re
         pat = re.compile(r'/releases/download/[^"/\s>]+/([^"<>&\s]+)')
         names = {m.group(1) for m in pat.finditer(html)}
         if pattern:
