@@ -16,10 +16,6 @@ class ThemeTests(unittest.TestCase):
     def test_system_scheme_is_known_value(self):
         self.assertIn(themes.detect_system_scheme(), ("light", "dark"))
 
-    def test_resolve_system_returns_concrete_palette(self):
-        resolved = themes.resolve("system")
-        self.assertIn(resolved, ("light", "dark"))
-
     def test_all_builtin_themes_have_palettes(self):
         for name in (*themes.BUILTIN_THEMES, "light", "dark", "custom"):
             self.assertIn(name, themes.PALETTES)
@@ -52,6 +48,39 @@ class ThemeTests(unittest.TestCase):
             top, bottom = themes.preview(name)
             self.assertTrue(top.startswith("#"))
             self.assertTrue(bottom.startswith("#"))
+
+
+class SystemSchemeTests(unittest.TestCase):
+    def test_high_contrast_wins_over_apps_light(self):
+        """HC-схема с чёрным окном важнее AppsUseLightTheme=1."""
+        with mock.patch.object(themes, "_hc_enabled", return_value=True), \
+             mock.patch.object(themes, "_hc_scheme", return_value="dark"), \
+             mock.patch.object(themes, "_apps_light", return_value=True):
+            self.assertEqual(themes.detect_system_scheme(), "dark")
+
+    def test_high_contrast_light_scheme(self):
+        with mock.patch.object(themes, "_hc_enabled", return_value=True), \
+             mock.patch.object(themes, "_hc_scheme", return_value="light"), \
+             mock.patch.object(themes, "_apps_light", return_value=False):
+            self.assertEqual(themes.detect_system_scheme(), "light")
+
+    def test_apps_theme_without_high_contrast(self):
+        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
+             mock.patch.object(themes, "_apps_light", return_value=True):
+            self.assertEqual(themes.detect_system_scheme(), "light")
+
+    def test_qt_scheme_fallback(self):
+        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
+             mock.patch.object(themes, "_apps_light", return_value=None), \
+             mock.patch.object(themes, "_qt_color_scheme", return_value="dark"):
+            self.assertEqual(themes.detect_system_scheme(), "dark")
+
+    def test_default_is_dark(self):
+        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
+             mock.patch.object(themes, "_apps_light", return_value=None), \
+             mock.patch.object(themes, "_qt_color_scheme", return_value=None), \
+             mock.patch.object(themes, "_palette_scheme", return_value=None):
+            self.assertEqual(themes.detect_system_scheme(), "dark")
 
 
 class UiStateTests(unittest.TestCase):

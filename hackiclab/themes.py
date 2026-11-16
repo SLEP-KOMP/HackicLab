@@ -82,35 +82,105 @@ BUILTIN_THEMES: tuple[str, ...] = ("aqua", "graphite", "sonoma", "bigsur")
 BASE_THEMES: tuple[str, ...] = ("system", "light", "dark", "custom")
 
 
-def detect_system_scheme() -> str:
-    """Возвращает «light» или «dark» по настройкам Windows.
+def _hc_enabled() -> bool:
+    """Включён ли режим высокой контрастности Windows.
 
-    На других ОС используется оформление Qt, а при полном отсутствии данных —
-    тёмная схема (историческое оформление HackicLab).
+    В этом режиме Windows подменяет системные цвета своей схемой, а
+    ``AppsUseLightTheme`` продолжает показывать обычную тему приложений —
+    из-за этого «системная» тема могла оказаться светлой на чёрной схеме.
     """
-    if sys.platform == "win32":
-        try:
-            import winreg
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-            ) as key:
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return "light" if int(value) else "dark"
-        except Exception:
-            pass
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Control Panel\Accessibility\HighContrast",
+        ) as key:
+            flags, _ = winreg.QueryValueEx(key, "Flags")
+        return bool(int(flags) & 0x1)
+    except Exception:
+        return False
+
+
+def _hc_scheme() -> str | None:
+    """Схема высокой контрастности по цвету системного окна."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Control Panel\Colors",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "Window")
+        parts = [int(p) for p in str(value).split()[:3]]
+        if len(parts) != 3:
+            return None
+        r, g, b = parts
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return "dark" if luminance < 128 else "light"
+    except Exception:
+        return None
+
+
+def _apps_light() -> bool | None:
+    """Значение AppsUseLightTheme из реестра (None, если недоступно)."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return bool(int(value))
+    except Exception:
+        return None
+
+
+def _qt_color_scheme() -> str | None:
     try:  # Qt 6.5+: реальная схема оформления
         from PySide6.QtGui import QGuiApplication
         hints = QGuiApplication.styleHints()
-        scheme = hints.colorScheme()
-        name = getattr(scheme, "name", "").lower()
+        name = getattr(hints.colorScheme(), "name", "").lower()
         if "light" in name:
             return "light"
         if "dark" in name:
             return "dark"
     except Exception:
         pass
-    return "dark"
+    return None
+
+
+def _palette_scheme() -> str | None:
+    """Запасной вариант: светлый/тёмный цвет окна в текущей палитре Qt."""
+    try:
+        from PySide6.QtGui import QPalette
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is None:
+            return None
+        color = app.palette().color(QPalette.Window)
+        return "dark" if color.lightness() < 128 else "light"
+    except Exception:
+        return None
+
+
+def detect_system_scheme() -> str:
+    """Возвращает «light» или «dark» с учётом высокой контрастности.
+
+    Порядок: схема высокой контрастности → AppsUseLightTheme → схема Qt →
+    фактическая палитра → тёмная по умолчанию.
+    """
+    if _hc_enabled():
+        hc = _hc_scheme()
+        if hc:
+            return hc
+    light = _apps_light()
+    if light is not None:
+        return "light" if light else "dark"
+    return _qt_color_scheme() or _palette_scheme() or "dark"
 
 
 def resolve(theme: str) -> str:

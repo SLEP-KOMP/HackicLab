@@ -64,7 +64,7 @@ from ..knowledge.sources import (
     title_of,
 )
 from ..scanner import HardwareProfile, WindowsScanner
-from ..themes import BASE_THEMES, BUILTIN_THEMES, get_qss
+from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss
 from .theme_tiles import MonitorButton
 
 
@@ -362,6 +362,13 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         self._hook_system_theme()
         QTimer.singleShot(3000, self._auto_check_updates)
+        # системная тема может смениться без сигнала Qt (например, при
+        # включении высокой контрастности) — сверяемся с реестром
+        self._last_system_scheme = detect_system_scheme()
+        self._sys_timer = QTimer(self)
+        self._sys_timer.setInterval(5000)
+        self._sys_timer.timeout.connect(self._poll_system_theme)
+        self._sys_timer.start()
 
     def apply_theme(self, theme: str | None = None):
         """Применяет тему оформления и сохраняет выбор пользователя."""
@@ -397,7 +404,17 @@ class MainWindow(QMainWindow):
             self._system_hooked = False
 
     def _on_system_scheme_changed(self, *_args):
+        self._last_system_scheme = detect_system_scheme()
         if self._theme == "system":
+            self.apply_theme()
+
+    def _poll_system_theme(self):
+        """Сверяется с системной схемой: Qt не всегда сообщает о смене контраста."""
+        if self._theme != "system":
+            return
+        scheme = detect_system_scheme()
+        if scheme != getattr(self, "_last_system_scheme", ""):
+            self._last_system_scheme = scheme
             self.apply_theme()
 
     def _fit_to_screen(self):
@@ -1932,7 +1949,12 @@ class MainWindow(QMainWindow):
             tr.t("oclog.enabled") if ok else tr.t("oclog.enable_failed"))
 
     def _build_settings(self):
-        page = QWidget()
+        root = QWidget()
+        outer = QVBoxLayout(root); outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        page = inner
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         v.addWidget(_h1(page, tr.t("settings.title")))
 
@@ -2076,7 +2098,9 @@ class MainWindow(QMainWindow):
         self._pending_update = None
 
         v.addStretch()
-        return page
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
+        return root
 
     # ---- обновления ----
     def _check_updates(self, silent: bool = False):

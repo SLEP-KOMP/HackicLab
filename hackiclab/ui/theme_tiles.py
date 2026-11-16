@@ -8,10 +8,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QAbstractButton
 
-from ..themes import palette, preview
+from ..themes import preview
 
 
 class MonitorButton(QAbstractButton):
@@ -36,13 +36,17 @@ class MonitorButton(QAbstractButton):
         return QSize(self.WIDTH - 12, self.HEIGHT - 10)
 
     def _colors(self) -> tuple[QColor, QColor, QColor, QColor]:
+        """Цвета экрана-превью и акцента; текст берём из текущей палитры окна.
+
+        Раньше подпись красилась цветом самой темы, и у тёмных тем она была
+        невидимой на светлом фоне списка.
+        """
         top, bottom = preview(self.key)
-        pal = palette(self.key)
         return (
             QColor(top),
             QColor(bottom),
-            QColor(pal.accent),
-            QColor(pal.text),
+            QColor(self.palette().color(QPalette.Highlight)),
+            QColor(self.palette().color(QPalette.WindowText)),
         )
 
     def paintEvent(self, event):
