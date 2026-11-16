@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import shutil
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -73,7 +74,6 @@ class EFIBuilder:
         if extract.exists():
             shutil.rmtree(str(extract), ignore_errors=True)
         # извлечение zip
-        import zipfile
         try:
             with zipfile.ZipFile(str(zip_path)) as z:
                 z.extractall(str(extract))
@@ -103,11 +103,10 @@ class EFIBuilder:
 
         # 1) OpenCore
         oc_zip = dl.download_open_core(tmp)
+        extract: Path | None = None
         if oc_zip:
             self._log("Распаковываю OpenCore…")
             try:
-                import shutil
-                import zipfile
                 extract = tmp / "oc_extracted"
                 if extract.exists():
                     shutil.rmtree(str(extract), ignore_errors=True)
@@ -222,7 +221,7 @@ class EFIBuilder:
             res.stats["ssdt_placed"] = []
 
         # 4) config.plist с SMBIOS
-        opts = self.plan.options
+        opts = self.plan.options or BuildOptions()
         opts = BuildOptions(**{**opts.__dict__, "custom_smbios": self.plan.smbios})
         data = generate_config_plist(self.plan.profile, opts)
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)
@@ -243,7 +242,8 @@ class EFIBuilder:
         # 5) ocvalidate финального config.plist
         cfg_path = layout.oc / "config.plist"
         from ..builder.ocvalidate import find_ocvalidate, run_ocvalidate
-        ocv_tool = find_ocvalidate(in_open_core_root=extract) if oc_zip and 'extract' in dir() else find_ocvalidate()
+        ocv_tool = (find_ocvalidate(in_open_core_root=extract) if extract
+                    else find_ocvalidate())
         ocv = run_ocvalidate(cfg_path, ocvalidate=ocv_tool)
         res.stats["ocvalidate_ok"] = ocv.ok
         res.stats["ocvalidate_errors"] = ocv.errors

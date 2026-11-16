@@ -710,7 +710,7 @@ class MainWindow(QMainWindow):
         sv.addLayout(last_row)
         # ручной выбор config.plist
         pick_row = QHBoxLayout()
-        self.val_config_path = None
+        self.val_config_path: Path | None = None
         self.val_path_label = QLabel(tr.t("validate.none")); self.val_path_label.setObjectName("muted")
         self.val_path_label.setWordWrap(True)
         pick_row.addWidget(self.val_path_label, 1)
@@ -945,8 +945,10 @@ class MainWindow(QMainWindow):
 
     def _resolve_config(self) -> Path | None:
         """config.plist для проверки: ручной выбор или последняя сборка."""
-        if self.val_config_path and self.val_config_path.is_file():
-            return self.val_config_path
+        if self.val_config_path:
+            cfg = Path(str(self.val_config_path))
+            if cfg.is_file():
+                return cfg
         build_dir = getattr(self, "last_build_dir", None)
         if self.profile and build_dir:
             cand = Path(build_dir) / "EFI" / "OC" / "config.plist"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from functools import lru_cache
 
 
 class PowerShell:
@@ -51,13 +50,20 @@ class PowerShell:
             depth += 1
         return parsed
 
-    @lru_cache(maxsize=64)
-    def cached(self, key: str, script: str, timeout: int = 20):
-        return PowerShell.run(script, timeout=timeout)
+    def cached(self, key: str, script: str, timeout: int = 20) -> str:
+        """Выполняет скрипт с кэшем по ключу: повторные вызовы бесплатны.
 
-    def clear_cache(self):
+        Кэш принадлежит экземпляру, поэтому ``clear_cache`` действительно его
+        очищает (раньше вызывался несуществующий ``run.cached.cache_clear``).
+        """
+        if key in self._cache:
+            return str(self._cache[key])
+        value = PowerShell.run(script, timeout=timeout)
+        self._cache[key] = value
+        return value
+
+    def clear_cache(self) -> None:
         self._cache.clear()
-        PowerShell.run.cached.cache_clear()
 
 
 ps = PowerShell()
