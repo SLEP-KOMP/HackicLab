@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -38,6 +39,8 @@ class UpdateInfo:
     page_url: str         # страница релиза
     asset_url: str        # прямая ссылка на EXE (может быть пустой)
     asset_size: int = 0
+    asset_digest: str = ""   # sha256 вложения по данным GitHub
+    is_rebuild: bool = False  # та же версия, но другое содержимое сборки
 
     @property
     def has_asset(self) -> bool:
@@ -65,22 +68,52 @@ def is_newer(latest: str, current: str = __version__) -> bool:
     return a > b
 
 
-def _find_asset(release: dict) -> tuple[str, int]:
+def _find_asset(release: dict) -> tuple[str, int, str]:
     for asset in release.get("assets") or []:
         if (asset.get("name") or "").lower() == ASSET_NAME.lower():
-            return str(asset.get("browser_download_url") or ""), int(asset.get("size") or 0)
-    return "", 0
+            return (
+                str(asset.get("browser_download_url") or ""),
+                int(asset.get("size") or 0),
+                str(asset.get("digest") or ""),
+            )
+    return "", 0, ""
 
 
-def parse_release(release: dict) -> Optional[UpdateInfo]:
-    """Разбирает ответ GitHub API; None — если версия не новее текущей."""
+def current_binary_digest() -> str:
+    """sha256 запущенного EXE. Для запуска из исходников — пустая строка."""
+    if not getattr(sys, "frozen", False):
+        return ""
+    try:
+        digest = hashlib.sha256()
+        with open(sys.executable, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return "sha256:" + digest.hexdigest()
+    except Exception:
+        return ""
+
+
+def parse_release(release: dict, current_digest: str = "") -> Optional[UpdateInfo]:
+    """Разбирает ответ GitHub API.
+
+    Возвращает None, если версия не новее текущей. Исключение — пересборка:
+    версия совпадает, но sha256 вложения отличается от запущенного EXE.
+    Так обновления видны, даже когда релиз перезаливают без смены номера.
+    """
     tag = str(release.get("tag_name") or "").strip()
     if not tag:
         return None
     version = tag.lstrip("vV")
-    if not is_newer(version):
-        return None
-    url, size = _find_asset(release)
+    url, size, digest = _find_asset(release)
+    newer = is_newer(version)
+    rebuild = False
+    if not newer:
+        same_version = parse_version(version) == parse_version(__version__)
+        if not (same_version and current_digest and digest):
+            return None
+        if digest == current_digest:
+            return None
+        rebuild = True
     return UpdateInfo(
         version=version,
         tag=tag,
@@ -88,6 +121,8 @@ def parse_release(release: dict) -> Optional[UpdateInfo]:
         page_url=str(release.get("html_url") or RELEASES_PAGE),
         asset_url=url,
         asset_size=size,
+        asset_digest=digest,
+        is_rebuild=rebuild,
     )
 
 
@@ -104,7 +139,7 @@ def check_for_update(timeout: int = 25) -> Optional[UpdateInfo]:
     release = json.loads(data.decode("utf-8"))
     if not isinstance(release, dict):
         return None
-    return parse_release(release)
+    return parse_release(release, current_binary_digest())
 
 
 def can_self_update() -> bool:

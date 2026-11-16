@@ -2170,6 +2170,7 @@ class MainWindow(QMainWindow):
         self.upd_check_btn.setEnabled(False)
         self.upd_status.setText(tr.t("settings.updates_checking"))
         self.upd_warning.setVisible(False)
+        self._upd_silent = bool(silent)
         worker = UpdateCheckWorker()
         self._upd_worker = worker
         worker.found.connect(self._updates_found)
@@ -2185,8 +2186,10 @@ class MainWindow(QMainWindow):
     def _updates_found(self, info):
         self._pending_update = info
         uistate.save(postponed_update="")
-        self.upd_status.setText(
-            tr.t("settings.updates_available").format(version=info.version))
+        key = ("settings.updates_rebuild" if getattr(info, "is_rebuild", False)
+               else "settings.updates_available")
+        text = tr.t(key).format(version=info.version)
+        self.upd_status.setText(text)
         notes = (info.notes or "").strip()
         self.upd_notes.setPlainText(notes)
         self.upd_notes.setVisible(bool(notes))
@@ -2194,8 +2197,19 @@ class MainWindow(QMainWindow):
             tr.t("settings.updates_now") if info.has_asset
             else tr.t("settings.updates_open_page"))
         self.upd_actions.setVisible(True)
-        self.statusBar().showMessage(
-            tr.t("settings.updates_available").format(version=info.version), 8000)
+        self.statusBar().showMessage(text, 8000)
+        if getattr(self, "_upd_silent", False) and info.has_asset:
+            # предложение при старте: обновиться сейчас или отложить с напоминанием
+            answer = QMessageBox.question(
+                self, tr.t("settings.updates"),
+                f"{text}\n\n{tr.t('settings.updates_warning')}",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                self._install_update()
+            else:
+                self._postpone_update()
+        self._upd_silent = False
 
     def _updates_up_to_date(self):
         self._pending_update = None

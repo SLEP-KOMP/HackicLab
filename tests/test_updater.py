@@ -13,13 +13,15 @@ import _bootstrap  # noqa: F401
 from hackiclab import updater
 
 
-def release(version: str, asset: bool = True, size: int = 1234) -> dict:
+def release(version: str, asset: bool = True, size: int = 1234,
+            digest: str = "") -> dict:
     assets = []
     if asset:
         assets = [{
             "name": "HackicLab.exe",
             "browser_download_url": f"https://example.com/{version}/HackicLab.exe",
             "size": size,
+            "digest": digest,
         }]
     return {
         "tag_name": f"v{version}",
@@ -59,6 +61,23 @@ class ParseReleaseTests(unittest.TestCase):
     def test_same_version_is_ignored(self):
         self.assertIsNone(updater.parse_release(release(updater.__version__)))
 
+    def test_same_version_new_digest_is_a_rebuild(self):
+        info = updater.parse_release(
+            release(updater.__version__, digest="sha256:new"), current_digest="sha256:old")
+        self.assertIsNotNone(info)
+        self.assertTrue(info.is_rebuild)
+        self.assertEqual(info.asset_digest, "sha256:new")
+
+    def test_same_digest_is_not_an_update(self):
+        info = updater.parse_release(
+            release(updater.__version__, digest="sha256:same"),
+            current_digest="sha256:same")
+        self.assertIsNone(info)
+
+    def test_rebuild_needs_known_local_digest(self):
+        payload = release(updater.__version__, digest="sha256:new")
+        self.assertIsNone(updater.parse_release(payload, current_digest=""))
+
     def test_release_without_asset(self):
         info = updater.parse_release(release("9.9.9", asset=False))
         self.assertIsNotNone(info)
@@ -75,6 +94,10 @@ class ParseReleaseTests(unittest.TestCase):
         called_url = dl.call_args[0][0]
         self.assertIn("api.github.com", called_url)
         self.assertIn("SLEP-KOMP/HackicLab", called_url)
+
+    def test_current_binary_digest_empty_for_source_runs(self):
+        with mock.patch.object(updater.sys, "frozen", False, create=True):
+            self.assertEqual(updater.current_binary_digest(), "")
 
     def test_http_error_propagates(self):
         with mock.patch.object(updater, "download_bytes", side_effect=RuntimeError("403")):
