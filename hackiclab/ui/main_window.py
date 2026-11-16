@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStackedWidget,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -65,7 +66,7 @@ from ..knowledge.sources import (
     title_of,
 )
 from ..scanner import HardwareProfile, WindowsScanner
-from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss
+from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
 from .theme_tiles import MonitorButton
 
 
@@ -610,7 +611,6 @@ class MainWindow(QMainWindow):
         mb = QGroupBox(tr.t("build.macos"))
         mv = QVBoxLayout(mb)
         mrow = QHBoxLayout()
-        mrow.addWidget(_h2(page, tr.t("build.macos")))
         self.macos_combo = QComboBox()
         from ..knowledge.oc_platforms import MACOS_VERSIONS
         self.macos_combo.addItem(tr.t("build.macos_auto"), "")
@@ -681,8 +681,6 @@ class MainWindow(QMainWindow):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "validate.title", "validate.subtitle")
-        sub = _muted(page, tr.t("validate.subtitle")); sub.setWordWrap(True)
-        v.addWidget(sub)
 
         # --- источник для валидации ---
         src = self._card(page)
@@ -766,7 +764,8 @@ class MainWindow(QMainWindow):
 
         # --- беджи результата ---
         badge_row = QHBoxLayout()
-        self.val_status = _h2(page, "—")
+        self.val_status = QLabel(tr.t("validate.not_checked"))
+        self.val_status.setObjectName("muted")
         badge_row.addWidget(self.val_status)
         badge_row.addStretch()
         v.addLayout(badge_row)
@@ -776,19 +775,47 @@ class MainWindow(QMainWindow):
         self.val_progress = QProgressBar(); self.val_progress.setMaximum(0); self.val_progress.setVisible(False)
         v.addWidget(self.val_progress)
 
-        # --- детальный свод ocvalidate по категориям ---
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        # --- детали проверки: вкладки, а не четыре пустые панели ---
+        details = self._card(page)
+        dv = QVBoxLayout(details)
+        dv.addWidget(_h2(page, tr.t("validate.details_title")))
+        self.val_tabs = QTabWidget()
         self.val_missing = QPlainTextEdit(); self.val_missing.setReadOnly(True)
         self.val_schema = QPlainTextEdit(); self.val_schema.setReadOnly(True)
         self.val_warn = QPlainTextEdit(); self.val_warn.setReadOnly(True)
-        splitter.addWidget(self._labelled(self, tr.t("validate.missing_title"), self.val_missing))
-        splitter.addWidget(self._labelled(self, tr.t("validate.schema_title"), self.val_schema))
-        splitter.addWidget(self._labelled(self, tr.t("validate.warnings_title"), self.val_warn))
         self.val_audit = QPlainTextEdit(); self.val_audit.setReadOnly(True)
-        splitter.addWidget(self._labelled(self, tr.t("validate.audit_title"), self.val_audit))
-        splitter.setSizes([180, 140, 110, 150])
-        v.addWidget(splitter, 1)
+        for wdg, hint in (
+            (self.val_missing, "validate.empty_results"),
+            (self.val_schema, "validate.empty_results"),
+            (self.val_warn, "validate.empty_results"),
+            (self.val_audit, "validate.audit_hint"),
+        ):
+            wdg.setPlaceholderText(tr.t(hint))
+            wdg.setMinimumHeight(220)
+            wdg.textChanged.connect(self._refresh_val_tabs)
+        self.val_tabs.addTab(self.val_missing, tr.t("validate.missing_title"))
+        self.val_tabs.addTab(self.val_schema, tr.t("validate.schema_title"))
+        self.val_tabs.addTab(self.val_warn, tr.t("validate.warnings_title"))
+        self.val_tabs.addTab(self.val_audit, tr.t("validate.audit_title"))
+        dv.addWidget(self.val_tabs)
+        v.addWidget(details)
+        v.addStretch(1)
         return page
+
+    def _refresh_val_tabs(self):
+        """Показывает число замечаний прямо в заголовках вкладок."""
+        tabs = getattr(self, "val_tabs", None)
+        if tabs is None:
+            return
+        skip = {tr.t("validate.empty_results"), tr.t("validate.audit_no_findings"), ""}
+        for idx, wdg, key in (
+            (0, self.val_missing, "validate.missing_title"),
+            (1, self.val_schema, "validate.schema_title"),
+            (2, self.val_warn, "validate.warnings_title"),
+            (3, self.val_audit, "validate.audit_title"),
+        ):
+            lines = [ln for ln in wdg.toPlainText().splitlines() if ln.strip() and ln.strip() not in skip]
+            tabs.setTabText(idx, tr.t(key) + (f" ({len(lines)})" if lines else ""))
 
     def _labelled(self, parent, title, widget):
         w = QWidget(parent)
@@ -1551,6 +1578,7 @@ class MainWindow(QMainWindow):
         self.usbmap_status.setWordWrap(True)
         pv.addWidget(self.usbmap_status)
         self.usbmap_log = QPlainTextEdit(); self.usbmap_log.setReadOnly(True)
+        self.usbmap_log.setPlaceholderText(tr.t("usbmap.log_hint"))
         self.usbmap_log.setMaximumHeight(110)
         pv.addWidget(self.usbmap_log)
         v.addWidget(ports_card)
@@ -1569,8 +1597,12 @@ class MainWindow(QMainWindow):
         self.disk_warn = _muted(page, ""); self.disk_warn.setWordWrap(True)
         dv.addWidget(self.disk_warn)
         self.disk_tree = QPlainTextEdit(); self.disk_tree.setReadOnly(True)
+        self.disk_tree.setPlaceholderText(tr.t("diskmap.hint"))
+        self.disk_tree.setMinimumHeight(220)
+        self.disk_tree.setMaximumHeight(340)
         dv.addWidget(self.disk_tree, 1)
-        v.addWidget(disk_card, 1)
+        v.addWidget(disk_card)
+        v.addStretch(1)
         return page
 
     def _do_usbmap(self):
@@ -1972,21 +2004,34 @@ class MainWindow(QMainWindow):
         log_row.addStretch()
         lv.addLayout(log_row)
         self.oclog_out = QPlainTextEdit(); self.oclog_out.setReadOnly(True)
-        self.oclog_out.setMaximumHeight(130)
+        self.oclog_out.setMaximumHeight(150)
+        self.oclog_out.setPlaceholderText(tr.t("oclog.hint"))
         lv.addWidget(self.oclog_out)
         v.addWidget(gb_log)
 
         self.an_progress = QProgressBar(); self.an_progress.setMaximum(0); self.an_progress.setVisible(False)
         v.addWidget(self.an_progress)
 
+        findings = self._card(page)
+        fv = QVBoxLayout(findings)
+        fv.addWidget(_h2(page, tr.t("analyze.results_title")))
+        self.an_empty_hint = _muted(page, tr.t("analyze.list_empty"))
+        self.an_empty_hint.setWordWrap(True)
+        fv.addWidget(self.an_empty_hint)
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
         self.issue_list = QListWidget(); self.issue_list.setObjectName("issueList")
+        self.issue_list.setMinimumHeight(240)
         self.issue_detail = QTextEdit(); self.issue_detail.setReadOnly(True)
+        self.issue_detail.setMinimumHeight(240)
+        self.issue_detail.setPlaceholderText(tr.t("analyze.detail_empty"))
         splitter.addWidget(self.issue_list)
         splitter.addWidget(self.issue_detail)
         splitter.setSizes([540, 380])
         self.issue_list.currentItemChanged.connect(self._on_issue)
-        v.addWidget(splitter, 1)
+        fv.addWidget(splitter, 1)
+        v.addWidget(findings)
+        v.addStretch(1)
         return page
 
     def _do_oclog(self):
@@ -2724,13 +2769,18 @@ class MainWindow(QMainWindow):
         self.an_progress.setVisible(True)
         self.issue_list.clear()
         self.issue_detail.clear()
+        self.an_empty_hint.setVisible(False)
         self._worker_an = AnalyzeWorker(self.profile, folder)
         self._worker_an.done.connect(self._analyze_done)
         self._worker_an.failed.connect(self._analyze_failed)
         self._worker_an.start()
 
     _SEV = {0: "ℹ", 1: "⚠", 2: "✖"}
-    _SEV_COLOR = {0: "#7f849c", 1: "#f9e2af", 2: "#f38ba8"}
+
+    def _sev_color(self, severity: int) -> str:
+        """Цвет серьёзности берётся из текущей темы, поэтому меняется вместе с ней."""
+        level = {0: "muted", 1: "warn", 2: "err"}.get(int(severity), "muted")
+        return tone(getattr(self, "_theme", "system"), level)[0]
 
     def _analyze_done(self, issues):
         self.an_progress.setVisible(False)
@@ -2741,7 +2791,7 @@ class MainWindow(QMainWindow):
             title = _issue_title(iss)
             it = QListWidgetItem(f"{icon} {title}")
             it.setData(Qt.ItemDataRole.UserRole, iss)
-            it.setForeground(QColor(self._SEV_COLOR.get(int(iss.severity), "#cdd6f4")))
+            it.setForeground(QColor(self._sev_color(int(iss.severity))))
             self.issue_list.addItem(it)
         n_err = sum(1 for i in issues if int(i.severity) == 2)
         n_warn = sum(1 for i in issues if int(i.severity) == 1)
