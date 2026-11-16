@@ -24,8 +24,8 @@ class ThemeTests(unittest.TestCase):
 
     def test_qss_contains_palette_colors(self):
         qss = themes.get_qss("dark")
-        self.assertIn("#1e1e2e", qss)
-        self.assertIn("#8839ef", qss)
+        self.assertIn("#14151f", qss)
+        self.assertIn("#8b5cf6", qss)
 
     def test_unknown_theme_falls_back_to_dark(self):
         self.assertEqual(themes.get_qss("nonsense"), themes.get_qss("dark"))

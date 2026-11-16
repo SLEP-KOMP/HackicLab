@@ -12,6 +12,7 @@ class Lang:
 
 
 LANGS = [Lang("ru", "Русский"), Lang("en", "English")]
+LANG_CODES = {lang.code for lang in LANGS}
 
 
 # Пространства имён переводов
@@ -22,6 +23,16 @@ T = {
         "common.yes": "Да",
         "common.no": "Нет",
         "app.tagline": "Интеллектуальный сборщик Hackintosh EFI",
+        "scan.subtitle": "Собираем модель железа из Windows и подбираем под неё поддерживаемые конфигурации macOS.",
+        "build.subtitle": "Параметры сборки, загрузчик OpenCore и кексты — с журналом каждого шага.",
+        "usb.subtitle": "Запись готового EFI на флешку с проверкой цели перед форматированием.",
+        "usbmap.subtitle": "Карта USB-портов и SSDT для USBToolBox: привязка портов к контроллерам.",
+        "analyze.subtitle": "Разбор готового EFI: кексты, драйверы, ACPI, SIP и журнал OpenCore.",
+        "sources.subtitle": "Проверенные конфигурации и ссылки на официальные гайды и инструменты.",
+        "settings.subtitle": "Оформление, язык, обновления и расширенные параметры.",
+        "about.subtitle": "Что делает HackicLab, на чём основан и какие ограничения важно помнить.",
+        "scan.empty": "Пока ничего не отсканировано. Нажмите «Сканировать железо» — HackicLab соберёт модель из Windows и сам определит подходящие конфигурации.",
+        "common.log_placeholder": "Здесь появится журнал по мере выполнения.",
         "app.lang_busy": "Дождитесь завершения текущей операции, затем смените язык.",
         "app.lang_changed": "Язык интерфейса изменён.",
         # nav
@@ -104,7 +115,7 @@ T = {
         "settings.theme_sonoma": "Sonoma",
         "settings.theme_bigsur": "Big Sur",
         "settings.theme_bg": "Свой фон",
-        "settings.theme_bg_none": "фон не выбран",
+        "settings.theme_bg_none": "не выбран",
         "settings.theme_bg_pick": "Выбрать изображение…",
         "settings.theme_bg_reset": "Сбросить фон",
         "settings.theme_bg_hint": "Изображение применяется к теме «Моя тема».",
@@ -404,6 +415,16 @@ T = {
         "common.yes": "Yes",
         "common.no": "No",
         "app.tagline": "Intelligent Hackintosh EFI builder",
+        "scan.subtitle": "We read the hardware from Windows and pick macOS configurations that fit it.",
+        "build.subtitle": "Build options, the OpenCore bootloader and kexts — with a log for every step.",
+        "usb.subtitle": "Write the ready EFI to a USB drive with the target verified before formatting.",
+        "usbmap.subtitle": "USB port map and SSDT for USBToolBox: binding ports to controllers.",
+        "analyze.subtitle": "Inspect an existing EFI: kexts, drivers, ACPI, SIP and the OpenCore log.",
+        "sources.subtitle": "Verified configurations plus links to official guides and tools.",
+        "settings.subtitle": "Appearance, language, updates and advanced options.",
+        "about.subtitle": "What HackicLab does, what it is based on and which limits matter.",
+        "scan.empty": "Nothing scanned yet. Click “Scan hardware” — HackicLab reads the model from Windows and picks matching configurations for you.",
+        "common.log_placeholder": "The log will appear here as the task runs.",
         "app.lang_busy": "Wait for the current operation to finish, then change the language.",
         "app.lang_changed": "Interface language changed.",
         "nav.scan": "Scan",
@@ -482,7 +503,7 @@ T = {
         "settings.theme_sonoma": "Sonoma",
         "settings.theme_bigsur": "Big Sur",
         "settings.theme_bg": "Custom background",
-        "settings.theme_bg_none": "no background selected",
+        "settings.theme_bg_none": "not set",
         "settings.theme_bg_pick": "Choose image…",
         "settings.theme_bg_reset": "Reset background",
         "settings.theme_bg_hint": "The image is applied to the \"My theme\" theme.",
@@ -864,10 +885,39 @@ ISSUE_EN = {
 }
 
 
+def detect_system_language() -> str:
+    """Язык интерфейса по системе: русский для ru-локалей, иначе английский.
+
+    Нужен для первого запуска: пользователь из США должен сразу получить
+    английский интерфейс. Явный выбор в настройках важнее — он проверяется до
+    этой функции.
+    """
+    try:
+        from PySide6.QtCore import QLocale
+
+        names = list(QLocale.system().uiLanguages()) or [QLocale.system().name()]
+        for name in names:
+            code = (name or "").replace("_", "-").split("-")[0].lower()
+            if code:
+                return code if code in LANG_CODES else "en"
+    except Exception:
+        pass
+    try:
+        import locale
+
+        code = (locale.getlocale()[0] or "")[:2].lower()
+        if code in LANG_CODES:
+            return code
+    except Exception:
+        pass
+    return "en"
+
+
 class Tr:
     """Обёртка локализации. t("key") возвращает перевод на текущий язык."""
 
-    def __init__(self, lang: str = "ru"):
+    def __init__(self, lang: str | None = None):
+        lang = lang or detect_system_language()
         self.lang = lang if lang in T else "ru"
 
     def set_lang(self, lang: str):
@@ -891,5 +941,6 @@ class Tr:
         return self.lang
 
 
-# Глобальный синглтон для простоты доступа из GUI
-tr = Tr("ru")
+# Глобальный синглтон: язык определяется системой, пока пользователь
+# не выбрал его явно в настройках.
+tr = Tr()

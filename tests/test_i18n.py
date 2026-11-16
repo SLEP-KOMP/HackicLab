@@ -7,7 +7,7 @@ import unittest
 
 import _bootstrap
 
-from hackiclab.i18n import ISSUE_EN, T, Tr
+from hackiclab.i18n import ISSUE_EN, T, Tr, detect_system_language
 
 
 class TranslationTests(unittest.TestCase):
@@ -44,6 +44,60 @@ class TranslationTests(unittest.TestCase):
         for code, pair in ISSUE_EN.items():
             self.assertEqual(len(pair), 2, code)
             self.assertTrue(pair[0].strip() and pair[1].strip(), code)
+
+
+class DetectLanguageTests(unittest.TestCase):
+    def _fake_qt(self, langs):
+        from unittest import mock
+
+        class _FakeLocale:
+            @staticmethod
+            def system():
+                class _S:
+                    @staticmethod
+                    def uiLanguages():
+                        return langs
+
+                    @staticmethod
+                    def name():
+                        return langs[0] if langs else ""
+                return _S()
+
+        return mock.patch("PySide6.QtCore.QLocale", _FakeLocale)
+
+    def test_russian_system_gives_russian(self):
+        with self._fake_qt(["ru-RU", "en-US"]):
+            self.assertEqual(detect_system_language(), "ru")
+
+    def test_english_system_gives_english(self):
+        with self._fake_qt(["en-US"]):
+            self.assertEqual(detect_system_language(), "en")
+
+    def test_other_language_falls_back_to_english(self):
+        with self._fake_qt(["de-DE", "en-US"]):
+            self.assertEqual(detect_system_language(), "en")
+
+    def test_locale_module_fallback_without_qt(self):
+        from unittest import mock
+
+        class _Broken:
+            @staticmethod
+            def system():
+                raise RuntimeError("Qt недоступен")
+
+        with mock.patch("PySide6.QtCore.QLocale", _Broken), \
+                mock.patch("locale.getlocale", return_value=("ru_RU", "UTF-8")):
+            self.assertEqual(detect_system_language(), "ru")
+
+
+class SystemDefaultLanguageTests(unittest.TestCase):
+    def test_bundle_defaults_to_system_language(self):
+        """Без сохранённого выбора язык берётся из системы, а не жёстко ru."""
+        from unittest import mock
+
+        with mock.patch("hackiclab.i18n.detect_system_language", return_value="en"):
+            instance = Tr()
+        self.assertEqual(instance.current, "en")
 
 
 if __name__ == "__main__":

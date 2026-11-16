@@ -1,13 +1,13 @@
 """Темы оформления HackicLab.
 
-Темы строятся из палитр, а не из трёх независимых QSS-простыней: так проще
+Темы строятся из палитр, а не из независимых QSS-простыней: так проще
 добавлять новые оформления и подмешивать пользовательский фон.
 
 - ``system`` — следует теме Windows (реестр AppsUseLightTheme);
 - ``light`` / ``dark`` — базовые;
 - ``custom`` — фирменная тема с возможностью подставить своё изображение;
 - ``aqua``, ``graphite``, ``sonoma``, ``bigsur`` — встроенные оформления
-  в духе macOS. Это собственные градиенты и цвета, без ассетов Apple.
+  в духе macOS: свои поверхности, градиенты и акценты, без ассетов Apple.
 """
 
 from __future__ import annotations
@@ -31,46 +31,74 @@ class Palette:
     code_bg: str
     hover: str
     gradient: str = ""          # градиент для кнопок и выделения
+    surface: str = ""           # фон карточек
+    window: str = ""            # фон рабочей области (можно градиент)
+    ok: str = "#16a34a"
+    warn: str = "#d97706"
+    danger: str = "#dc2626"
 
 
 DARK = Palette(
-    "dark", "#1e1e2e", "#181825", "#313244", "#cdd6f4", "#7f849c",
-    "#8839ef", "#9d4ef0", "#ffffff", "#181825", "#11111b", "#313244",
+    "dark", "#14151f", "#0f1018", "#2b2d3d", "#e6e8f2", "#8d92a8",
+    "#8b5cf6", "#a78bfa", "#ffffff", "#12131c", "#0d0e15", "#232537",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #7c5cff, stop:1 #b06cff)",
+    surface="#1b1c29",
+    window="qlineargradient(x1:0,y1:0,x2:0.6,y2:1, stop:0 #161724, stop:1 #101119)",
+    ok="#4ade80", warn="#fbbf24", danger="#fb7185",
 )
 
 LIGHT = Palette(
-    "light", "#f4f5f7", "#ffffff", "#d0d3d8", "#1f2328", "#6c7278",
-    "#8839ef", "#9d4ef0", "#ffffff", "#ffffff", "#ffffff", "#e0e3e6",
+    "light", "#f2f4f8", "#ffffff", "#dde1e9", "#14161c", "#62687a",
+    "#6d4bff", "#8568ff", "#ffffff", "#ffffff", "#f7f8fb", "#e6e9f0",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #6d4bff, stop:1 #9a6bff)",
+    surface="#ffffff",
+    window="qlineargradient(x1:0,y1:0,x2:0.6,y2:1, stop:0 #f7f9fc, stop:1 #eef1f7)",
+    ok="#15803d", warn="#b45309", danger="#be123c",
 )
 
 CUSTOM = Palette(
-    "custom", "#0f172a", "#0b1120", "#1e293b", "#e2e8f0", "#64748b",
+    "custom", "#0f172a", "#0b1120", "#1e293b", "#e2e8f0", "#7c8aa5",
     "#06b6d4", "#22d3ee", "#ffffff", "#0b1120", "#0b1120", "#1e293b",
-    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #06b6d4, stop:1 #8b5cf6)",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #06b6d4, stop:1 #8b5cf6)",
+    surface="#111c33",
+    window="qlineargradient(x1:0,y1:0,x2:0.7,y2:1, stop:0 #0d1628, stop:1 #0a101f)",
+    ok="#34d399", warn="#fbbf24", danger="#fb7185",
 )
 
 AQUA = Palette(
-    "aqua", "#eef5fb", "#ffffff", "#c7d9ea", "#10243a", "#5b7591",
-    "#0a84ff", "#3d9bff", "#ffffff", "#ffffff", "#f6fafd", "#dbe8f4",
-    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #0a84ff, stop:1 #64b5ff)",
+    "aqua", "#eaf2fb", "#ffffff", "#cbdcee", "#0d2238", "#5d7490",
+    "#0a84ff", "#3d9bff", "#ffffff", "#ffffff", "#f5f9fd", "#dbe8f4",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #0a84ff, stop:1 #40c8e0)",
+    surface="#ffffff",
+    window="qlineargradient(x1:0,y1:0,x2:0.6,y2:1, stop:0 #f2f8ff, stop:1 #e3eefb)",
+    ok="#0f766e", warn="#b45309", danger="#be123c",
 )
 
 GRAPHITE = Palette(
-    "graphite", "#232427", "#1b1c1f", "#33353a", "#e8e9ec", "#8b8e96",
-    "#8e9198", "#a8abb3", "#101114", "#1b1c1f", "#17181b", "#2c2e33",
-    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6f747d, stop:1 #a8abb3)",
+    "graphite", "#16171b", "#0f1014", "#34373f", "#edeef2", "#9a9ea9",
+    "#b9becb", "#d3d7df", "#101114", "#1c1e23", "#121317", "#24262c",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #8b909c, stop:1 #c9ced8)",
+    surface="#202228",
+    window="qlineargradient(x1:0,y1:0,x2:0.6,y2:1, stop:0 #191a1f, stop:1 #121317)",
+    ok="#5eead4", warn="#fcd34d", danger="#fda4af",
 )
 
 SONOMA = Palette(
-    "sonoma", "#1c1420", "#241a29", "#3a2b41", "#f7e9f0", "#b39bab",
-    "#ff7ab6", "#ff9bc8", "#2b0f1c", "#241a29", "#180f1d", "#34243c",
-    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7ab6, stop:1 #ffb454)",
+    "sonoma", "#170f1d", "#1f1426", "#46304f", "#f8eef4", "#b9a2b4",
+    "#ff6fae", "#ff8fc2", "#2b0f1c", "#2a1a33", "#180f1d", "#31203a",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ff6fae, stop:1 #ffa14a)",
+    surface="#2a1a33",
+    window="qlineargradient(x1:0,y1:0,x2:0.7,y2:1, stop:0 #1d1224, stop:1 #241430)",
+    ok="#86efac", warn="#fde68a", danger="#fda4af",
 )
 
 BIGSUR = Palette(
-    "bigsur", "#0b1226", "#111a33", "#223055", "#e6ecfb", "#8b9bc4",
-    "#4f8cff", "#7aa6ff", "#ffffff", "#111a33", "#0a1020", "#1b2647",
-    "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #4f8cff, stop:1 #9d6bff)",
+    "bigsur", "#071022", "#0a1529", "#24355e", "#e8eefc", "#93a4c9",
+    "#4f8cff", "#7aa6ff", "#ffffff", "#122043", "#0a1020", "#1b2647",
+    "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #4f8cff, stop:1 #9d6bff)",
+    surface="#122043",
+    window="qlineargradient(x1:0,y1:0,x2:0.6,y2:1, stop:0 #0a1428, stop:1 #0b1731)",
+    ok="#7dd3fc", warn="#fcd34d", danger="#fda4af",
 )
 
 PALETTES: dict[str, Palette] = {
@@ -210,17 +238,27 @@ def _accent_hover(p: Palette) -> str:
     return p.accent_hover
 
 
+def tone(theme: str, level: str) -> tuple[str, str]:
+    """Цвет текста и подложки для статуса: (текст, плашка)."""
+    p = palette(theme)
+    color = {"ok": p.ok, "warn": p.warn, "err": p.danger}.get(level, p.muted)
+    return color, _rgba(color, 0.16)
+
+
 def build_qss(theme: str, background: str = "") -> str:
     """Собирает QSS для темы. ``background`` — путь к картинке своей темы."""
     p = palette(theme)
     translucent = bool(background)
     bg = _rgba(p.bg, 0.88) if translucent else p.bg
-    panel = _rgba(p.panel, 0.86) if translucent else p.panel
-    card = _rgba(p.panel, 0.82) if translucent else p.panel
-    field = _rgba(p.input_bg, 0.84) if translucent else p.input_bg
-    code = _rgba(p.code_bg, 0.86) if translucent else p.code_bg
-    border = _rgba(p.border, 0.75) if translucent else p.border
-    hover = _rgba(p.hover, 0.9) if translucent else p.hover
+    panel = _rgba(p.panel, 0.90) if translucent else p.panel
+    surface = _rgba(p.surface or p.panel, 0.84) if translucent else (p.surface or p.panel)
+    field = _rgba(p.input_bg, 0.86) if translucent else p.input_bg
+    code = _rgba(p.code_bg, 0.90) if translucent else p.code_bg
+    border = _rgba(p.border, 0.80) if translucent else p.border
+    hover = _rgba(p.hover, 0.90) if translucent else p.hover
+    soft = _rgba(p.accent, 0.14)
+    soft_hover = _rgba(p.accent, 0.22)
+    window = p.window or p.bg
 
     bg_image = ""
     if background:
@@ -231,43 +269,139 @@ def build_qss(theme: str, background: str = "") -> str:
         )
 
     return f"""
-QWidget {{ background-color: {bg}; color: {p.text}; font-family: 'Segoe UI'; font-size: 13px; }}
-QMainWindow {{ background-color: {p.bg}; {bg_image} }}
+QWidget {{
+    background-color: transparent;
+    color: {p.text};
+    font-family: 'Segoe UI Variable Text', 'Segoe UI';
+    font-size: 13px;
+}}
+QMainWindow, QDialog {{ background: {bg}; {bg_image} }}
+#pageRoot {{ background: {window}; }}
 QScrollArea {{ background: transparent; border: none; }}
+QScrollArea > QWidget > QWidget {{ background: transparent; }}
 #sidebar {{ background-color: {panel}; border-right: 1px solid {border}; }}
-#sidebar QLabel#logo {{ color: {p.accent}; font-size: 22px; font-weight: 800; padding: 16px 12px 4px 12px; }}
-#sidebar QLabel#sub {{ color: {p.muted}; font-size: 11px; padding: 0 12px 12px 12px; }}
+#sidebar QLabel#logo {{
+    color: {p.text}; font-size: 21px; font-weight: 800;
+    letter-spacing: 0.2px; padding: 18px 14px 2px 14px;
+}}
+#sidebar QLabel#sub {{ color: {p.muted}; font-size: 11px; padding: 0 14px 14px 14px; }}
 #navList {{ background: transparent; border: none; outline: none; }}
-#navList::item {{ padding: 12px 16px; margin: 2px 8px; border-radius: 8px; color: {p.muted}; }}
+#navList::item {{
+    padding: 11px 14px; margin: 2px 10px; border-radius: 9px;
+    color: {p.muted}; font-size: 13px;
+}}
 #navList::item:hover {{ background: {hover}; color: {p.text}; }}
-#navList::item:selected {{ background: {_accent(p)}; color: {p.accent_text}; font-weight: 600; }}
-QPushButton {{ background: {_accent(p)}; color: {p.accent_text}; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; }}
+#navList::item:selected {{
+    background: {soft}; color: {p.text}; font-weight: 600;
+    border-left: 3px solid {p.accent};
+}}
+#navList::item:focus {{ outline: none; }}
+QPushButton {{
+    background: {_accent(p)}; color: {p.accent_text}; border: none;
+    border-radius: 9px; padding: 9px 18px; font-weight: 600;
+}}
 QPushButton:hover {{ background: {_accent_hover(p)}; }}
+QPushButton:pressed {{ background: {p.accent}; }}
 QPushButton:disabled {{ background: {border}; color: {p.muted}; }}
-QPushButton#ghost {{ background: transparent; border: 1px solid {border}; color: {p.text}; }}
-QPushButton#ghost:hover {{ background: {hover}; }}
-#card {{ background: {card}; border: 1px solid {border}; border-radius: 12px; padding: 14px; }}
-QLabel#h1 {{ font-size: 20px; font-weight: 700; color: {p.text}; }}
-QLabel#h2 {{ font-size: 14px; font-weight: 600; color: {p.text}; }}
+QPushButton#ghost {{
+    background: {surface}; border: 1px solid {border}; color: {p.text};
+    padding: 8px 14px; font-weight: 500;
+}}
+QPushButton#ghost:hover {{ background: {hover}; border-color: {p.accent}; }}
+QPushButton#ghost:disabled {{ background: transparent; color: {p.muted}; }}
+#card {{
+    background: {surface}; border: 1px solid {border};
+    border-radius: 14px;
+}}
+QLabel#h1 {{ font-size: 22px; font-weight: 700; color: {p.text}; }}
+QLabel#h2 {{ font-size: 13px; font-weight: 700; color: {p.text}; letter-spacing: 0.2px; }}
 QLabel#val {{ font-size: 13px; color: {p.text}; }}
-QLabel#muted {{ color: {p.muted}; font-size: 12px; }}
-QLabel#kv {{ color: {p.muted}; font-size: 12px; }}
-QGroupBox {{ border: 1px solid {border}; border-radius: 10px; margin-top: 14px; padding: 12px 10px; color: {p.muted}; }}
-QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; }}
-QProgressBar {{ background: {border}; border: none; border-radius: 6px; height: 8px; text-align: center; color: transparent; }}
-QProgressBar::chunk {{ background: {_accent(p)}; border-radius: 6px; }}
-QTextEdit, QPlainTextEdit {{ background: {code}; border: 1px solid {border}; border-radius: 8px; color: {p.text}; font-family: 'Cascadia Code','Consolas'; font-size: 12px; }}
-QListWidget {{ background: {card}; border: 1px solid {border}; border-radius: 8px; }}
-QListWidget::item {{ padding: 8px; }}
-QListWidget#issueList::item {{ border-bottom: 1px solid {border}; padding: 6px; }}
-QComboBox {{ background: {field}; border: 1px solid {border}; border-radius: 8px; padding: 6px 10px; }}
-QComboBox QAbstractItemView {{ background: {field}; selection-background-color: {p.accent}; }}
-QCheckBox {{ spacing: 8px; }}
-QCheckBox::indicator {{ width: 18px; height: 18px; border-radius: 5px; border: 2px solid {border}; background: {field}; }}
-QCheckBox::indicator:checked {{ background: {p.accent}; border-color: {p.accent}; }}
+QLabel#muted, QLabel#kv {{ color: {p.muted}; font-size: 12px; }}
+QLabel#ok {{ color: {p.ok}; font-size: 12px; font-weight: 600; }}
+QLabel#warn {{ color: {p.warn}; font-size: 12px; font-weight: 600; }}
+QLabel#err {{ color: {p.danger}; font-size: 12px; font-weight: 600; }}
+QLabel#badge {{
+    border-radius: 9px; padding: 2px 9px; font-size: 11px; font-weight: 600;
+}}
+QLabel#badge[tone="ok"] {{ color: {p.ok}; background: {_rgba(p.ok, 0.16)}; }}
+QLabel#badge[tone="warn"] {{ color: {p.warn}; background: {_rgba(p.warn, 0.16)}; }}
+QLabel#badge[tone="err"] {{ color: {p.danger}; background: {_rgba(p.danger, 0.16)}; }}
+QLabel#badge[tone="muted"] {{ color: {p.muted}; background: {_rgba(p.muted, 0.16)}; }}
+QGroupBox {{
+    background: {surface}; border: 1px solid {border}; border-radius: 12px;
+    margin-top: 16px; padding: 14px 12px 12px 12px;
+    font-size: 12px; font-weight: 700; color: {p.muted};
+}}
+QGroupBox::title {{ subcontrol-origin: margin; left: 14px; padding: 0 6px; }}
+QProgressBar {{
+    background: {_rgba(p.border, 0.6)}; border: none; border-radius: 5px;
+    height: 6px; text-align: center; color: transparent;
+}}
+QProgressBar::chunk {{ background: {_accent(p)}; border-radius: 5px; }}
+QPlainTextEdit, QTextEdit, QTextBrowser {{
+    background: {code}; border: 1px solid {border}; border-radius: 10px;
+    color: {p.text}; font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px; padding: 8px; selection-background-color: {p.accent};
+}}
+QListWidget {{
+    background: {surface}; border: 1px solid {border}; border-radius: 10px;
+    padding: 4px;
+}}
+QListWidget::item {{ padding: 8px 10px; border-radius: 8px; }}
+QListWidget::item:hover {{ background: {hover}; }}
+QListWidget::item:selected {{ background: {soft_hover}; color: {p.text}; }}
+QListWidget#issueList::item {{ border-bottom: 1px solid {border}; padding: 6px 8px; }}
+QComboBox {{
+    background: {field}; border: 1px solid {border}; border-radius: 9px;
+    padding: 7px 12px; min-height: 20px;
+}}
+QComboBox:hover {{ border-color: {p.accent}; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox QAbstractItemView {{
+    background: {field}; color: {p.text}; border: 1px solid {border};
+    selection-background-color: {soft_hover};
+}}
+QCheckBox {{ spacing: 9px; font-size: 13px; }}
+QCheckBox::indicator {{
+    width: 17px; height: 17px; border-radius: 5px;
+    border: 1.5px solid {border}; background: {field};
+}}
+QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
+QCheckBox::indicator:checked {{ background: {_accent(p)}; border-color: {p.accent}; }}
+QCheckBox::indicator:checked:hover {{ background: {_accent_hover(p)}; }}
 QSplitter::handle {{ background: {border}; }}
-QLineEdit {{ background: {field}; border: 1px solid {border}; border-radius: 8px; padding: 6px 10px; }}
-QToolTip {{ background-color: {p.panel}; color: {p.text}; border: 1px solid {border}; }}
+QLineEdit {{
+    background: {field}; border: 1px solid {border}; border-radius: 9px;
+    padding: 8px 12px; selection-background-color: {p.accent};
+}}
+QLineEdit:focus {{ border-color: {p.accent}; }}
+QScrollBar:vertical {{
+    background: transparent; width: 10px; margin: 4px 2px 4px 0;
+}}
+QScrollBar::handle:vertical {{
+    background: {_rgba(p.muted, 0.45)}; border-radius: 5px; min-height: 32px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {_rgba(p.muted, 0.7)}; }}
+QScrollBar:horizontal {{
+    background: transparent; height: 10px; margin: 0 4px 2px 4px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {_rgba(p.muted, 0.45)}; border-radius: 5px; min-width: 32px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: {_rgba(p.muted, 0.7)}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+QStatusBar {{ background: {panel}; border-top: 1px solid {border}; color: {p.muted}; }}
+QMenu {{
+    background: {surface}; border: 1px solid {border}; border-radius: 10px;
+    padding: 6px;
+}}
+QMenu::item {{ padding: 7px 18px; border-radius: 7px; }}
+QMenu::item:selected {{ background: {soft_hover}; }}
+QToolTip {{
+    background-color: {surface}; color: {p.text};
+    border: 1px solid {border}; border-radius: 8px; padding: 6px 9px;
+}}
 """
 
 

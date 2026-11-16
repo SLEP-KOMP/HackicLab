@@ -17,6 +17,7 @@ from .builder.cache_manager import app_home
 #: Значения по умолчанию. Новая установка стартует с системной темы.
 DEFAULTS: dict[str, Any] = {
     "theme": "system",
+    "language": "",
     "background": "",
     "check_updates": True,
     "postponed_update": "",

@@ -43,7 +43,7 @@ from ..builder import (
     BuildPlan,
     EFIBuilder,
 )
-from ..i18n import LANGS, tr
+from ..i18n import LANGS, detect_system_language, tr
 from ..knowledge.configs import (
     STATUS_LIMITED,
     STATUS_NATIVE,
@@ -376,10 +376,14 @@ class MainWindow(QMainWindow):
         if theme is not None:
             self._theme = theme
             uistate.save(theme=theme)
-        qss = get_qss(self._theme, getattr(self, "_theme_bg", ""))
+        qss = get_qss(getattr(self, "_theme", "system"), getattr(self, "_theme_bg", ""))
         app = QApplication.instance()
         if isinstance(app, QApplication):
             app.setStyleSheet(qss)
+            for badge in app.allWidgets():
+                if badge.objectName() == "badge":
+                    badge.style().unpolish(badge)
+                    badge.style().polish(badge)
         self._sync_theme_tiles()
 
     def _sync_theme_tiles(self):
@@ -453,6 +457,7 @@ class MainWindow(QMainWindow):
 
         self.nav = QListWidget()
         self.nav.setObjectName("navList")
+        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         nav_items = [
             ("nav.scan", "🖥"),
             ("nav.build", "⚙"),
@@ -470,7 +475,7 @@ class MainWindow(QMainWindow):
             it.setData(Qt.ItemDataRole.UserRole, key)
             self.nav.addItem(it)
         self.nav.currentRowChanged.connect(self._on_nav)
-        side_layout.addWidget(self.nav)
+        side_layout.addWidget(self.nav, 1)
         side_layout.addStretch()
 
         # Языковой переключатель внизу сайдбара
@@ -507,11 +512,24 @@ class MainWindow(QMainWindow):
         for page in (self.page_scan, self.page_build, self.page_validate,
                      self.page_usb, self.page_ports, self.page_analyze,
                      self.page_sources, self.page_settings, self.page_about):
+            page.setObjectName("pageRoot")
             self.stack.addWidget(self._scroll_page(page))
+        if self.nav.currentRow() < 0:
+            self.nav.setCurrentRow(0)
 
     # ---- pages ----
     def _card(self, parent):
         w = QFrame(parent); w.setObjectName("card"); return w
+
+    def _page_header(self, page, layout, title_key: str, subtitle_key: str):
+        """Заголовок страницы: крупный заголовок и короткое пояснение в одну фразу."""
+        head = QVBoxLayout()
+        head.setSpacing(4)
+        head.addWidget(_h1(page, tr.t(title_key)))
+        sub = _muted(page, tr.t(subtitle_key))
+        sub.setWordWrap(True)
+        head.addWidget(sub)
+        layout.addLayout(head)
 
     def _scroll_page(self, page: QWidget) -> QScrollArea:
         """Оборачивает страницу в прокрутку: контент не обрезается при малом окне."""
@@ -527,7 +545,7 @@ class MainWindow(QMainWindow):
     def _build_scan(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("scan.title")))
+        self._page_header(page, v, "scan.title", "scan.subtitle")
         btn = QPushButton(tr.t("scan.button"))
         btn.clicked.connect(self._do_scan)
         v.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -538,6 +556,17 @@ class MainWindow(QMainWindow):
         self.hw_grid = QVBoxLayout()
         self.hw_grid.setSpacing(10)
         v.addLayout(self.hw_grid)
+
+        from PySide6.QtWidgets import QLabel as _QLabel
+
+        self.scan_empty_card = self._card(page)
+        ev = QVBoxLayout(self.scan_empty_card)
+        ev.setContentsMargins(16, 14, 16, 14)
+        empty = _QLabel(tr.t("scan.empty"))
+        empty.setObjectName("muted")
+        empty.setWordWrap(True)
+        ev.addWidget(empty)
+        v.addWidget(self.scan_empty_card)
         v.addStretch()
 
         self.scan_save_btn = QPushButton(tr.t("scan.save"))
@@ -550,7 +579,7 @@ class MainWindow(QMainWindow):
     def _build_build(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("build.title")))
+        self._page_header(page, v, "build.title", "build.subtitle")
 
         # options with description cards
         gb = QGroupBox(tr.t("build.options"))
@@ -593,7 +622,7 @@ class MainWindow(QMainWindow):
         mac_desc = _muted(page, tr.t("build.macos_desc")); mac_desc.setWordWrap(True)
         mv.addWidget(mac_desc)
         self.macos_incompat = _muted(page, ""); self.macos_incompat.setWordWrap(True)
-        self.macos_incompat.setStyleSheet("color:#f9e2af;")
+        self.macos_incompat.setObjectName("warn")
         self.macos_incompat.setVisible(False)
         mv.addWidget(self.macos_incompat)
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
@@ -614,7 +643,7 @@ class MainWindow(QMainWindow):
         dest_desc = _muted(page, tr.t("build.dest_desc")); dest_desc.setWordWrap(True)
         dv.addWidget(dest_desc)
         note = _muted(page, tr.t("build.note_online")); note.setWordWrap(True)
-        note.setStyleSheet("color:#a6e3a1;")
+        note.setObjectName("ok")
         dv.addWidget(note)
         v.addWidget(dest_card)
 
@@ -628,6 +657,7 @@ class MainWindow(QMainWindow):
         lbl = _h2(page, tr.t("build.log"))
         v.addWidget(lbl)
         self.build_log = QPlainTextEdit(); self.build_log.setReadOnly(True); self.build_log.setMinimumHeight(160)
+        self.build_log.setPlaceholderText(tr.t("common.log_placeholder"))
         v.addWidget(self.build_log, 1)
 
         # --- Почему так собрано (объяснение решений) ---
@@ -650,7 +680,7 @@ class MainWindow(QMainWindow):
         """Вкладка «Валидация»: детальный свод ocvalidate + состояние Wi-Fi/BT."""
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("validate.title")))
+        self._page_header(page, v, "validate.title", "validate.subtitle")
         sub = _muted(page, tr.t("validate.subtitle")); sub.setWordWrap(True)
         v.addWidget(sub)
 
@@ -855,13 +885,13 @@ class MainWindow(QMainWindow):
         self.val_meta.setText(f"{tr.t('validate.tool_version')}: {tv or '—'}")
         if res.get("ok"):
             self.val_status.setText("✔ " + tr.t("validate.valid"))
-            self.val_status.setStyleSheet("color:#a6e3a1;")
+            self.val_status.setObjectName("ok")
         elif not schema and missing:
             self.val_status.setText("⚠ " + tr.t("validate.badge_missing_only"))
-            self.val_status.setStyleSheet("color:#f9e2af;")
+            self.val_status.setObjectName("warn")
         else:
             self.val_status.setText("✖ " + tr.t("validate.invalid"))
-            self.val_status.setStyleSheet("color:#f38ba8;")
+            self.val_status.setObjectName("err")
         self.statusBar().showMessage(f"ocvalidate: {len(schema)} err / {len(warns)} warn", 6000)
 
     def _validate_failed(self, err):
@@ -938,19 +968,19 @@ class MainWindow(QMainWindow):
         if w == "mediatek":
             self.val_hw_card.setVisible(True)
             t = _h2(self.val_hw_card, "✖ " + tr.t("validate.wifi_mediatek_title"))
-            t.setStyleSheet("color:#f38ba8;")
+            t.setObjectName("err")
             self.val_hw_box.addWidget(t)
             d = _val(self.val_hw_card, tr.t("validate.wifi_mediatek_desc")); d.setWordWrap(True)
             self.val_hw_box.addWidget(d)
             b = _val(self.val_hw_card, "⚠ " + tr.t("validate.bt_unsupported"))
-            b.setStyleSheet("color:#f9e2af;")
+            b.setObjectName("warn")
             self.val_hw_box.addWidget(b)
         elif w == "" :
             self.val_hw_card.setVisible(False)
         else:
             self.val_hw_card.setVisible(True)
             t = _h2(self.val_hw_card, "✔ " + tr.t("validate.wifi_ok"))
-            t.setStyleSheet("color:#a6e3a1;")
+            t.setObjectName("ok")
             self.val_hw_box.addWidget(t)
             if w == "broadcom" and p.net.has_bt:
                 self.val_hw_box.addWidget(_val(self.val_hw_card, tr.t("validate.bt_broadcom")))
@@ -959,7 +989,7 @@ class MainWindow(QMainWindow):
         """Мастер записи EFI на флешку (аналог Build Mode в hackmate, современнее)."""
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("usb.title")))
+        self._page_header(page, v, "usb.title", "usb.subtitle")
 
         # --- 1. Выбор USB-флешки ---
         usb_card = self._card(page)
@@ -1108,6 +1138,7 @@ class MainWindow(QMainWindow):
         log_row.addWidget(save_btn)
         v.addLayout(log_row)
         self.usb_log = QPlainTextEdit(); self.usb_log.setReadOnly(True); self.usb_log.setMinimumHeight(180)
+        self.usb_log.setPlaceholderText(tr.t("common.log_placeholder"))
         v.addWidget(self.usb_log, 1)
 
         # сразу просканируем флешки и историю
@@ -1365,7 +1396,7 @@ class MainWindow(QMainWindow):
         dlgv.addWidget(_h2(dlg, f"{tr.t('usb.confirm_action')}: {action}"))
 
         if mode == "full":
-            warn = _val(dlg, "⚠  " + tr.t("usb.warn_erase")); warn.setStyleSheet("color:#f38ba8; font-weight:bold;")
+            warn = _val(dlg, "⚠  " + tr.t("usb.warn_erase")); warn.setObjectName("err")
             dlgv.addWidget(warn)
         elif mode == "repair":
             dlgv.addWidget(_muted(dlg, tr.t("usb.warn_repair")))
@@ -1397,7 +1428,7 @@ class MainWindow(QMainWindow):
                 dlg.accept()
             else:
                 self._usb_mismatch.setText(f"{tr.t('usb.confirm_mismatch')} {phrase}")
-                self._usb_mismatch.setStyleSheet("color:#f38ba8;")
+                self._usb_mismatch.setObjectName("err")
 
         ok_btn.clicked.connect(_try_accept)
         cancel_btn.clicked.connect(dlg.reject)
@@ -1498,7 +1529,7 @@ class MainWindow(QMainWindow):
         """Вкладка «Порты и диски»: карта USB-портов и карта дисков."""
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("usbmap.title")))
+        self._page_header(page, v, "usbmap.title", "usbmap.subtitle")
 
         ports_card = self._card(page)
         pv = QVBoxLayout(ports_card)
@@ -1653,9 +1684,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         v = QVBoxLayout(inner); v.setContentsMargins(28, 24, 28, 24); v.setSpacing(10)
-        v.addWidget(_h1(inner, tr.t("sources.title")))
-        hint = _muted(inner, tr.t("sources.hint")); hint.setWordWrap(True)
-        v.addWidget(hint)
+        self._page_header(inner, v, "sources.title", "sources.subtitle")
 
         # --- под ваше железо ---
         self._src_ctx_page = inner
@@ -1706,17 +1735,14 @@ class MainWindow(QMainWindow):
         combo.blockSignals(False)
 
     def _status_badge(self, parent, status: str) -> QLabel:
-        colors = {
-            STATUS_NATIVE: ("#a6e3a1", "rgba(166,227,161,0.16)"),
-            STATUS_PATCHED: ("#f9e2af", "rgba(249,226,175,0.16)"),
-            STATUS_LIMITED: ("#f38ba8", "rgba(243,139,168,0.16)"),
+        levels = {
+            STATUS_NATIVE: "ok",
+            STATUS_PATCHED: "warn",
+            STATUS_LIMITED: "err",
         }
-        fg, bg = colors.get(status, ("#a6adc8", "rgba(166,173,200,0.16)"))
         badge = QLabel(tr.t("sources.status." + status), parent)
-        badge.setStyleSheet(
-            f"color:{fg}; background:{bg}; border-radius:9px; "
-            f"padding:2px 9px; font-size:11px; font-weight:600;"
-        )
+        badge.setObjectName("badge")
+        badge.setProperty("tone", levels.get(status, "muted"))
         return badge
 
     def _support_report(self, cfg):
@@ -1732,17 +1758,10 @@ class MainWindow(QMainWindow):
 
     def _support_badge(self, parent, cfg) -> QLabel:
         rep = self._support_report(cfg)
-        colors = {
-            "full": ("#a6e3a1", "rgba(166,227,161,0.16)"),
-            "partial": ("#f9e2af", "rgba(249,226,175,0.16)"),
-            "none": ("#f38ba8", "rgba(243,139,168,0.16)"),
-        }
-        fg, bg = colors.get(rep.level, colors["partial"])
+        levels = {"full": "ok", "partial": "warn", "none": "err"}
         badge = QLabel(tr.t("support.level." + rep.level), parent)
-        badge.setStyleSheet(
-            f"color:{fg}; background:{bg}; border-radius:9px; "
-            f"padding:2px 9px; font-size:11px; font-weight:600;"
-        )
+        badge.setObjectName("badge")
+        badge.setProperty("tone", levels.get(rep.level, "warn"))
         reasons = [tr.t(key) for key in rep.failed]
         tip = tr.t("support.tooltip")
         if reasons:
@@ -1908,7 +1927,7 @@ class MainWindow(QMainWindow):
     def _build_analyze(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("analyze.title")))
+        self._page_header(page, v, "analyze.title", "analyze.subtitle")
 
         # Пояснение что это
         hint_card = self._card(page)
@@ -2016,12 +2035,11 @@ class MainWindow(QMainWindow):
         inner = QWidget()
         page = inner
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("settings.title")))
+        self._page_header(page, v, "settings.title", "settings.subtitle")
 
         # Язык
         gb_lang = QGroupBox(tr.t("settings.language"))
         lg = QHBoxLayout(gb_lang)
-        lg.addWidget(_h2(page, tr.t("settings.language")))
         self.settings_lang = QComboBox()
         for l in LANGS:
             self.settings_lang.addItem(l.native, l.code)
@@ -2315,7 +2333,7 @@ class MainWindow(QMainWindow):
     def _build_about(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        v.addWidget(_h1(page, tr.t("about.title")))
+        self._page_header(page, v, "about.title", "about.subtitle")
 
         # Что это
         c_what = self._card(page)
@@ -2371,6 +2389,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "HackicLab", tr.t("app.lang_busy"))
             return
         tr.set_lang(code)
+        uistate.save(language=code)
         # пересобираем страницы после выхода из обработчика сигнала
         QTimer.singleShot(0, self._rebuild_pages)
 
@@ -2503,6 +2522,9 @@ class MainWindow(QMainWindow):
 
     def _scan_done(self, profile):
         self.scan_progress.setVisible(False)
+        card = getattr(self, "scan_empty_card", None)
+        if card is not None:
+            card.setVisible(False)
         self.profile = profile
         try:
             from ..knowledge import registry as hw_registry
@@ -2756,7 +2778,15 @@ def run_app() -> int:
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     from .. import updater
+
     updater.cleanup_old_binaries()
+    # язык: явный выбор пользователя, иначе — язык системы (ru/en)
+    saved_lang = str(uistate.get("language", "") or "")
+    if saved_lang:
+        tr.set_lang(saved_lang)
+    else:
+        tr.set_lang(detect_system_language())
+        uistate.save(language=tr.current)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     state = uistate.load()
