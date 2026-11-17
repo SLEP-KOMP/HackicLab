@@ -64,6 +64,7 @@ from ..knowledge.configs import (
     search_configs,
     similar_configs,
 )
+from ..knowledge.preflight import bios_requirements
 from ..knowledge.sources import (
     GROUP_COMMUNITY,
     GROUP_EFI,
@@ -1636,6 +1637,22 @@ class MainWindow(QMainWindow):
             (tr.t("tile.build_oc_v"), tr.t("tile.build_oc")),
             (tr.t("tile.build_check_v"), tr.t("tile.build_check")),
         ])
+        bios = self._card(page)
+        bv = QVBoxLayout(bios)
+        bv.addWidget(_h2(page, tr.t("bios.title")))
+        bios_hint = _muted(page, tr.t("bios.subtitle"))
+        bios_hint.setWordWrap(True)
+        bv.addWidget(bios_hint)
+        profile = getattr(self, "profile", None)
+        from ..scanner.models import HardwareProfile as _HP
+        report = bios_requirements(profile or _HP())
+        for key in report.requirements:
+            item = QLabel("✓  " + tr.t(key), bios)
+            item.setObjectName("muted")
+            item.setWordWrap(True)
+            bv.addWidget(item)
+        self.bios_box = bv
+        v.addWidget(bios)
 
         # Слева настройки и журнал, справа карточка с яблоком и прогрессом —
         # как фото автора в «Поддержке».
