@@ -193,3 +193,50 @@ class OptionsStepTests(unittest.TestCase):
         self.assertIn(tr.t("wizard.sum.dual"), joined)
         self.assertIn(tr.t("wizard.sum.dgpu"), joined)
         self.assertIn(tr.t("wizard.sum.share"), joined)
+
+    def test_pick_folder_ignores_missing_dir(self):
+        import tempfile
+        from unittest import mock
+
+        from PySide6.QtWidgets import QFileDialog
+
+        state = self.win._wiz_state()
+        state["step"] = 2
+        missing = str(__import__("pathlib").Path(tempfile.gettempdir()) / "hl-no-such-dir-xyz")
+        with mock.patch.object(QFileDialog, "getExistingDirectory", return_value=missing):
+            self.win._wiz_pick_folder()
+        self.assertEqual(state.get("folder", ""), "")
+
+    def test_pick_folder_accepts_existing_dir(self):
+        import tempfile
+        from unittest import mock
+
+        from PySide6.QtWidgets import QFileDialog
+
+        tmp = tempfile.mkdtemp(prefix="hl_folder_")
+        with mock.patch.object(QFileDialog, "getExistingDirectory", return_value=tmp):
+            self.win._wiz_pick_folder()
+        self.assertEqual(self.win._wiz_state().get("folder"), tmp)
+
+    def test_option_card_exposes_accessible_name(self):
+        from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+        holder = QWidget()
+        lay = QVBoxLayout(holder)
+        card = self.win._wiz_option(None, lay, "macos", "macOS Sonoma",
+                                    "macOS Sonoma", "14 · 2023")
+        self.assertEqual(card.accessibleName(), "macOS Sonoma")
+        self.assertEqual(card.accessibleDescription(), "14 · 2023")
+
+    def test_rebuild_does_not_prompt_on_startup(self):
+        from unittest import mock
+
+        from hackiclab.updater import UpdateInfo
+
+        info = UpdateInfo(version="1.0.3", tag="v1.0.3", notes="", page_url="p",
+                          asset_url="https://x", asset_size=1, asset_digest="d",
+                          is_rebuild=True)
+        self.win._upd_silent = True
+        with mock.patch.object(self.win, "_confirm") as confirm:
+            self.win._updates_found(info)
+        confirm.assert_not_called()

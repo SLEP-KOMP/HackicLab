@@ -739,6 +739,11 @@ class MainWindow(QMainWindow):
         btn.setObjectName("optionCard")
         btn.setCheckable(True)
         btn.setProperty("value", value)
+        # Имя для скринридеров: без него карточка читается как «кнопка».
+        btn.setAccessibleName(title)
+        if desc:
+            btn.setAccessibleDescription(desc)
+            btn.setToolTip(desc)
         btn.clicked.connect(lambda: self._wiz_select(key, value, layout))
         layout.addWidget(btn)
         return btn
@@ -1197,10 +1202,22 @@ class MainWindow(QMainWindow):
         self._wiz_fill_target()
 
     def _wiz_pick_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, tr.t("wizard.target.folder"))
-        if not folder:
+        # Повторный клик открывал второй диалог: путь вводился в одном окне,
+        # а подтверждался пустой в другом, и выбор «терялся».
+        if getattr(self, "_wiz_folder_busy", False):
+            return
+        self._wiz_folder_busy = True
+        try:
+            folder = QFileDialog.getExistingDirectory(
+                self, tr.t("wizard.target.folder"))
+        finally:
+            self._wiz_folder_busy = False
+        folder = (folder or "").strip()
+        if not folder or not Path(folder).is_dir():
             return
         state = self._wiz_state()
+        if state.get("folder") == folder and state.get("kind") == "folder":
+            return
         state["folder"] = folder
         state["kind"] = "folder"
         state["device"] = ""
@@ -3743,7 +3760,10 @@ class MainWindow(QMainWindow):
             else tr.t("settings.updates_open_page"))
         self.upd_actions.setVisible(True)
         self.statusBar().showMessage(text, 8000)
-        if getattr(self, "_upd_silent", False) and info.has_asset:
+        # Пересборку той же версии не предлагаем модальным окном при старте:
+        # пользователь только что мог собрать её сам. В «Настройках» она видна.
+        if (getattr(self, "_upd_silent", False) and info.has_asset
+                and not getattr(info, "is_rebuild", False)):
             # предложение при старте: обновиться сейчас или отложить с напоминанием
             if self._confirm(
                 tr.t("settings.updates"),
