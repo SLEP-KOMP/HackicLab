@@ -608,6 +608,25 @@ class MainWindow(QMainWindow):
         head.addWidget(sub)
         layout.addLayout(head)
 
+    def _stat_tiles(self, page, layout, items):
+        """Ряд плиток-метрик: крупное значение и короткая подпись."""
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        for value, caption in items:
+            tile = self._card(page)
+            tv = QVBoxLayout(tile)
+            tv.setContentsMargins(16, 14, 16, 14)
+            tv.setSpacing(2)
+            big = QLabel(str(value), tile)
+            big.setObjectName("tileValue")
+            cap = QLabel(caption, tile)
+            cap.setObjectName("muted")
+            cap.setWordWrap(True)
+            tv.addWidget(big)
+            tv.addWidget(cap)
+            row.addWidget(tile, 1)
+        layout.addLayout(row)
+
     def _scroll_page(self, page: QWidget) -> QScrollArea:
         """Прокрутка и центральная колонка: поля слева и справа одинаковые.
 
@@ -636,6 +655,11 @@ class MainWindow(QMainWindow):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "scan.title", "scan.subtitle")
+        self._stat_tiles(page, v, [
+            (tr.t("tile.scan_engine_v"), tr.t("tile.scan_engine")),
+            (tr.t("tile.scan_offline_v"), tr.t("tile.scan_offline")),
+            (tr.t("tile.scan_safe_v"), tr.t("tile.scan_safe")),
+        ])
         btn = QPushButton(tr.t("scan.button"))
         btn.clicked.connect(self._do_scan)
         v.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -1607,6 +1631,11 @@ class MainWindow(QMainWindow):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "build.title", "build.subtitle")
+        self._stat_tiles(page, v, [
+            (tr.t("tile.build_kexts_v"), tr.t("tile.build_kexts")),
+            (tr.t("tile.build_oc_v"), tr.t("tile.build_oc")),
+            (tr.t("tile.build_check_v"), tr.t("tile.build_check")),
+        ])
 
         # Слева настройки и журнал, справа карточка с яблоком и прогрессом —
         # как фото автора в «Поддержке».

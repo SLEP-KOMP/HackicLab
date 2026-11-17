@@ -349,6 +349,7 @@ QPushButton#chip:checked {{
     border-radius: 14px;
 }}
 QLabel#h1 {{ font-size: 26px; font-weight: 800; letter-spacing: -0.3px; color: {p.text}; }}
+QLabel#tileValue {{ font-size: 20px; font-weight: 700; color: {p.text}; }}
 QLabel#h2 {{ font-size: 13px; font-weight: 700; color: {p.text}; letter-spacing: 0.2px; }}
 QLabel#val {{ font-size: 13px; color: {p.text}; }}
 QLabel#muted, QLabel#kv {{ color: {p.muted}; font-size: 12px; }}
