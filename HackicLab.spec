@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         ('hackiclab/assets/acpi', 'hackiclab/assets/acpi'),
         ('hackiclab/assets/brands', 'hackiclab/assets/brands'),
+        ('hackiclab/assets/hwdb', 'hackiclab/assets/hwdb'),
         ('hackiclab/assets/support', 'hackiclab/assets/support'),
         (QT_TRANSLATIONS + '/qtbase_ru.qm', 'PySide6/translations'),
     ],

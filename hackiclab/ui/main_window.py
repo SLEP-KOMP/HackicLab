@@ -2069,11 +2069,58 @@ class MainWindow(QMainWindow):
             btn.setObjectName("ghost")
             btn.clicked.connect(self._suggest_config)
             lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        # реальные отчёты сообщества из базы hackmate-hwdb
+        self._fill_hwdb_reports(page, lay, prof)
         # специфичные ссылки
         skip = {"oc_guide", "insanelymac", "tonymacx86"}
         picked = [s for s in sources_for(prof) if s.key not in skip]
         for src in picked:
             lay.addWidget(self._link_label(page, src))
+
+    def _fill_hwdb_reports(self, page, lay, prof):
+        """Реальные отчёты сообщества из вшитой базы hackmate-hwdb."""
+        try:
+            from ..knowledge import hwdb
+            data = hwdb.summary(prof)
+            source_url = hwdb.SOURCE_URL
+        except Exception:
+            return
+        if not data.get("total"):
+            return
+        lay.addWidget(_h2(page, tr.t("sources.hwdb_title")))
+        body = _muted(page, tr.t("sources.hwdb_body").format(
+            total=data["total"], similar=data["similar"]))
+        body.setWordWrap(True)
+        lay.addWidget(body)
+        if not data["similar"]:
+            none = _muted(page, tr.t("sources.hwdb_none"))
+            none.setWordWrap(True)
+            lay.addWidget(none)
+        for report, _score in data["reports"]:
+            row = QHBoxLayout()
+            title = _val(page, report.device or report.cpu)
+            title.setWordWrap(True)
+            row.addWidget(title, 1)
+            if report.succeeded:
+                key, tone = "sources.hwdb_ok", "ok"
+            elif report.failed:
+                key, tone = "sources.hwdb_fail", "err"
+            else:
+                key, tone = "sources.hwdb_partial", "warn"
+            badge = QLabel(tr.t(key), page)
+            badge.setObjectName("badge")
+            badge.setProperty("tone", tone)
+            row.addWidget(badge)
+            lay.addLayout(row)
+            line = _muted(page, f"{report.cpu or '—'} · {report.macos or '—'}")
+            line.setWordWrap(True)
+            if report.issues:
+                line.setToolTip(f"{tr.t('sources.hwdb_issues')}: {report.issues[:400]}")
+            lay.addWidget(line)
+        note = _muted(page, tr.t("sources.hwdb_note"))
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        lay.addWidget(self._mini_link(page, tr.t("sources.hwdb_source"), source_url))
 
     def _build_analyze(self):
         page = QWidget()
