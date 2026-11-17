@@ -78,7 +78,6 @@ from ..knowledge.sources import (
 from ..scanner import HardwareProfile, WindowsScanner
 from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
 from .apple_progress import AppleProgressBar
-from .hero import hero_block
 from .hwview import hardware_rows
 from .theme_tiles import MonitorButton
 
@@ -779,26 +778,11 @@ class MainWindow(QMainWindow):
                 widget.setChecked(str(widget.property("value")) == value)
         self._wiz_update_hint()
 
-    def _wiz_pick_macos(self, name: str):
-        state = self._wiz_state()
-        state["macos"] = name
-        monitor = getattr(self, "wiz_hero_monitor", None)
-        if monitor is not None:
-            monitor.set_version(name)
-        self._wiz_update_hint()
-
     def _wiz_step_hw(self, page) -> QWidget:
         widget = QWidget()
         lay = QVBoxLayout(widget)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(10)
-        from ..knowledge.oc_platforms import MACOS_VERSIONS
-        hero, self.wiz_hero_monitor, tiles = hero_block(
-            widget, MACOS_VERSIONS[:5], tr.t("wizard.hero_title"),
-            tr.t("wizard.hero_caption"))
-        lay.addWidget(hero)
-        for tile in tiles:
-            tile.picked.connect(self._wiz_pick_macos)
         card = self._card(page)
         cv = QVBoxLayout(card)
         cv.setContentsMargins(16, 12, 16, 12)
