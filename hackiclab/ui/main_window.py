@@ -54,6 +54,7 @@ from ..builder import (
     EFIBuilder,
 )
 from ..i18n import LANG_CODES, LANGS, detect_system_language, tr
+from ..knowledge import manual_hw
 from ..knowledge.configs import (
     STATUS_LIMITED,
     STATUS_NATIVE,
@@ -579,6 +580,7 @@ class MainWindow(QMainWindow):
         self.page_wizard = self._build_wizard()
         self.page_scan = self._build_scan()
         self.page_build = self._build_build()
+        self.page_manual = self._build_manual()
         self.page_validate = self._build_validate()
         self.page_usb = self._build_usb()
         self.page_ports = self._build_ports()
@@ -588,6 +590,7 @@ class MainWindow(QMainWindow):
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
         for page in (self.page_wizard, self.page_scan, self.page_build,
+                     self.page_manual,
                      self.page_validate, self.page_usb, self.page_ports,
                      self.page_analyze, self.page_sources, self.page_donate,
                      self.page_settings, self.page_about):
@@ -1314,8 +1317,278 @@ class MainWindow(QMainWindow):
         index = self.usb_combo.findData(device) if device else -1
         if index >= 0:
             self.usb_combo.setCurrentIndex(index)
-        self._go_page(4)
+        self._go_page(5)
 
+    # ---- manual hardware setup ----
+    def _build_manual(self):
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(28, 24, 28, 24)
+        v.setSpacing(10)
+        self._page_header(page, v, "manual.title", "manual.subtitle")
+
+        cols = QHBoxLayout()
+        cols.setSpacing(18)
+        form = QVBoxLayout()
+        form.setSpacing(8)
+        cols.addLayout(form, 3)
+
+        self.manual_cpu = QComboBox()
+        for option in manual_hw.CPU_OPTIONS:
+            self.manual_cpu.addItem(option.title, option.key)
+        default_index = self.manual_cpu.findData("intel-8d")
+        if default_index >= 0:
+            self.manual_cpu.setCurrentIndex(default_index)
+        self.manual_cpu.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.cpu", self.manual_cpu)
+
+        row = QHBoxLayout()
+        self.manual_laptop = QCheckBox(tr.t("manual.laptop"))
+        self.manual_laptop.toggled.connect(self._manual_refresh)
+        row.addWidget(self.manual_laptop)
+        row.addSpacing(12)
+        row.addWidget(QLabel(tr.t("manual.cores")))
+        self.manual_cores = QSpinBox()
+        self.manual_cores.setRange(2, 64)
+        self.manual_cores.setValue(4)
+        self.manual_cores.valueChanged.connect(self._manual_refresh)
+        row.addWidget(self.manual_cores)
+        row.addStretch()
+        form.addLayout(row)
+
+        self.manual_gpu = QComboBox()
+        for option in manual_hw.GPU_OPTIONS:
+            self.manual_gpu.addItem(option.title, option.key)
+        self.manual_gpu.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.gpu", self.manual_gpu)
+
+        self.manual_audio = QLineEdit()
+        self.manual_audio.setPlaceholderText(tr.t("manual.audio_ph"))
+        self.manual_audio.textChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.audio", self.manual_audio)
+
+        self.manual_eth = QComboBox()
+        for value, title in manual_hw.ETHERNET_OPTIONS:
+            self.manual_eth.addItem(title, value)
+        self.manual_eth.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.eth", self.manual_eth)
+
+        self.manual_wifi = QComboBox()
+        for value, title in manual_hw.WIFI_OPTIONS:
+            self.manual_wifi.addItem(title, value)
+        self.manual_wifi.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.wifi", self.manual_wifi)
+
+        self.manual_touchpad = QComboBox()
+        for value, title in manual_hw.TOUCHPAD_OPTIONS:
+            self.manual_touchpad.addItem(title, value)
+        self.manual_touchpad.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.touchpad", self.manual_touchpad)
+
+        other = QHBoxLayout()
+        self.manual_nvme = QCheckBox(tr.t("manual.nvme"))
+        self.manual_nvme.setChecked(True)
+        self.manual_nvme.toggled.connect(self._manual_refresh)
+        other.addWidget(self.manual_nvme)
+        self.manual_tb = QCheckBox(tr.t("manual.tb"))
+        self.manual_tb.toggled.connect(self._manual_refresh)
+        other.addWidget(self.manual_tb)
+        other.addStretch()
+        form.addLayout(other)
+
+        self.manual_macos = QComboBox()
+        self.manual_macos.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.macos", self.manual_macos)
+
+        actions = QHBoxLayout()
+        self.manual_build_btn = QPushButton(tr.t("manual.build"))
+        self.manual_build_btn.clicked.connect(self._manual_build)
+        actions.addWidget(self.manual_build_btn)
+        self.manual_open_btn = QPushButton(tr.t("manual.open"))
+        self.manual_open_btn.setObjectName("ghost")
+        self.manual_open_btn.setVisible(False)
+        self.manual_open_btn.clicked.connect(self._manual_open)
+        actions.addWidget(self.manual_open_btn)
+        actions.addStretch()
+        form.addLayout(actions)
+
+        self.manual_progress = QProgressBar()
+        self.manual_progress.setRange(0, 100)
+        self.manual_progress.setVisible(False)
+        form.addWidget(self.manual_progress)
+        self.manual_log = QPlainTextEdit()
+        self.manual_log.setReadOnly(True)
+        self.manual_log.setPlaceholderText(tr.t("manual.log_ph"))
+        self.manual_log.setMaximumHeight(180)
+        form.addWidget(self.manual_log)
+        self.manual_result = _val(page, "")
+        self.manual_result.setWordWrap(True)
+        form.addWidget(self.manual_result)
+        form.addStretch()
+
+        review_card = self._card(page)
+        rv = QVBoxLayout(review_card)
+        rv.setContentsMargins(16, 12, 16, 12)
+        rv.addWidget(_h2(page, tr.t("manual.review")))
+        self.manual_review_box = QVBoxLayout()
+        self.manual_review_box.setSpacing(6)
+        rv.addLayout(self.manual_review_box)
+        rv.addStretch()
+        cols.addWidget(review_card, 2, Qt.AlignmentFlag.AlignTop)
+        v.addLayout(cols, 1)
+
+        self._manual_refresh()
+        return page
+
+    def _manual_field(self, page, layout, label_key: str, widget):
+        row = QHBoxLayout()
+        label = QLabel(tr.t(label_key), page)
+        label.setObjectName("kv")
+        label.setMinimumWidth(150)
+        row.addWidget(label)
+        row.addWidget(widget, 1)
+        layout.addLayout(row)
+
+    def _manual_selection(self):
+        return manual_hw.ManualSelection(
+            cpu=str(self.manual_cpu.currentData() or "intel-8d"),
+            laptop=self.manual_laptop.isChecked(),
+            cores=self.manual_cores.value(),
+            gpu=str(self.manual_gpu.currentData() or ""),
+            audio_codec=self.manual_audio.text().strip(),
+            ethernet=str(self.manual_eth.currentData() or ""),
+            wifi=str(self.manual_wifi.currentData() or ""),
+            nvme=self.manual_nvme.isChecked(),
+            thunderbolt=self.manual_tb.isChecked(),
+            touchpad=str(self.manual_touchpad.currentData() or "ps2"),
+        )
+
+    def _manual_refresh(self, *_args):
+        if not hasattr(self, "manual_review_box"):
+            return
+        profile = manual_hw.build_profile(self._manual_selection())
+        self.manual_profile = profile
+        self.manual_touchpad.setEnabled(profile.platform == "laptop")
+        self._manual_fill_macos(profile)
+        target = str(self.manual_macos.currentData() or "")
+        self._manual_render(profile, manual_hw.review(profile, target, "itlwm"))
+
+    def _manual_fill_macos(self, profile):
+        from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
+        ceiling = MAX_MACOS_BY_GEN.get(profile.cpu.generation, "Sonoma")
+        order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
+                 "Ventura", "Sonoma", "Sequoia", "Tahoe"]
+
+        def rank(name: str) -> int:
+            low = (name or "").lower()
+            return next((i for i, item in enumerate(order) if item.lower() in low), -1)
+
+        current = str(self.manual_macos.currentData() or "")
+        limit = rank(ceiling)
+        self.manual_macos.blockSignals(True)
+        self.manual_macos.clear()
+        for entry in MACOS_VERSIONS:
+            name = str(entry.get("name") or "")
+            if limit >= 0 and rank(name) > limit:
+                continue
+            self.manual_macos.addItem(name, name)
+        index = self.manual_macos.findData(current)
+        if index < 0 and self.manual_macos.count():
+            index = 0
+        if index >= 0:
+            self.manual_macos.setCurrentIndex(index)
+        self.manual_macos.blockSignals(False)
+
+    def _manual_render(self, profile, data):
+        self._clear_layout(self.manual_review_box)
+        platform_key = f"hw.platform.{data['platform']}"
+        platform_text = tr.t(platform_key) if data["platform"] in (
+            "laptop", "desktop", "mini", "workstation") else data["platform"]
+        rows = [
+            ("manual.r.gen", f"{data['generation']} · {data['codename']}"),
+            ("manual.r.platform", platform_text),
+            ("manual.r.max", data["max_macos"]),
+            ("manual.r.smbios", data["smbios"] or "—"),
+            ("manual.r.kexts", f"{data['kext_count']}: " + ", ".join(data["kexts"][:8])
+             + ("…" if data["kext_count"] > 8 else "")),
+            ("manual.r.ssdts", ", ".join(data["ssdts"]) or "—"),
+        ]
+        for key, value in rows:
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            label = QLabel(tr.t(key), row)
+            label.setObjectName("kv")
+            label.setMinimumWidth(110)
+            rl.addWidget(label)
+            text = _val(row, value)
+            text.setWordWrap(True)
+            rl.addWidget(text, 1)
+            self.manual_review_box.addWidget(row)
+        for issue in data["issues"]:
+            prefix = {"ok": "✔", "warn": "⚠", "err": "✖"}.get(issue["level"], "•")
+            label = QLabel(f"{prefix} {issue['text']}", self.manual_review_box.parentWidget())
+            label.setWordWrap(True)
+            label.setObjectName(issue["level"] if issue["level"] in ("ok", "warn", "err") else "muted")
+            self.manual_review_box.addWidget(label)
+
+    def _manual_build(self):
+        worker = getattr(self, "_worker_manual", None)
+        if worker is not None and worker.isRunning():
+            return
+        profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
+            self._manual_selection())
+        folder = QFileDialog.getExistingDirectory(self, tr.t("manual.pick"))
+        if not folder:
+            return
+        target = Path(folder) / "EFI"
+        opts = BuildOptions(target_macos=str(self.manual_macos.currentData() or ""),
+                            wifi_kext_mode="itlwm", usb_toolbox=True)
+        plan = BuildPlan(profile=profile, options=opts)
+        self._manual_last_target = target
+        self.manual_log.clear()
+        self.manual_progress.setVisible(True)
+        self.manual_progress.setValue(0)
+        self.manual_result.setText("")
+        self.manual_open_btn.setVisible(False)
+        self.manual_build_btn.setEnabled(False)
+        self._worker_manual = BuildWorker(plan, target)
+        self._worker_manual.progress.connect(self._manual_progress)
+        self._worker_manual.done.connect(self._manual_done)
+        self._worker_manual.failed.connect(self._manual_failed)
+        self._worker_manual.start()
+
+    def _manual_progress(self, percent: int, message: str):
+        self.manual_log.appendPlainText(f"[{percent:3d}%] {message}")
+        self.manual_log.verticalScrollBar().setValue(
+            self.manual_log.verticalScrollBar().maximum())
+        self.manual_progress.setValue(percent)
+
+    def _manual_done(self, res):
+        self.manual_build_btn.setEnabled(True)
+        self.manual_progress.setValue(100)
+        ok = bool(getattr(res, "ok", False))
+        root = getattr(res, "root", None) or getattr(self, "_manual_last_target", None)
+        self.manual_result.setText(
+            tr.t("manual.build.ok") if ok else tr.t("manual.build.fail"))
+        self.manual_result.setProperty("tone", "ok" if ok else "err")
+        self.manual_result.style().unpolish(self.manual_result)
+        self.manual_result.style().polish(self.manual_result)
+        self.manual_open_btn.setVisible(bool(root))
+        for error in list(getattr(res, "errors", []) or [])[:10]:
+            self.manual_log.appendPlainText(f"[err] {error}")
+        for line in (getattr(res, "log", []) or [])[-30:]:
+            self.manual_log.appendPlainText(line)
+
+    def _manual_failed(self, err):
+        self.manual_build_btn.setEnabled(True)
+        self.manual_progress.setVisible(False)
+        self.manual_result.setText(str(err))
+
+    def _manual_open(self):
+        target = getattr(self, "_manual_last_target", None)
+        if target:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
     def _build_build(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
@@ -2714,6 +2987,8 @@ class MainWindow(QMainWindow):
             it = lay.takeAt(0)
             w = it.widget()
             if w is not None:
+                w.hide()
+                w.setParent(None)
                 w.deleteLater()
 
     def _refresh_sources(self):
@@ -3647,6 +3922,7 @@ class MainWindow(QMainWindow):
         )),
         ("nav.group.build", (
             ("nav.build", "⚙", "nav.build.sub"),
+            ("nav.manual", "🧩", "nav.manual.sub"),
             ("nav.validate", "✔", "nav.validate.sub"),
             ("usb.nav", "💾", "usb.nav.sub"),
         )),

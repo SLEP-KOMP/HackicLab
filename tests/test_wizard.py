@@ -75,7 +75,7 @@ class WindowTests(unittest.TestCase):
 
     def test_nav_has_groups_and_all_pages(self):
         titles = self.win._nav_titles()
-        self.assertEqual(len(titles), 11)
+        self.assertEqual(len(titles), 12)
         self.assertEqual(titles[0], tr.t("nav.wizard"))
         headers = [self.win.nav.item(i) for i in range(self.win.nav.count())
                    if self.win._nav_rows[i] < 0]
