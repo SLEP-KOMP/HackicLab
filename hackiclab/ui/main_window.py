@@ -3996,26 +3996,34 @@ class MainWindow(QMainWindow):
         self._nav_keys = []
         self._nav_icons = []
         page = 0
-        for group_key, items in self.NAV_GROUPS:
-            header = QListWidgetItem(tr.t(group_key).upper())
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            header.setData(Qt.ItemDataRole.UserRole, "header")
-            header.setSizeHint(QSize(0, 28))
-            self.nav.addItem(header)
-            self._nav_rows.append(-1)
+        first_group = True
+        for _group_key, items in self.NAV_GROUPS:
+            if not first_group:
+                # разделитель между группами: без текста, чтобы скринридер
+                # не читал служебные слова вроде «Начало» и «Сборка»
+                spacer = QListWidgetItem()
+                spacer.setFlags(Qt.ItemFlag.NoItemFlags)
+                spacer.setSizeHint(QSize(0, 12))
+                self.nav.addItem(spacer)
+                self._nav_rows.append(-1)
+            first_group = False
             for title_key, icon, _sub_key in items:
+                label = tr.t(title_key)
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, title_key)
+                item.setData(Qt.ItemDataRole.AccessibleTextRole, label)
                 item.setSizeHint(QSize(0, 40))
                 self.nav.addItem(item)
                 widget = QWidget()
                 widget.setAttribute(
                     Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                widget.setAccessibleName(label)
                 lay = QHBoxLayout(widget)
                 lay.setContentsMargins(12, 0, 10, 0)
                 lay.setSpacing(10)
-                title = QLabel(f"{icon}  {tr.t(title_key)}", widget)
+                title = QLabel(f"{icon}  {label}", widget)
                 title.setObjectName("navTitle")
+                title.setAccessibleName(label)
                 lay.addWidget(title)
                 lay.addStretch(1)
                 self.nav.setItemWidget(item, widget)

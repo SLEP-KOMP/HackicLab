@@ -87,7 +87,7 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(titles[0], tr.t("nav.wizard"))
         headers = [self.win.nav.item(i) for i in range(self.win.nav.count())
                    if self.win._nav_rows[i] < 0]
-        self.assertEqual(len(headers), 3)
+        self.assertEqual(len(headers), 2)
 
     def test_every_nav_row_opens_its_page(self):
         for page, row in self.win._page_rows.items():
