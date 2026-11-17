@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from ..i18n import tr
 from ..scanner.models import HardwareProfile
 
 _PLATFORM = {"laptop": "hw.platform.laptop", "desktop": "hw.platform.desktop",
@@ -97,6 +98,10 @@ def _wifi_line(profile: HardwareProfile) -> tuple[str, str]:
         note = vendor
     if model and model.lower() not in (net.wifi_name or "").lower():
         note = f"{model} · {note}" if note else model
+    ignored = [item for item in (net.ignored_wifi or []) if item]
+    if ignored:
+        extra = tr.t("hw.wifi.inactive") + ": " + ", ".join(ignored[:2])
+        note = f"{note} · {extra}" if note else extra
     return name, note
 
 

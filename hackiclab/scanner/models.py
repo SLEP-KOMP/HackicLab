@@ -96,6 +96,8 @@ class NetInfo:
     # True если найден нативный Apple Bluetooth-модуль (VID 05AC) — как у карт
     # BCM94360CD/BCM943602CS: ему не нужны BrcmPatchRAM/BrcmFirmwareData.
     bt_native_apple: bool = False
+    # Неактивные Wi-Fi адаптеры: их видит Windows, но выбирать их нельзя.
+    ignored_wifi: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -110,6 +112,7 @@ class NetInfo:
             "bt_chipset": self.bt_chipset,
             "has_bt": self.has_bt,
             "bt_native_apple": self.bt_native_apple,
+            "ignored_wifi": self.ignored_wifi,
         }
 
 

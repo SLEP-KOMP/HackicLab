@@ -280,6 +280,20 @@ class WindowsScanner:
         """)
         w = wifi.strip()
         p.net.wifi_name = w
+        # Windows видит и отключённые адаптеры (например, старый MediaTek рядом
+        # с рабочим Broadcom). Их нельзя выбирать для подбора кекстов, но
+        # полезно показать пользователю, чтобы не было сомнений.
+        inactive = ps.run("""
+            Get-CimInstance Win32_NetworkAdapter | Where-Object {
+                ($_.NetEnabled -ne $true -or $_.PhysicalAdapter -ne $true) -and
+                $_.Name -match 'Wi-Fi|Wireless|WiFi|802.11|WLAN|ac' -and
+                $_.Name -notmatch 'Virtual|Wi-Fi Direct'
+            } | ForEach-Object { $_.Name }
+        """)
+        p.net.ignored_wifi = [
+            line.strip() for line in inactive.splitlines()
+            if line.strip() and line.strip() != w
+        ]
         wl = w.lower()
         if "intel" in wl: p.net.wifi_chipset = "intel"
         elif "broadcom" in wl or "bcm" in wl: p.net.wifi_chipset = "broadcom"

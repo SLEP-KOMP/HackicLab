@@ -41,6 +41,14 @@ class HardwareRowsTests(unittest.TestCase):
         self.assertEqual(wifi_model("Intel(R) Wi-Fi 6 AX201 160MHz", "intel"), "AX201")
         self.assertEqual(wifi_model("", "broadcom"), "Broadcom")
 
+    def test_inactive_wifi_adapter_is_reported(self):
+        profile = desktop_profile()
+        profile.net.ignored_wifi = ["MediaTek Wi-Fi 7 MT7925 Wireless LAN Card"]
+        rows = {row["key"]: row for row in hardware_rows(profile, "Sonoma")}
+        from hackiclab.i18n import tr
+        self.assertIn(tr.t("hw.wifi.inactive"), rows["hw.wifi"]["note"])
+        self.assertIn("MT7925", rows["hw.wifi"]["note"])
+
     def test_rows_cover_all_devices(self):
         rows = {row["key"]: row for row in hardware_rows(desktop_profile(), "Sonoma")}
         self.assertIn("hw.cpu", rows)

@@ -127,6 +127,7 @@ T = {
         "hw.platform.mini": "Мини-ПК",
         "hw.platform.workstation": "Рабочая станция",
         "hw.bt.native": "нативный модуль Apple",
+        "hw.wifi.inactive": "неактивен и не учитывается",
         "scan.save": "Сохранить профиль",
         "scan.saved": "Профиль сохранён",
         # wizard
@@ -722,6 +723,7 @@ T = {
         "hw.platform.mini": "Mini PC",
         "hw.platform.workstation": "Workstation",
         "hw.bt.native": "native Apple module",
+        "hw.wifi.inactive": "inactive, ignored",
         "scan.save": "Save profile",
         "scan.saved": "Profile saved",
         # wizard
