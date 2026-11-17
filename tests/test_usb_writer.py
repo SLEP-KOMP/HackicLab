@@ -153,3 +153,33 @@ class ConfirmPhraseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BackupTests(unittest.TestCase):
+    def test_list_backups_sorted_by_time(self):
+        import os
+        import tempfile
+        import time
+        from pathlib import Path
+
+        from hackiclab.builder.usb_writer import list_backups
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = root / "EFI-old"
+            new = root / "EFI-new"
+            old.mkdir()
+            new.mkdir()
+            os.utime(old, (time.time() - 100, time.time() - 100))
+            names = [p.name for p in list_backups(root)]
+        self.assertEqual(names, ["EFI-new", "EFI-old"])
+
+    def test_restore_requires_existing_backup(self):
+        import tempfile
+        from pathlib import Path
+
+        from hackiclab.builder.usb_writer import restore_backup
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(RuntimeError):
+                restore_backup(Path(tmp) / "missing", "Z")

@@ -674,7 +674,8 @@ class MainWindow(QMainWindow):
             state = {
                 "step": 0, "profile": None, "macos": "", "kind": "usb",
                 "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
-                "usb_toolbox": True,
+                "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
+                "share_log": False,
             }
             self._wiz = state
         return state
@@ -690,7 +691,8 @@ class MainWindow(QMainWindow):
         steps.setSpacing(6)
         self.wiz_chips = []
         step_keys = ("wizard.step.hw", "wizard.step.macos", "wizard.step.target",
-                     "wizard.step.mode", "wizard.step.wifi", "wizard.step.summary")
+                     "wizard.step.mode", "wizard.step.wifi", "wizard.step.options",
+                     "wizard.step.summary")
         for index, key in enumerate(step_keys):
             chip = QLabel(f"{index + 1}. {tr.t(key)}", page)
             chip.setObjectName("stepChip")
@@ -706,6 +708,7 @@ class MainWindow(QMainWindow):
         self.wiz_stack.addWidget(self._wiz_step_target(page))
         self.wiz_stack.addWidget(self._wiz_step_mode(page))
         self.wiz_stack.addWidget(self._wiz_step_wifi(page))
+        self.wiz_stack.addWidget(self._wiz_step_options(page))
         self.wiz_stack.addWidget(self._wiz_step_summary(page))
         v.addWidget(self.wiz_stack, 1)
 
@@ -851,6 +854,63 @@ class MainWindow(QMainWindow):
         lay.addStretch()
         return widget
 
+    def _wiz_step_options(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        lay.addWidget(_h2(page, tr.t("wizard.options.dual")))
+        self.wiz_dual_box = QVBoxLayout()
+        self.wiz_dual_box.setSpacing(6)
+        for value, key in (
+            ("", "wizard.options.dual.none"),
+            ("windows", "wizard.options.dual.windows"),
+            ("linux", "wizard.options.dual.linux"),
+            ("both", "wizard.options.dual.both"),
+        ):
+            btn = self._wiz_option(page, self.wiz_dual_box, "dual_boot", value, tr.t(key))
+            btn.setChecked(value == "")
+        lay.addLayout(self.wiz_dual_box)
+
+        self.wiz_dgpu_chk = QCheckBox(tr.t("wizard.options.dgpu"))
+        self.wiz_dgpu_chk.toggled.connect(
+            lambda on: self._wiz_state().__setitem__("disable_dgpu", bool(on)))
+        lay.addWidget(self.wiz_dgpu_chk)
+        dgpu_note = _muted(page, tr.t("wizard.options.dgpu_desc"))
+        dgpu_note.setWordWrap(True)
+        lay.addWidget(dgpu_note)
+
+        self.wiz_share_chk = QCheckBox(tr.t("wizard.options.share"))
+        self.wiz_share_chk.toggled.connect(
+            lambda on: self._wiz_state().__setitem__("share_log", bool(on)))
+        lay.addWidget(self.wiz_share_chk)
+        share_note = _muted(page, tr.t("wizard.options.share_desc"))
+        share_note.setWordWrap(True)
+        lay.addWidget(share_note)
+        lay.addStretch()
+        return widget
+
+    def _wiz_fill_options(self):
+        state = self._wiz_state()
+        profile = state.get("profile")
+        dgpu = getattr(profile, "dgpu", None) if profile is not None else None
+        has_dgpu = bool(dgpu)
+        self.wiz_dgpu_chk.setVisible(has_dgpu)
+        if not has_dgpu:
+            state["disable_dgpu"] = False
+            self.wiz_dgpu_chk.setChecked(False)
+        elif dgpu is not None and dgpu.vendor == "nvidia":
+            # Nvidia в macOS не работает: предлагаем отключить сразу
+            self.wiz_dgpu_chk.setChecked(True)
+            state["disable_dgpu"] = True
+        self.wiz_share_chk.setChecked(bool(state.get("share_log", False)))
+        for index in range(self.wiz_dual_box.count()):
+            item = self.wiz_dual_box.itemAt(index)
+            widget = item.widget() if item is not None else None
+            if isinstance(widget, QPushButton):
+                widget.setChecked(str(widget.property("value") or "") ==
+                                  str(state.get("dual_boot") or ""))
+
     def _wiz_step_summary(self, page) -> QWidget:
         widget = QWidget()
         lay = QVBoxLayout(widget)
@@ -912,6 +972,8 @@ class MainWindow(QMainWindow):
         elif step == 2:
             self._wiz_fill_target()
         elif step == 5:
+            self._wiz_fill_options()
+        elif step == 6:
             self._wiz_fill_summary()
         self._wiz_update_hint()
 
@@ -949,6 +1011,8 @@ class MainWindow(QMainWindow):
             text = tr.t("wizard.mode." + str(state.get("mode") or "full") + "_hint")
         elif step == 4:
             text = tr.t("wizard.wifi.hint")
+        elif step == 5:
+            text = tr.t("wizard.hint.options")
         label.setText(text)
 
     def _wiz_fill_hw(self):
@@ -1058,6 +1122,13 @@ class MainWindow(QMainWindow):
             ("wizard.sum.wifi", tr.t("wizard.wifi." + str(state.get("wifi") or "itlwm"))),
             ("hw.smbios", smbios or "—"),
         ]
+        dual = str(state.get("dual_boot") or "")
+        if dual:
+            rows.append(("wizard.sum.dual", tr.t("wizard.options.dual." + dual)))
+        if state.get("disable_dgpu"):
+            rows.append(("wizard.sum.dgpu", tr.t("wizard.sum.dgpu_off")))
+        if state.get("share_log"):
+            rows.append(("wizard.sum.share", tr.t("wizard.sum.share_on")))
         for key, value in rows:
             row = QWidget()
             rl = QHBoxLayout(row)
@@ -1154,6 +1225,8 @@ class MainWindow(QMainWindow):
             disable_sip=True,
             wifi_kext_mode=str(state.get("wifi") or "itlwm"),
             target_macos=str(state.get("macos") or ""),
+            disable_dgpu=bool(state.get("disable_dgpu")),
+            dual_boot=str(state.get("dual_boot") or ""),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target
@@ -1204,6 +1277,18 @@ class MainWindow(QMainWindow):
             self.wiz_log.appendPlainText(f"[err] {error}")
         if root:
             self.wiz_log.appendPlainText(tr.t("wizard.build.saved").format(path=root))
+            if self._wiz_state().get("share_log"):
+                try:
+                    from ..knowledge import hwdb
+                    text = hwdb.build_report(self._wiz_state().get("profile"),
+                                             getattr(self, "_last_build_options", None),
+                                             res)
+                    report_path = Path(root) / "HackicLab-build-report.log"
+                    report_path.write_text(text, encoding="utf-8")
+                    self.wiz_log.appendPlainText(
+                        tr.t("wizard.build.report_saved").format(path=report_path))
+                except Exception as exc:
+                    self.wiz_log.appendPlainText(f"[warn] {exc}")
         for line in (getattr(res, "log", []) or [])[-40:]:
             self.wiz_log.appendPlainText(line)
 
@@ -1805,6 +1890,29 @@ class MainWindow(QMainWindow):
         hv.addLayout(hbtns)
         v.addWidget(hist_card)
 
+        # --- 3.7. Резервные копии EFI ---
+        bk_card = self._card(page)
+        bv = QVBoxLayout(bk_card)
+        brow = QHBoxLayout()
+        brow.addWidget(_h2(page, tr.t("usb.backups.title")))
+        brow.addStretch()
+        self.backup_refresh_btn = QPushButton(tr.t("usb.backups.refresh"))
+        self.backup_refresh_btn.setObjectName("ghost")
+        self.backup_refresh_btn.clicked.connect(self._backup_refresh)
+        brow.addWidget(self.backup_refresh_btn)
+        bv.addLayout(brow)
+        bk_hint = _muted(page, tr.t("usb.backups.hint")); bk_hint.setWordWrap(True)
+        bv.addWidget(bk_hint)
+        self.backup_combo = QComboBox()
+        bv.addWidget(self.backup_combo)
+        self.backup_empty = _muted(page, tr.t("usb.backups.empty")); self.backup_empty.setWordWrap(True)
+        bv.addWidget(self.backup_empty)
+        self.backup_restore_btn = QPushButton(tr.t("usb.backups.restore"))
+        self.backup_restore_btn.setObjectName("ghost")
+        self.backup_restore_btn.clicked.connect(self._backup_restore)
+        bv.addWidget(self.backup_restore_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        v.addWidget(bk_card)
+
         v.addStretch()
 
         # --- Кнопки ---
@@ -1832,8 +1940,9 @@ class MainWindow(QMainWindow):
         self.usb_log.setPlaceholderText(tr.t("common.log_placeholder"))
         v.addWidget(self.usb_log, 1)
 
-        # сразу просканируем флешки и историю
+        # сразу просканируем флешки, историю и резервные копии
         self._usb_refresh()
+        self._backup_refresh()
         self._history_refresh()
         return page
 
@@ -2005,6 +2114,67 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage(tr.t("history.restored").format(path=out), 8000)
 
+    def _backup_refresh(self):
+        """Список резервных копий EFI, которые создаются перед перезаписью."""
+        combo = getattr(self, "backup_combo", None)
+        if combo is None:
+            return
+        try:
+            from ..builder.usb_writer import list_backups
+            backups = list_backups()
+        except Exception:
+            backups = []
+        combo.blockSignals(True)
+        combo.clear()
+        for path in backups:
+            combo.addItem(path.name, str(path))
+        combo.blockSignals(False)
+        combo.setEnabled(bool(backups))
+        self.backup_restore_btn.setEnabled(bool(backups))
+        self.backup_empty.setVisible(not backups)
+
+    def _backup_restore(self):
+        """Возвращает выбранную резервную копию на флешку после подтверждения."""
+        from PySide6.QtWidgets import QInputDialog
+
+        from ..builder import usb_writer
+
+        worker = getattr(self, "_worker_usb", None)
+        if worker is not None and worker.isRunning():
+            return
+        path = self.backup_combo.currentData() if hasattr(self, "backup_combo") else None
+        if not path:
+            return
+        device = self.usb_combo.currentData() if hasattr(self, "usb_combo") else ""
+        if not device:
+            QMessageBox.information(self, tr.t("usb.backups.title"), tr.t("usb.choose"))
+            return
+        if not self._ensure_admin():
+            return
+        dev = next((x for x in getattr(self, "usb_devices", []) if x.device == device), None)
+        disk_number = getattr(dev, "disk_number", "") if dev else ""
+        try:
+            letter = usb_writer.resolve_drive_letter(device, disk_number)
+        except Exception as exc:
+            QMessageBox.critical(self, tr.t("usb.backups.title"), str(exc))
+            return
+        phrase = self._confirm_phrase(device, disk_number)
+        text, ok = QInputDialog.getText(
+            self, tr.t("usb.backups.restore"),
+            tr.t("usb.backups.type").format(phrase=phrase))
+        if not ok or text.strip().upper() != phrase:
+            return
+        self.usb_log.appendPlainText(
+            f"→ {tr.t('usb.backups.restored_from')}: {path}")
+        try:
+            usb_writer.restore_backup(Path(str(path)), letter,
+                                      log=self.usb_log.appendPlainText)
+        except Exception as exc:
+            QMessageBox.critical(self, tr.t("usb.backups.title"), str(exc))
+            return
+        self.usb_log.appendPlainText(tr.t("usb.backups.restored"))
+        self.statusBar().showMessage(tr.t("usb.backups.restored"), 6000)
+        self._backup_refresh()
     def _usb_select(self):
         idx = self.usb_combo.currentIndex()
         if idx < 0 or not getattr(self, "usb_devices", None):

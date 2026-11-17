@@ -144,10 +144,14 @@ class EFIBuilder:
                     res.stats["opencore"] = "OK"
                 else:
                     self._log("  OpenCore.efi/BOOTx64.efi не найдены в архиве")
-                # обязательные UEFI-драйверы: OpenRuntime + OpenHfsPlus
+                # обязательные UEFI-драйверы: OpenRuntime + OpenHfsPlus;
+                # для Linux в мультизагрузке добавляем OpenLinuxBoot
                 placed_drivers = []
                 drivers_dir = (x64_efi / "OC" / "Drivers") if x64_efi else (extract / "Drivers")
-                for drv in ("OpenRuntime.efi", "OpenHfsPlus.efi"):
+                wanted = ["OpenRuntime.efi", "OpenHfsPlus.efi"]
+                if getattr(self.plan.options, "dual_boot", "") in ("linux", "both"):
+                    wanted.append("OpenLinuxBoot.efi")
+                for drv in wanted:
                     src = drivers_dir / drv
                     if not src.exists():
                         src = next(extract.rglob(drv), None)

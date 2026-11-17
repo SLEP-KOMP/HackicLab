@@ -87,9 +87,9 @@ class WindowTests(unittest.TestCase):
             self.app.processEvents()
             self.assertEqual(self.win.stack.currentIndex(), page)
 
-    def test_wizard_has_six_steps(self):
-        self.assertEqual(self.win.wiz_stack.count(), 6)
-        self.assertEqual(len(self.win.wiz_chips), 6)
+    def test_wizard_has_seven_steps(self):
+        self.assertEqual(self.win.wiz_stack.count(), 7)
+        self.assertEqual(len(self.win.wiz_chips), 7)
         self.assertEqual(self.win._wiz_state()["step"], 0)
 
     def test_next_requires_scan(self):
@@ -107,7 +107,7 @@ class WindowTests(unittest.TestCase):
         self.win._wiz_fill_target()
         self.assertEqual(self.win._wiz_target_label(), "C:/EFI")
         self.win._wiz_state().update({"macos": "macOS Sonoma"})
-        self.win._wiz_show(5)
+        self.win._wiz_show(6)
         self.assertGreater(self.win.wiz_sum_rows.count(), 0)
 
     def test_macos_list_respects_generation(self):
@@ -122,3 +122,66 @@ class WindowTests(unittest.TestCase):
                 labels.append(widget.text())
         self.assertTrue(labels)
         self.assertFalse(any("Tahoe" in label for label in labels))
+
+
+class OptionsStepTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from hackiclab.ui.main_window import MainWindow
+        self.win = MainWindow()
+        self.addCleanup(self.win.close)
+        self.addCleanup(self.win.deleteLater)
+
+    def test_wizard_has_seven_steps(self):
+        self.assertEqual(self.win.wiz_stack.count(), 7)
+        self.assertEqual(len(self.win.wiz_chips), 7)
+
+    def test_options_step_collects_choices(self):
+        from PySide6.QtWidgets import QPushButton
+
+        profile = desktop_profile()
+        self.win._wiz_state().update({"profile": profile, "macos": "macOS Sonoma",
+                                      "folder": "C:/EFI", "kind": "folder"})
+        self.win._wiz_show(5)
+        item = self.win.wiz_dual_box.itemAt(3)
+        button = item.widget() if item is not None else None
+        if isinstance(button, QPushButton):
+            button.click()
+        self.win.wiz_share_chk.setChecked(True)
+        state = self.win._wiz_state()
+        self.assertEqual(state["dual_boot"], "both")
+        self.assertTrue(state["share_log"])
+
+    def test_options_step_suggests_dgpu_disable_for_nvidia(self):
+        profile = desktop_profile()
+        profile.dgpu = GPUInfo(name="GeForce RTX 3060", vendor="nvidia")
+        self.win._wiz_state().update({"profile": profile})
+        self.win._wiz_show(5)
+        self.assertTrue(self.win.wiz_dgpu_chk.isChecked())
+
+    def test_summary_shows_options(self):
+        profile = desktop_profile()
+        self.win._wiz_state().update({
+            "profile": profile, "macos": "macOS Sonoma", "folder": "C:/EFI",
+            "kind": "folder", "dual_boot": "both", "disable_dgpu": True,
+            "share_log": True,
+        })
+        self.win._wiz_show(6)
+        from PySide6.QtWidgets import QLabel
+        text = []
+        for i in range(self.win.wiz_sum_rows.count()):
+            row_item = self.win.wiz_sum_rows.itemAt(i)
+            widget = row_item.widget() if row_item is not None else None
+            if widget is not None:
+                text.extend(label.text() for label in widget.findChildren(QLabel))
+        joined = " ".join(text)
+        self.assertIn(tr.t("wizard.sum.dual"), joined)
+        self.assertIn(tr.t("wizard.sum.dgpu"), joined)
+        self.assertIn(tr.t("wizard.sum.share"), joined)

@@ -64,3 +64,37 @@ class ConfigGenTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GpuAndDualBootTests(unittest.TestCase):
+    def _profile_with_dgpu(self):
+        p = desktop_profile()
+        p.dgpu = GPUInfo(name="GeForce RTX 3060", vendor="nvidia", device_id="2504")
+        return p
+
+    def test_disable_dgpu_adds_boot_arg(self):
+        cfg = plistlib.loads(generate_config_plist(
+            self._profile_with_dgpu(), BuildOptions(disable_dgpu=True)))
+        boot_args = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
+        self.assertIn("-wegnoegpu", boot_args)
+
+    def test_no_boot_arg_without_dgpu(self):
+        cfg = plistlib.loads(generate_config_plist(
+            desktop_profile(), BuildOptions(disable_dgpu=True)))
+        boot_args = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
+        self.assertNotIn("-wegnoegpu", boot_args)
+
+    def test_linux_dual_boot_keeps_driver_entry(self):
+        import tempfile
+        from pathlib import Path
+
+        from hackiclab.builder.efi_layout import EFILayout
+        data = generate_config_plist(desktop_profile(), BuildOptions(dual_boot="both"))
+        with tempfile.TemporaryDirectory() as tmp:
+            layout = EFILayout(Path(tmp))
+            layout.create()
+            path = layout.write_plist_with_kexts(
+                data, [], driver_names=["OpenRuntime.efi", "OpenLinuxBoot.efi"])
+            cfg = plistlib.loads(Path(path).read_bytes())
+        drivers = [d["Path"] for d in cfg["UEFI"]["Drivers"]]
+        self.assertIn("OpenLinuxBoot.efi", drivers)

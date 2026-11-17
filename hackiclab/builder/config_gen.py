@@ -54,6 +54,10 @@ class BuildOptions:
     custom_smbios: Optional["SMBIOSData"] = None
     target_macos: str = ""              # e.g. "Sonoma"
     verbose: bool = False
+    # Отключить дискретную видеокарту (WhateverGreen: -wegnoegpu)
+    disable_dgpu: bool = False
+    # Мультизагрузка: "" / windows / linux / both — для linux ставим OpenLinuxBoot
+    dual_boot: str = ""
     # Патчи, которые клиент хочет искусственно пропустить (набор имён kext)
     skip_kexts: set = field(default_factory=set)
 
@@ -172,6 +176,11 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot_args = str(nv.get("boot-args") or "")
         if "alcid=" not in boot_args:
             nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
+    if options.disable_dgpu and profile.dgpu:
+        # WhateverGreen: не поднимать внешнюю видеокарту вовсе
+        boot_args = str(nv.get("boot-args") or "")
+        if "-wegnoegpu" not in boot_args:
+            nv["boot-args"] = f"{boot_args} -wegnoegpu".strip()
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
     if options.custom_smbios:

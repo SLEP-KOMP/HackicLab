@@ -832,3 +832,27 @@ def install_recovery_layer(target_letter: str, macos_name: str, log=None) -> str
         return f"recovery: {version.name} ({copied} файлов)"
     finally:
         shutil.rmtree(str(tmp), ignore_errors=True)
+
+
+def list_backups(backup_root: Optional[Path] = None) -> list[Path]:
+    """Резервные копии EFI, самые свежие сверху.
+
+    Копии создаются автоматически перед перезаписью EFI на флешке — по ним
+    можно откатиться, если ремонт или новая сборка что-то сломали.
+    """
+    root = Path(backup_root) if backup_root else _backup_root()
+    if not root.is_dir():
+        return []
+    items = [p for p in root.iterdir() if p.is_dir()]
+    items.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return items
+
+
+def restore_backup(backup_dir: Path, target_letter: str, log=None,
+                   backup_root: Optional[Path] = None) -> Optional[Path]:
+    """Возвращает резервную копию EFI на флешку, сохраняя текущую в бэкап."""
+    src = Path(backup_dir)
+    if not src.is_dir():
+        raise RuntimeError(f"Резервная копия не найдена: {src}")
+    return copy_efi(src, target_letter, log=log, backup=True,
+                    backup_root=backup_root)
