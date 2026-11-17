@@ -50,6 +50,7 @@ class EFIBuilder:
         self.plan = plan
         self.log: list[str] = []
         self.on_progress = on_progress
+        self._last_percent = 0
 
     def _log(self, msg: str):
         self.log.append(msg)
@@ -57,9 +58,14 @@ class EFIBuilder:
     def _step(self, percent: int, msg: str):
         """Пишет шаг в журнал и сразу отдаёт его с процентом в интерфейс."""
         self._log(msg)
+        # прогресс не должен идти назад: карточка с яблоком показывает проценты
+        value = max(0, min(100, int(percent)))
+        if value < self._last_percent:
+            value = self._last_percent
+        self._last_percent = value
         if self.on_progress is not None:
             try:
-                self.on_progress(max(0, min(100, int(percent))), msg)
+                self.on_progress(value, msg)
             except Exception:
                 pass
 
@@ -179,7 +185,7 @@ class EFIBuilder:
         for index, e in enumerate(selected, 1):
             if e.internal:
                 continue  # входят в состав родительского архива
-            self._step(30 + int(40 * index / total_kexts), f"Скачиваю {e.name}…")
+            self._step(30 + int(34 * index / total_kexts), f"Скачиваю {e.name}…")
             try:
                 dl.download_kext(e, kexts_dir)
                 downloaded.append(e.name)
@@ -293,7 +299,6 @@ class EFIBuilder:
         if layout.errors:
             res.errors.extend(layout.errors)
             res.ok = False
-        res.warnings = list(layout.warnings) + list(dl.log)
 
         # пустая папка Tools только путает: OpenCore её не требует
         tools_dir = layout.oc / "Tools"

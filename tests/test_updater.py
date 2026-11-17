@@ -186,15 +186,16 @@ class ParseReleaseTests(unittest.TestCase):
         """Кэш от прошлой заливки не должен превращаться в «доступно обновление»."""
         local = "sha256:" + "1" * 64
         old = "sha256:" + "2" * 64
+        tag = f"v{updater.__version__}"
         self._temp_cache()
         updater._write_cache({
-            "tag": "v1.0.2", "version": "1.0.2", "notes": "",
+            "tag": tag, "version": updater.__version__, "notes": "",
             "page_url": "https://example.com", "asset_url": "https://example.com/HackicLab.exe",
             "asset_size": 100, "asset_digest": old, "ts": 9e12,
         })
         with mock.patch.object(updater, "current_binary_digest", return_value=local), \
                 mock.patch.object(updater, "_http", side_effect=updater._RateLimited("0")), \
-                mock.patch.object(updater, "_fetch_atom_tag", return_value="v1.0.2"), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=tag), \
                 mock.patch.object(updater, "remote_asset_digest", return_value=local), \
                 mock.patch.object(updater, "_remote_size", return_value=100):
             self.assertIsNone(updater.check_for_update())
@@ -203,7 +204,7 @@ class ParseReleaseTests(unittest.TestCase):
     def test_sidecar_digest_is_parsed(self):
         body = b"58cf12c7b54662a1bee6d4b5cf67d34cf0483ab0bc28b58b94578248bf42d25a  HackicLab.exe\n"
         with mock.patch.object(updater, "_http", return_value=(200, {}, body)):
-            digest = updater.remote_asset_digest("v1.0.2")
+            digest = updater.remote_asset_digest(f"v{updater.__version__}")
         self.assertEqual(
             digest,
             "sha256:58cf12c7b54662a1bee6d4b5cf67d34cf0483ab0bc28b58b94578248bf42d25a",
@@ -216,10 +217,11 @@ class ParseReleaseTests(unittest.TestCase):
     def test_sidecar_rebuild_detected_without_api(self):
         local = "sha256:" + "3" * 64
         remote = "sha256:" + "4" * 64
+        tag = f"v{updater.__version__}"
         self._temp_cache()
         with mock.patch.object(updater, "current_binary_digest", return_value=local), \
                 mock.patch.object(updater, "_http", side_effect=updater._RateLimited("0")), \
-                mock.patch.object(updater, "_fetch_atom_tag", return_value="v1.0.2"), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=tag), \
                 mock.patch.object(updater, "remote_asset_digest", return_value=remote), \
                 mock.patch.object(updater, "_remote_size", return_value=500):
             info = updater.check_for_update(force=True)

@@ -342,6 +342,20 @@ class BuildProgressTests(unittest.TestCase):
         builder._step(150, "край")
         self.assertEqual(steps[-1][0], 100)
 
+    def test_step_progress_never_goes_back(self):
+        """Карточка с яблоком не должна показывать 70 %, а следом 66 %."""
+        from typing import cast
+
+        from hackiclab.builder.builder import BuildPlan, EFIBuilder
+
+        steps: list[int] = []
+        builder = EFIBuilder(cast("BuildPlan", None),
+                             on_progress=lambda p, m: steps.append(p))
+        builder._step(70, "Скачиваю kext…")
+        builder._step(66, "Строю карту USB-портов…")
+        builder._step(68, "USB: карта UTBMap.kext собрана")
+        self.assertEqual(steps, [70, 70, 70])
+
     def test_worker_has_progress_signal(self):
         from hackiclab.ui.main_window import BuildWorker
 
