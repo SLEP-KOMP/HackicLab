@@ -21,6 +21,9 @@ class KextEntry:
     internal: bool = False                     # true = архив уже внутри другого (VirtualSMC и т.п.)
     home: str = "github"                       # github / dortania
     os_min: str = ""                           # минимальная macOS (для версии-специфичных)
+    os_max: str = ""                           # максимальная macOS, где кекст ещё работает
+    # Версии-специфичные сборки в одном релизе: (macOS, подстрока имени ассета).
+    macos_assets: tuple = ()
 
 
 KEXT_DB: dict[str, KextEntry] = {}
@@ -67,7 +70,19 @@ _reg({
     "NullEthernet": KextEntry("NullEthernet", "jcreed69/NullEthernet", "NullEthernet", "Заглушка Ethernet для iMessage"),
 
     "itlwm": KextEntry("itlwm", "OpenIntelWireless/itlwm", "itlwm_", "Intel WiFi (нужен HeliPort)"),
-    "AirportItlwm": KextEntry("AirportItlwm", "OpenIntelWireless/itlwm", "AirportItlwm_", "Intel WiFi как нативный Airport", os_min="sonoma"),
+    # AirportItlwm публикуется отдельной сборкой на каждую macOS. Последняя
+    # официальная — Sonoma 14.4, на Sequoia/Tahoe кекста нет.
+    "AirportItlwm": KextEntry(
+        "AirportItlwm", "OpenIntelWireless/itlwm", "AirportItlwm_",
+        "Intel WiFi как нативный Airport",
+        os_min="big sur", os_max="sonoma",
+        macos_assets=(
+            ("high sierra", "HighSierra"), ("mojave", "Mojave"),
+            ("catalina", "Catalina"), ("big sur", "BigSur"),
+            ("monterey", "Monterey"), ("ventura", "Ventura"),
+            ("sonoma", "Sonoma"),
+        ),
+    ),
     "AirportBrcmFixup": KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup", "AirportBrcmFixup-", "Broadcom WiFi патчи"),
     "ATH9KFixup": KextEntry("ATH9KFixup", "black-dragon74/ATH9KFixup", "release", "Atheros WiFi патчи"),
 
@@ -193,6 +208,34 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     return cur
 
 
+def macos_in_range(entry: KextEntry, target_macos: str = "") -> bool:
+    """Попадает ли целевая macOS в диапазон, где кекст реально работает."""
+    if not target_macos:
+        return True
+    idx = _macos_idx(target_macos)
+    if entry.os_min and idx < _macos_idx(entry.os_min):
+        return False
+    return not (entry.os_max and idx > _macos_idx(entry.os_max))
+
+
+def asset_variant(entry: KextEntry, target_macos: str = "") -> str:
+    """Подстрока имени ассета под целевую macOS (версии-специфичные сборки).
+
+    AirportItlwm публикует в одном релизе отдельные архивы на каждую macOS
+    (``AirportItlwm_v2.3.0_stable_Ventura.kext.zip`` и т. д.). Без этой
+    подсказки загрузчик брал первый по длине/алфавиту файл и в EFI попадала
+    сборка под другую систему — кекст не прелинковывался при загрузке.
+    """
+    if not entry.macos_assets or not target_macos:
+        return ""
+    limit = _macos_idx(target_macos)
+    best = ""
+    for name, fragment in entry.macos_assets:
+        if _macos_idx(name) <= limit:
+            best = fragment
+    return best
+
+
 def _is_navi2x(gpu) -> bool:
     """NootRX нужен только Navi 2x (RX 6600–6950), не Polaris/Navi 1x."""
     name = (getattr(gpu, "name", "") or "").lower()
@@ -204,8 +247,13 @@ def _is_navi2x(gpu) -> bool:
 
 
 def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
-                 usb_toolbox: bool = False) -> list[KextEntry]:
-    """Подбирает нужный набор кекстсов по профилю железа."""
+                 usb_toolbox: bool = False,
+                 target_macos: str = "") -> list[KextEntry]:
+    """Подбирает нужный набор кекстсов по профилю железа.
+
+    ``target_macos`` учитывает версии-специфичные кексты: AirportItlwm есть
+    только до Sonoma, поэтому на Sequoia/Tahoe выбирается itlwm.
+    """
     selected: list[KextEntry] = []
     seen: set[str] = set()
 
@@ -243,8 +291,9 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
             if profile.cpu.vendor == "amd" and _is_navi2x(g):
                 add("NootRX")
 
-    # Аудио
-    if profile.audio.codec:
+    # Аудио: AppleALC нужен и при неопознанном кодеке — иначе звука нет вовсе
+    audio = getattr(profile, "audio", None)
+    if audio and (audio.codec or (audio.name and getattr(audio, "pci_device", -1) >= 0)):
         add("AppleALC")
 
     # Сеть: чипсет приходит общим («intel»), модель уточняется по имени устройства
@@ -264,7 +313,12 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     w = (profile.net.wifi_chipset or "").lower()
     native_apple = profile.net.bt_native_apple
     if w == "intel":
-        add("itlwm" if wifi_kext_mode == "itlwm" else "AirportItlwm")
+        entry = KEXT_DB["AirportItlwm"]
+        if wifi_kext_mode != "itlwm" and not macos_in_range(entry, target_macos):
+            # AirportItlwm не публикуется для этой macOS — только itlwm+HeliPort
+            add("itlwm")
+        else:
+            add("itlwm" if wifi_kext_mode == "itlwm" else "AirportItlwm")
     elif w == "broadcom":
         if native_apple:
             # BCM94360/BCM943602 (нативный Apple AirPort): работает из коробки,

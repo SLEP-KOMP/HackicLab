@@ -6,9 +6,11 @@ OpCore-Simplify (gathering_files.py). Использует GitHub API для р�
 
 from __future__ import annotations
 
+import io
 import json
 import ssl
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -129,10 +131,16 @@ def download_asset(release: dict, pattern: str, dest_dir: Path, cache_name: str 
 
     out = dest_dir / name
     data = download_bytes(url, timeout=120)
+    # Проверка размера и формата до записи: иначе страница ошибки GitHub
+    # или обрезанный архив ложится в кэш как «скачанный» файл.
+    if size and abs(len(data) - size) > 1024:
+        raise IOError(f"Size mismatch for {name}")
+    if len(data) < 512:
+        raise IOError(f"{name}: ответ слишком короткий ({len(data)} байт)")
+    if name.lower().endswith(".zip") and not zipfile.is_zipfile(io.BytesIO(data)):
+        raise IOError(f"{name}: скачанный файл не является zip-архивом")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(data)
-    if size and abs(out.stat().st_size - size) > 1024:
-        raise IOError(f"Size mismatch for {name}")
     try:
         cache_root.mkdir(parents=True, exist_ok=True)
         import shutil

@@ -196,7 +196,8 @@ def _acpi_decisions(cfg: dict, lang: str) -> list[Decision]:
 def _kext_decisions(profile: HardwareProfile, options: BuildOptions,
                     lang: str) -> list[Decision]:
     out: list[Decision] = []
-    for entry in select_kexts(profile, options.wifi_kext_mode):
+    for entry in select_kexts(profile, options.wifi_kext_mode,
+                              target_macos=options.target_macos):
         reason = entry.note if (lang == "ru" and entry.note) else _r(lang, "kext.generic")
         out.append(Decision("Kexts", entry.name, "included", reason, GUIDE))
     return out

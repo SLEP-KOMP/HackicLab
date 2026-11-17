@@ -7,12 +7,13 @@
 
 from __future__ import annotations
 
+import io
 import re
 import zipfile
 from pathlib import Path
 from typing import Optional
 
-from ..knowledge.kexts import KextEntry
+from ..knowledge.kexts import KextEntry, asset_variant
 from .cache_manager import cache_dir
 from .fetcher import GitHubFetcher, download_bytes
 
@@ -73,25 +74,37 @@ class Downloader:
         return out
 
     # --- Keхts ---
-    def kext_release_file(self, entry: KextEntry, tag: str, fallback_asset: str = "") -> str:
+    def kext_release_file(self, entry: KextEntry, tag: str, fallback_asset: str = "",
+                          target_macos: str = "") -> str:
         """Находит реальное имя файла-релиза для kext.
 
         Достаёт имена assets со страницы /releases/tag/<tag> (стабильный HTML,
-        не зависит от JS binaries-page). При неудаче ищет .zip по форме
-        '<pattern><tag>-RELEASE.zip'.
+        не зависит от JS binaries-page). Если у кекста есть версии-специфичные
+        сборки (AirportItlwm), берётся файл под целевую macOS — иначе в EFI
+        попадала сборка под другую систему.
         """
         if fallback_asset:
             return fallback_asset
         if not entry.repo:
             return entry.name
+        variant = asset_variant(entry, target_macos)
         # 1) со страницы тега
         html = self._fetch_release_html(entry.repo, tag)
         if html:
             names = self._extract_assets(html, entry.asset_pattern)
+            if variant and names:
+                matching = [n for n in names if variant.lower() in n.lower()]
+                if matching:
+                    names = matching
+                else:
+                    self._log(f"{entry.name}: сборки под {target_macos} нет — беру общую")
             if names:
-                # предпочитаем RELEASE (не DEBUG), затем самый длинный
+                # предпочитаем RELEASE (не DEBUG), затем самую свежую сборку
                 rel = [n for n in names if "release" in n.lower()]
                 pool = rel or names
+                if variant:
+                    pool.sort()
+                    return pool[-1]
                 pool.sort(key=len, reverse=True)
                 return pool[0]
         # 2) стандартные формы имён acidanthera/большинства kext
@@ -129,7 +142,8 @@ class Downloader:
             names = {n for n in names if pattern in n}
         return sorted(names)
 
-    def download_kext(self, entry: KextEntry, dest_dir: Path) -> Optional[Path]:
+    def download_kext(self, entry: KextEntry, dest_dir: Path,
+                      target_macos: str = "") -> Optional[Path]:
         """Скачивает архив kext и распаковывает его в dest_dir (папка Kexts).
 
         Возвращает путь к распакованной папке kext (если она .kext),
@@ -142,7 +156,7 @@ class Downloader:
             self._log(f"{entry.name}: тег релиза не определён (пропуск)")
             return None
         base = f"https://github.com/{entry.repo}/releases/download/{tag}/"
-        asset_name = self.kext_release_file(entry, tag)
+        asset_name = self.kext_release_file(entry, tag, target_macos=target_macos)
         url = base + asset_name
         dest_dir.mkdir(parents=True, exist_ok=True)
         # архив и распаковка — в кэше; в EFI/OC/Kexts попадают только .kext
@@ -152,6 +166,12 @@ class Downloader:
             data = download_bytes(url, headers={"User-Agent": self.client}, timeout=120)
         except Exception as e:
             self._log(f"{entry.name}: не скачалось ({e})")
+            return None
+        # Проверяем архив до записи: страница ошибки вместо zip и обрезанный
+        # файл не должны попадать в кэш как «скачанный кекст».
+        if len(data) < 512 or not zipfile.is_zipfile(io.BytesIO(data)):
+            self._log(f"{entry.name}: {asset_name} повреждён или это не архив "
+                      f"({len(data)} байт) — пропуск")
             return None
         zpath = work / asset_name
         zpath.write_bytes(data)

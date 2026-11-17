@@ -37,7 +37,8 @@ class BuildPlan:
             model = smbios_model_for(self.profile, self.options.target_macos)
             self.smbios = generate_smbios(model)
         if not self.kext_names:
-            for e in select_kexts(self.profile, self.options.wifi_kext_mode):
+            for e in select_kexts(self.profile, self.options.wifi_kext_mode,
+                                  target_macos=self.options.target_macos):
                 self.kext_names.append(e.name)
 
 
@@ -151,6 +152,13 @@ class EFIBuilder:
                     if not src.exists():
                         src = next(extract.rglob(drv), None)
                     if src is not None and src.exists():
+                        # битый/обрезанный драйвер (0–4 КБ) в EFI не кладём:
+                        # OpenCore не загрузит такой драйвер и не скажет почему
+                        if src.stat().st_size < 4096:
+                            layout.warnings.append(
+                                f"{drv}: файл подозрительно мал "
+                                f"({src.stat().st_size} байт) — пропущен")
+                            continue
                         layout.place_driver(src)
                         placed_drivers.append(drv)
                         self._log(f"  {drv} → Drivers")
@@ -177,7 +185,8 @@ class EFIBuilder:
         # 2) Кексты по профилю
         from ..knowledge.kexts import select_kexts
         selected = select_kexts(self.plan.profile, self.plan.options.wifi_kext_mode,
-                                self.plan.options.usb_toolbox)
+                                self.plan.options.usb_toolbox,
+                                self.plan.options.target_macos)
         kexts_dir = layout.oc / "Kexts"
         kexts_dir.mkdir(parents=True, exist_ok=True)
         downloaded = []
@@ -187,7 +196,7 @@ class EFIBuilder:
                 continue  # входят в состав родительского архива
             self._step(30 + int(34 * index / total_kexts), f"Скачиваю {e.name}…")
             try:
-                dl.download_kext(e, kexts_dir)
+                dl.download_kext(e, kexts_dir, self.plan.options.target_macos)
                 downloaded.append(e.name)
             except Exception as ex:
                 self._log(f"  {e.name}: ошибка ({ex})")

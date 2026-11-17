@@ -38,6 +38,8 @@ IG_PLATFORM_IDS = {
     # Coffee Lake
     "uhd630_dt": bytes([0x07, 0x00, 0x9B, 0x3E]),
     "uhd630_mb": bytes([0x09, 0x00, 0xA5, 0x3E]),
+    # Comet Lake: мобильный UHD 620 — 00009B3E, десктоп — как Coffee Lake
+    "cml_mb": bytes([0x00, 0x00, 0x9B, 0x3E]),
     # Ice Lake
     "iris_ice": bytes([0x00, 0x00, 0x52, 0x8A]),
 }
@@ -78,7 +80,7 @@ def _igpu_config(profile: HardwareProfile, headless: bool = False):
         if headless: return IG_PLATFORM_IDS["skl_headless"] if "skl_headless" in IG_PLATFORM_IDS else (IG_PLATFORM_IDS["skl_desktop"], None)
         return IG_PLATFORM_IDS["skl_desktop"], None
     if gen == 7:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["hd620"], None
+        if profile.platform == "laptop": return IG_PLATFORM_IDS["hd630_mb"], None
         if headless: return IG_PLATFORM_IDS["hd630_headless"] if "hd630_headless" in IG_PLATFORM_IDS else (IG_PLATFORM_IDS["hd630_dt"], None)
         return IG_PLATFORM_IDS["hd630_dt"], None
     if gen in (8, 9):
@@ -86,8 +88,8 @@ def _igpu_config(profile: HardwareProfile, headless: bool = False):
         if headless: return IG_PLATFORM_IDS["uhd630_dt"], None
         return IG_PLATFORM_IDS["uhd630_dt"], None
     if gen == 10:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["hd620"], None
-        return IG_PLATFORM_IDS["hd630_dt"], None
+        if profile.platform == "laptop": return IG_PLATFORM_IDS["cml_mb"], None
+        return IG_PLATFORM_IDS["uhd630_dt"], None
     # Слишком новые/неизвестные — без конфигурации iGPU
     return None, None
 
@@ -128,6 +130,12 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             props = {"AAPL,ig-platform-id": pidi}
             if devid:
                 props["device-id"] = devid
+            if profile.cpu.generation == 7 and profile.platform == "laptop" and not headless:
+                # Kaby Lake ноутбуки с залоченным DVMT: без патчей framebuffer
+                # macOS не поднимает ускорение (Dortania, Kaby Lake laptop).
+                props["framebuffer-patch-enable"] = bytes([0x01, 0x00, 0x00, 0x00])
+                props["framebuffer-stolenmem"] = bytes([0x00, 0x00, 0x30, 0x01])
+                props["framebuffer-fbmem"] = bytes([0x00, 0x00, 0x90, 0x00])
             dp["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"] = props
 
     # --- Kernel ---
