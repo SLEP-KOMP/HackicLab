@@ -4524,6 +4524,12 @@ def run_app() -> int:
         if target:
             Path(target).write_text(payload, encoding="utf-8")
         else:
+            # В сборке без консоли stdout бывает в cp866: без явного UTF-8
+            # перенаправленный вывод превращается в мусор.
+            try:
+                sys.stdout.reconfigure(encoding="utf-8")
+            except (AttributeError, OSError):
+                pass
             print(payload)
         return 0
 
