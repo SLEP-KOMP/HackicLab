@@ -291,6 +291,19 @@ class EFIBuilder:
                                       kernel_patches=amd_patches,
                                       acpi_names=res.stats.get("ssdt_placed", []))
 
+        # 4.5) HeliPort для режима itlwm: без него в macOS нет меню Wi-Fi
+        if (self.plan.options.wifi_kext_mode == "itlwm"
+                and (self.plan.profile.net.wifi_chipset or "").lower() == "intel"):
+            self._step(88, "Скачиваю HeliPort для itlwm…")
+            extras = target / "EFI" / "HackicLab-Extras"
+            heliport = dl.download_heliport(extras)
+            if heliport:
+                res.stats["heliport"] = heliport.name
+                self._log(f"  HeliPort → {heliport}")
+            else:
+                self._log("  HeliPort: не скачан — интернет через itlwm будет, "
+                          "но меню Wi-Fi в macOS не появится")
+
         # 5) ocvalidate финального config.plist
         cfg_path = layout.oc / "config.plist"
         from ..builder.ocvalidate import find_ocvalidate, run_ocvalidate

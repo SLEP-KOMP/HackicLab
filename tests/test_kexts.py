@@ -205,3 +205,33 @@ class WifiNoneModeTests(unittest.TestCase):
         self.assertNotIn("itlwm", names)
         self.assertNotIn("AirportItlwm", names)
         self.assertNotIn("IntelBluetoothFirmware", names)
+
+
+class HeliPortTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+    def test_heliport_is_downloaded_and_saved(self):
+        release = {"assets": [{"name": "HeliPort.dmg", "size": 8601948,
+                               "browser_download_url": "https://example.com/HeliPort.dmg"}]}
+        data = b"x" * 1_100_000
+        with mock.patch.object(dl_mod.GitHubFetcher, "latest_release", return_value=release), \
+                mock.patch.object(dl_mod, "download_bytes", return_value=data):
+            out = Downloader().download_heliport(self.tmp)
+        assert out is not None
+        self.assertEqual(out.name, "HeliPort.dmg")
+        self.assertEqual(out.stat().st_size, len(data))
+
+    def test_heliport_rejects_truncated_file(self):
+        release = {"assets": [{"name": "HeliPort.dmg", "size": 8601948,
+                               "browser_download_url": "https://example.com/HeliPort.dmg"}]}
+        with mock.patch.object(dl_mod.GitHubFetcher, "latest_release", return_value=release), \
+                mock.patch.object(dl_mod, "download_bytes", return_value=b"<html>"):
+            self.assertIsNone(Downloader().download_heliport(self.tmp))
+
+    def test_heliport_missing_asset(self):
+        with mock.patch.object(dl_mod.GitHubFetcher, "latest_release",
+                               return_value={"assets": []}):
+            self.assertIsNone(Downloader().download_heliport(self.tmp))

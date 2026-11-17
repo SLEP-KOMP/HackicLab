@@ -43,6 +43,39 @@ class Downloader:
     def _log(self, msg: str):
         self.log.append(msg)
 
+    # --- HeliPort ---
+    def download_heliport(self, dest_dir: Path) -> Optional[Path]:
+        """Скачивает HeliPort.dmg — приложение Wi-Fi для режима itlwm.
+
+        Без HeliPort у пользователя нет меню Wi-Fi в macOS, хотя интернет
+        работает. Кладём dmg рядом с EFI, чтобы его можно было поставить
+        уже на первой загрузке.
+        """
+        try:
+            release = GitHubFetcher.latest_release("OpenIntelWireless/HeliPort")
+        except Exception as exc:
+            self._log(f"HeliPort: релиз не получен ({exc})")
+            return None
+        if not release:
+            return None
+        asset = GitHubFetcher.find_asset(release, "HeliPort.dmg")
+        if not asset or not asset.get("browser_download_url"):
+            self._log("HeliPort: в релизе нет HeliPort.dmg")
+            return None
+        try:
+            data = download_bytes(str(asset["browser_download_url"]), timeout=180)
+        except Exception as exc:
+            self._log(f"HeliPort: не скачалось ({exc})")
+            return None
+        # dmg весит ~8 МБ: обрезанный файл или страница ошибки сюда не пройдут
+        if len(data) < 1_000_000:
+            self._log(f"HeliPort: подозрительно маленький файл ({len(data)} байт)")
+            return None
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out = dest_dir / "HeliPort.dmg"
+        out.write_bytes(data)
+        return out
+
     # --- OpenCore ---
     def download_open_core(self, dest_dir: Path) -> Optional[Path]:
         """Скачивает бинарный релиз OpenCorePkg (OpenCore-<tag>-RELEASE.zip).
