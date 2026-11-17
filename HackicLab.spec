@@ -15,6 +15,7 @@ a = Analysis(
         ('hackiclab/assets/brands', 'hackiclab/assets/brands'),
         ('hackiclab/assets/hwdb', 'hackiclab/assets/hwdb'),
         ('hackiclab/assets/support', 'hackiclab/assets/support'),
+        ('hackiclab/assets/hero', 'hackiclab/assets/hero'),
         (QT_TRANSLATIONS + '/qtbase_ru.qm', 'PySide6/translations'),
     ],
     hiddenimports=[
