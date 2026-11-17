@@ -13,6 +13,7 @@ from .classify import (
     INTEL_IGPU_GENERATIONS,
     cpu_brand,
     detect_amd_gen,
+    eth_chipset_from_name,
     infer_intel_gen,
     parse_intel_model,
 )
@@ -257,16 +258,7 @@ class WindowsScanner:
         """)
         eth = raw.strip()
         p.net.eth_name = eth
-        el = eth.lower()
-        if "i219" in el: p.net.eth_chipset = "i219"
-        elif "i218" in el: p.net.eth_chipset = "i218"
-        elif "i217" in el: p.net.eth_chipset = "i217"
-        elif "i225" in el: p.net.eth_chipset = "i225"
-        elif "i226" in el: p.net.eth_chipset = "i226"
-        elif "rtl8125" in el: p.net.eth_chipset = "rtl8125"
-        elif "rtl8111" in el or "rtl8168" in el: p.net.eth_chipset = "rtl8111"
-        elif "realtek" in el: p.net.eth_chipset = "realtek"
-        elif "intel" in el: p.net.eth_chipset = "intel"
+        p.net.eth_chipset = eth_chipset_from_name(eth)
 
         # WiFi: берём ТОЛЬКО активный физический адаптер (Status = Up).
         # Win32_NetworkAdapter перечисляет и отключённые, поэтому фильтр по статусу

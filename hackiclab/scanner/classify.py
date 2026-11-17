@@ -169,6 +169,40 @@ def cpu_brand(name: str) -> str:
     return "Core"
 
 
+def eth_chipset_from_name(name: str) -> str:
+    """Чипсет Ethernet по имени адаптера Windows.
+
+    Порядок важен: I211/I210 идут до общего «intel», иначе AppleIGB не
+    выберется и для I211 подставится IntelMausi.
+    """
+    el = (name or "").lower()
+    if "i219" in el:
+        return "i219"
+    if "i218" in el:
+        return "i218"
+    if "i217" in el:
+        return "i217"
+    if "i211" in el:
+        return "i211"
+    if "i210" in el:
+        return "i210"
+    if "i350" in el:
+        return "i350"
+    if "i225" in el:
+        return "i225"
+    if "i226" in el:
+        return "i226"
+    if "rtl8125" in el or "2.5gbe" in el:
+        return "rtl8125"
+    if "rtl8111" in el or "rtl8168" in el or "pcie gbe" in el:
+        return "rtl8111"
+    if "realtek" in el:
+        return "realtek"
+    if "intel" in el:
+        return "intel"
+    return ""
+
+
 # Audio codec -> известные layout-ids (из kext DB OpCore/hackmate)
 ALC_LAYOUTS: dict[str, list[int]] = {
     "ALC255": [3, 17, 18, 21, 27, 29, 69, 71, 76, 82, 86, 100],

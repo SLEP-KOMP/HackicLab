@@ -4526,10 +4526,12 @@ def run_app() -> int:
         else:
             # В сборке без консоли stdout бывает в cp866: без явного UTF-8
             # перенаправленный вывод превращается в мусор.
-            try:
-                sys.stdout.reconfigure(encoding="utf-8")
-            except (AttributeError, OSError):
-                pass
+            reconfigure = getattr(sys.stdout, "reconfigure", None)
+            if reconfigure is not None:
+                try:
+                    reconfigure(encoding="utf-8")
+                except (ValueError, OSError):
+                    pass
             print(payload)
         return 0
 
