@@ -3997,30 +3997,27 @@ class MainWindow(QMainWindow):
         self._nav_icons = []
         page = 0
         for group_key, items in self.NAV_GROUPS:
-            header = QListWidgetItem(tr.t(group_key))
+            header = QListWidgetItem(tr.t(group_key).upper())
             header.setFlags(Qt.ItemFlag.NoItemFlags)
             header.setData(Qt.ItemDataRole.UserRole, "header")
-            header.setSizeHint(QSize(0, 30))
+            header.setSizeHint(QSize(0, 28))
             self.nav.addItem(header)
             self._nav_rows.append(-1)
-            for title_key, icon, sub_key in items:
+            for title_key, icon, _sub_key in items:
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, title_key)
-                item.setSizeHint(QSize(0, 56))
+                item.setSizeHint(QSize(0, 40))
                 self.nav.addItem(item)
                 widget = QWidget()
                 widget.setAttribute(
                     Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-                lay = QVBoxLayout(widget)
-                lay.setContentsMargins(14, 6, 10, 6)
-                lay.setSpacing(1)
+                lay = QHBoxLayout(widget)
+                lay.setContentsMargins(12, 0, 10, 0)
+                lay.setSpacing(10)
                 title = QLabel(f"{icon}  {tr.t(title_key)}", widget)
                 title.setObjectName("navTitle")
-                subtitle = QLabel(tr.t(sub_key), widget)
-                subtitle.setObjectName("navSub")
-                subtitle.setWordWrap(True)
                 lay.addWidget(title)
-                lay.addWidget(subtitle)
+                lay.addStretch(1)
                 self.nav.setItemWidget(item, widget)
                 self._nav_keys.append(title_key)
                 self._nav_icons.append(icon)

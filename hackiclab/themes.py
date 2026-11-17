@@ -287,16 +287,15 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 #sidebar QLabel#sub {{ color: {p.muted}; font-size: 11px; padding: 0 14px 14px 14px; }}
 #navList {{ background: transparent; border: none; outline: none; }}
 #navList::item {{
-    padding: 2px 4px; margin: 2px 10px; border-radius: 10px;
+    padding: 0 2px; margin: 1px 8px; border-radius: 9px;
     color: {p.muted}; font-size: 13px;
 }}
 #navList::item:hover {{ background: {hover}; color: {p.text}; }}
 #navList::item:selected {{
     background: {soft}; color: {p.text}; font-weight: 600;
-    border-left: 3px solid {p.accent};
 }}
 #navList::item:focus {{ outline: none; }}
-#navList::item:disabled {{ color: {p.muted}; font-size: 11px; font-weight: 700; }}
+#navList::item:disabled {{ color: {p.muted}; font-size: 10px; font-weight: 700; letter-spacing: 1px; }}
 #navList QLabel#navTitle {{
     color: {p.text}; font-size: 13px; font-weight: 600; background: transparent;
 }}
