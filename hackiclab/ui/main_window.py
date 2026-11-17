@@ -77,6 +77,7 @@ from ..knowledge.sources import (
 )
 from ..scanner import HardwareProfile, WindowsScanner
 from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
+from .apple_progress import AppleProgressBar
 from .hwview import hardware_rows
 from .theme_tiles import MonitorButton
 
@@ -580,20 +581,15 @@ class MainWindow(QMainWindow):
         self.page_wizard = self._build_wizard()
         self.page_scan = self._build_scan()
         self.page_build = self._build_build()
-        self.page_manual = self._build_manual()
         self.page_validate = self._build_validate()
         self.page_usb = self._build_usb()
-        self.page_ports = self._build_ports()
-        self.page_analyze = self._build_analyze()
         self.page_sources = self._build_sources()
         self.page_donate = self._build_donate()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
         for page in (self.page_wizard, self.page_scan, self.page_build,
-                     self.page_manual,
-                     self.page_validate, self.page_usb, self.page_ports,
-                     self.page_analyze, self.page_sources, self.page_donate,
-                     self.page_settings, self.page_about):
+                     self.page_validate, self.page_usb, self.page_sources,
+                     self.page_donate, self.page_settings, self.page_about):
             page.setObjectName("pageRoot")
             self.stack.addWidget(self._scroll_page(page))
         self._go_page(0)
@@ -668,6 +664,7 @@ class MainWindow(QMainWindow):
         self.scan_save_btn.setVisible(False)
         self.scan_save_btn.clicked.connect(self._save_profile)
         v.addWidget(self.scan_save_btn)
+        v.addWidget(self._build_manual())
         return page
 
     # ---- wizard: быстрая сборка ----
@@ -935,7 +932,7 @@ class MainWindow(QMainWindow):
         self.wiz_build_btn = QPushButton(tr.t("wizard.build.start"))
         self.wiz_build_btn.clicked.connect(self._wiz_build)
         lay.addWidget(self.wiz_build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
-        self.wiz_progress = QProgressBar()
+        self.wiz_progress = AppleProgressBar()
         self.wiz_progress.setRange(0, 100)
         self.wiz_progress.setVisible(False)
         lay.addWidget(self.wiz_progress)
@@ -1342,7 +1339,7 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(page)
         v.setContentsMargins(28, 24, 28, 24)
         v.setSpacing(10)
-        self._page_header(page, v, "manual.title", "manual.subtitle")
+        v.addWidget(_h2(page, tr.t("manual.title")))
 
         cols = QHBoxLayout()
         cols.setSpacing(18)
@@ -1837,6 +1834,7 @@ class MainWindow(QMainWindow):
         dv.addWidget(self.val_tabs)
         v.addWidget(details)
         v.addStretch(1)
+        v.addWidget(self._build_analyze())
         return page
 
     def _refresh_val_tabs(self):
@@ -2234,6 +2232,7 @@ class MainWindow(QMainWindow):
         self._usb_refresh()
         self._backup_refresh()
         self._history_refresh()
+        v.addWidget(self._build_ports())
         return page
 
     def _usb_refresh(self):
@@ -2689,7 +2688,7 @@ class MainWindow(QMainWindow):
         """Вкладка «Порты и диски»: карта USB-портов и карта дисков."""
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "usbmap.title", "usbmap.subtitle")
+        v.addWidget(_h2(page, tr.t("usbmap.title")))
 
         ports_card = self._card(page)
         pv = QVBoxLayout(ports_card)
@@ -3141,7 +3140,7 @@ class MainWindow(QMainWindow):
     def _build_analyze(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "analyze.title", "analyze.subtitle")
+        v.addWidget(_h2(page, tr.t("analyze.title")))
 
         # Пояснение что это
         hint_card = self._card(page)
@@ -3937,21 +3936,16 @@ class MainWindow(QMainWindow):
     # ---- nav / lang ----
     NAV_GROUPS = (
         ("nav.group.start", (
-            ("nav.wizard", "🧭", "nav.wizard.sub"),
+            ("nav.wizard", "✨", "nav.wizard.sub"),
             ("nav.scan", "🖥", "nav.scan.sub"),
         )),
         ("nav.group.build", (
             ("nav.build", "⚙", "nav.build.sub"),
-            ("nav.manual", "🧩", "nav.manual.sub"),
-            ("nav.validate", "✔", "nav.validate.sub"),
+            ("nav.validate", "✅", "nav.validate.sub"),
             ("usb.nav", "💾", "usb.nav.sub"),
         )),
-        ("nav.group.tools", (
-            ("usbmap.nav", "🔌", "usbmap.nav.sub"),
-            ("nav.analyze", "🔍", "nav.analyze.sub"),
-            ("nav.sources", "📚", "nav.sources.sub"),
-        )),
         ("nav.group.more", (
+            ("nav.sources", "📚", "nav.sources.sub"),
             ("donate.nav", "💛", "donate.nav.sub"),
             ("nav.settings", "⚙", "nav.settings.sub"),
             ("nav.about", "ℹ", "nav.about.sub"),

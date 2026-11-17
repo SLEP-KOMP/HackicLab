@@ -89,7 +89,7 @@ class PageTests(unittest.TestCase):
         self.addCleanup(self.win.deleteLater)
 
     def test_page_is_in_menu(self):
-        self.assertIn("Сборка вручную", self.win._nav_titles())
+        self.assertTrue(hasattr(self.win, "manual_cpu"))
         self.assertEqual(self.win.stack.count(), 12)
 
     def test_form_builds_profile(self):
