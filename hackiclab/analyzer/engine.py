@@ -72,7 +72,16 @@ class Analyzer:
                 Severity.ERROR, "folder_missing",
                 "Папка не найдена", str(folder)))
             return
-        required = select_kexts(self.profile)
+        # Собранный нами EFI содержит USB-карту и кексты под все режимы Wi-Fi,
+        # поэтому сверяемся с объединением вариантов: иначе собственные файлы
+        # выглядят как «необязательные кексты».
+        required = list(select_kexts(self.profile, usb_toolbox=True))
+        known_names = {e.name for e in required}
+        for mode in ("itlwm", "airportitlwm", "native"):
+            for e in select_kexts(self.profile, mode, usb_toolbox=True):
+                if e.name not in known_names:
+                    known_names.add(e.name)
+                    required.append(e)
         present = self._discover_kexts(folder)
         for e in required:
             nm = e.bundle_name or e.name

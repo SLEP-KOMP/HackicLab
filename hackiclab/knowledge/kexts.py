@@ -181,6 +181,12 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     форм-фактора (ноутбук/десктоп), поддерживающая нужную версию.
     """
     need = _macos_idx(macos_target)
+    if not macos_target:
+        # Пустая цель — это ещё не выбранная macOS: показываем модель под
+        # максимально доступную версию, иначе карточка обещает MacPro7,1,
+        # а сборка ставит iMacPro1,1.
+        from .oc_platforms import MAX_MACOS_BY_GEN
+        need = _macos_idx(MAX_MACOS_BY_GEN.get(profile.cpu.generation, ""))
 
     if profile.cpu.vendor == "amd":
         if profile.platform == "laptop":

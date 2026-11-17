@@ -235,3 +235,16 @@ class HeliPortTests(unittest.TestCase):
         with mock.patch.object(dl_mod.GitHubFetcher, "latest_release",
                                return_value={"assets": []}):
             self.assertIsNone(Downloader().download_heliport(self.tmp))
+
+
+class SmbiosDefaultTargetTests(unittest.TestCase):
+    def test_empty_target_matches_built_model(self):
+        """Карточка без выбранной macOS должна обещать ту же модель, что сборка."""
+        from hackiclab.knowledge.kexts import smbios_model_for
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile, NetInfo
+        p = HardwareProfile(cpu=CPUInfo(name="AMD Ryzen 5 3600", vendor="amd", generation=10))
+        p.net = NetInfo(eth_chipset="i211", wifi_chipset="broadcom")
+        self.assertEqual(
+            smbios_model_for(p, ""),
+            smbios_model_for(p, "macOS Sequoia"),
+        )

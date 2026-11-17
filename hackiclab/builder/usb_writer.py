@@ -426,9 +426,12 @@ def format_usb(device: str, drive_letter: str = "") -> str:
     # поэтому размечаем её как MBR с активным основным разделом FAT32 —
     # UEFI грузит такой раздел так же, как ESP.
     if _is_removable(disk_num):
+        # После clean диск может остаться GPT: ACTIVE на GPT невозможен,
+        # поэтому явно переводим в MBR перед разметкой.
         create_script = (
             f"select disk {disk_num}\n"
             "clean\n"
+            "convert mbr\n"
             "create partition primary\n"
             "select partition 1\n"
             "active\n"

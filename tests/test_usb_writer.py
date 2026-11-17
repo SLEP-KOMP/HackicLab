@@ -103,6 +103,9 @@ class FormatUsbScriptTests(unittest.TestCase):
         create = next(s for s in scripts if "clean" in s)
         self.assertNotIn("convert gpt", create)
         self.assertNotIn("create partition efi", create)
+        # Флешка после clean может остаться GPT: без convert mbr diskpart
+        # отказывает в ACTIVE и сборка падает.
+        self.assertIn("convert mbr", create)
         self.assertIn("create partition primary", create)
         self.assertIn("active", create)
 
