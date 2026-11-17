@@ -765,7 +765,14 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
 
         recovery_msg = ""
         if recovery_macos:
-            recovery_msg = install_recovery_layer(target_letter, recovery_macos, log=log)
+            # Recovery — необязательный слой: EFI уже на флешке, поэтому сбой
+            # загрузки с Apple CDN не должен объявлять готовую сборку ошибкой.
+            try:
+                recovery_msg = install_recovery_layer(target_letter, recovery_macos, log=log)
+            except Exception as e:
+                recovery_msg = f"recovery не установлен: {e}"
+                if log:
+                    log(f"Recovery пропущен: {e}")
 
         if log:
             log("Готово. Флешка записана и отключена безопасно.")

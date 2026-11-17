@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from pathlib import Path
 from typing import cast
 from unittest import mock
 
@@ -183,3 +184,18 @@ class BackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(RuntimeError):
                 restore_backup(Path(tmp) / "missing", "Z")
+
+class RecoveryBestEffortTests(unittest.TestCase):
+    def test_recovery_failure_keeps_write_successful(self):
+        log: list[str] = []
+        with mock.patch.object(uw, "format_usb", return_value="Q:"), \
+             mock.patch.object(uw, "copy_efi", return_value=None), \
+             mock.patch.object(uw, "inject_usb_map", return_value=None), \
+             mock.patch.object(uw, "install_recovery_layer",
+                               side_effect=RuntimeError("нет сети")):
+            res = uw.write_efi_to_usb(Path("efi"), "3", recovery_macos="macOS Sonoma",
+                                      log=log.append)
+        self.assertTrue(res.ok)
+        self.assertEqual(res.target_letter.split(" | ")[0], "Q:")
+        self.assertIn("recovery не установлен", res.target_letter)
+        self.assertIn("нет сети", res.target_letter)
