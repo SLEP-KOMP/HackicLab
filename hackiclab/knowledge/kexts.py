@@ -312,7 +312,10 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     # WiFi
     w = (profile.net.wifi_chipset or "").lower()
     native_apple = profile.net.bt_native_apple
-    if w == "intel":
+    wifi_disabled = wifi_kext_mode == "none"
+    if wifi_disabled:
+        pass  # встроенный Wi-Fi/BT отключён: пользователь ставит USB-адаптер
+    elif w == "intel":
         entry = KEXT_DB["AirportItlwm"]
         if wifi_kext_mode != "itlwm" and not macos_in_range(entry, target_macos):
             # AirportItlwm не публикуется для этой macOS — только itlwm+HeliPort
@@ -330,7 +333,7 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
         add("ATH9KFixup")
 
     # Bluetooth
-    if profile.net.has_bt:
+    if profile.net.has_bt and not wifi_disabled:
         if native_apple:
             # нативный Apple BT (VID 05AC) — драйвера не требуются
             pass

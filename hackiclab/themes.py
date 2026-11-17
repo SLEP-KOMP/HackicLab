@@ -287,7 +287,7 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 #sidebar QLabel#sub {{ color: {p.muted}; font-size: 11px; padding: 0 14px 14px 14px; }}
 #navList {{ background: transparent; border: none; outline: none; }}
 #navList::item {{
-    padding: 11px 14px; margin: 2px 10px; border-radius: 9px;
+    padding: 2px 4px; margin: 2px 10px; border-radius: 10px;
     color: {p.muted}; font-size: 13px;
 }}
 #navList::item:hover {{ background: {hover}; color: {p.text}; }}
@@ -296,6 +296,29 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
     border-left: 3px solid {p.accent};
 }}
 #navList::item:focus {{ outline: none; }}
+#navList::item:disabled {{ color: {p.muted}; font-size: 11px; font-weight: 700; }}
+#navList QLabel#navTitle {{
+    color: {p.text}; font-size: 13px; font-weight: 600; background: transparent;
+}}
+#navList QLabel#navSub {{
+    color: {p.muted}; font-size: 11px; background: transparent;
+}}
+#stepChip {{
+    color: {p.muted}; background: transparent; border: 1px solid {border};
+    border-radius: 11px; padding: 4px 10px; font-size: 11px;
+}}
+#stepChip[active="true"] {{
+    color: {p.accent_text}; background: {_accent(p)}; border-color: {_accent(p)};
+    font-weight: 600;
+}}
+QPushButton#optionCard {{
+    text-align: left; padding: 10px 14px; background: {surface}; color: {p.text};
+    border: 1px solid {border}; border-radius: 10px; font-weight: 500;
+}}
+QPushButton#optionCard:hover {{ border-color: {p.accent}; background: {hover}; }}
+QPushButton#optionCard:checked {{
+    border: 1px solid {p.accent}; background: {soft}; font-weight: 600;
+}}
 QPushButton {{
     background: {_accent(p)}; color: {p.accent_text}; border: none;
     border-radius: 9px; padding: 9px 18px; font-weight: 600;

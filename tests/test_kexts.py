@@ -197,3 +197,11 @@ class AudioSelectionTests(unittest.TestCase):
         profile.cpu = CPUInfo(name="Intel Core i7-8700", vendor="intel", generation=8)
         profile.net = NetInfo(eth_chipset="rtl8111", eth_name="Realtek PCIe GbE")
         self.assertIn("RealtekRTL8111", [e.name for e in select_kexts(profile)])
+
+
+class WifiNoneModeTests(unittest.TestCase):
+    def test_none_mode_drops_wifi_and_bt(self):
+        names = [e.name for e in select_kexts(laptop_intel(), "none", target_macos="Sonoma")]
+        self.assertNotIn("itlwm", names)
+        self.assertNotIn("AirportItlwm", names)
+        self.assertNotIn("IntelBluetoothFirmware", names)

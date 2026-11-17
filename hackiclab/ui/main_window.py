@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, Qt, QThread, QTimer, QTranslator, QUrl, Signal
+from PySide6.QtCore import QCoreApplication, QSize, Qt, QThread, QTimer, QTranslator, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -76,6 +76,7 @@ from ..knowledge.sources import (
 )
 from ..scanner import HardwareProfile, WindowsScanner
 from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
+from .hwview import hardware_rows
 from .theme_tiles import MonitorButton
 
 #: Имя локального сервера для проверки «программа уже запущена».
@@ -544,25 +545,12 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName("navList")
         self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        nav_items = [
-            ("nav.scan", "🖥"),
-            ("nav.build", "⚙"),
-            ("nav.validate", "✔"),
-            ("usb.nav", "💾"),
-            ("usbmap.nav", "🔌"),
-            ("nav.analyze", "🔍"),
-            ("nav.sources", "📚"),
-            ("donate.nav", "💛"),
-            ("nav.settings", "⚙"),
-            ("nav.about", "ℹ"),
-        ]
-        self._nav_keys = [k for k, _ in nav_items]
-        self._nav_icons = [icon for _, icon in nav_items]
-        for key, icon in nav_items:
-            it = QListWidgetItem(f"{icon}  {tr.t(key)}")
-            it.setData(Qt.ItemDataRole.UserRole, key)
-            self.nav.addItem(it)
         self.nav.currentRowChanged.connect(self._on_nav)
+        self._nav_rows: list[int] = []
+        self._page_rows: dict[int, int] = {}
+        self._nav_keys: list[str] = []
+        self._nav_icons: list[str] = []
+        self._rebuild_nav()
         side_layout.addWidget(self.nav, 1)
         side_layout.addStretch()
 
@@ -588,6 +576,7 @@ class MainWindow(QMainWindow):
 
     def _create_pages(self):
         """Создаёт страницы заново — используется при старте и смене языка."""
+        self.page_wizard = self._build_wizard()
         self.page_scan = self._build_scan()
         self.page_build = self._build_build()
         self.page_validate = self._build_validate()
@@ -598,14 +587,13 @@ class MainWindow(QMainWindow):
         self.page_donate = self._build_donate()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
-        for page in (self.page_scan, self.page_build, self.page_validate,
-                     self.page_usb, self.page_ports, self.page_analyze,
-                     self.page_sources, self.page_donate, self.page_settings,
-                     self.page_about):
+        for page in (self.page_wizard, self.page_scan, self.page_build,
+                     self.page_validate, self.page_usb, self.page_ports,
+                     self.page_analyze, self.page_sources, self.page_donate,
+                     self.page_settings, self.page_about):
             page.setObjectName("pageRoot")
             self.stack.addWidget(self._scroll_page(page))
-        if self.nav.currentRow() < 0:
-            self.nav.setCurrentRow(0)
+        self._go_page(0)
 
     # ---- pages ----
     def _card(self, parent):
@@ -678,6 +666,570 @@ class MainWindow(QMainWindow):
         self.scan_save_btn.clicked.connect(self._save_profile)
         v.addWidget(self.scan_save_btn)
         return page
+
+    # ---- wizard: быстрая сборка ----
+    def _wiz_state(self) -> dict:
+        state = getattr(self, "_wiz", None)
+        if state is None:
+            state = {
+                "step": 0, "profile": None, "macos": "", "kind": "usb",
+                "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
+                "usb_toolbox": True,
+            }
+            self._wiz = state
+        return state
+
+    def _build_wizard(self):
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(28, 24, 28, 24)
+        v.setSpacing(10)
+        self._page_header(page, v, "wizard.title", "wizard.subtitle")
+
+        steps = QHBoxLayout()
+        steps.setSpacing(6)
+        self.wiz_chips = []
+        step_keys = ("wizard.step.hw", "wizard.step.macos", "wizard.step.target",
+                     "wizard.step.mode", "wizard.step.wifi", "wizard.step.summary")
+        for index, key in enumerate(step_keys):
+            chip = QLabel(f"{index + 1}. {tr.t(key)}", page)
+            chip.setObjectName("stepChip")
+            chip.setProperty("active", "false")
+            self.wiz_chips.append(chip)
+            steps.addWidget(chip)
+        steps.addStretch()
+        v.addLayout(steps)
+
+        self.wiz_stack = QStackedWidget()
+        self.wiz_stack.addWidget(self._wiz_step_hw(page))
+        self.wiz_stack.addWidget(self._wiz_step_macos(page))
+        self.wiz_stack.addWidget(self._wiz_step_target(page))
+        self.wiz_stack.addWidget(self._wiz_step_mode(page))
+        self.wiz_stack.addWidget(self._wiz_step_wifi(page))
+        self.wiz_stack.addWidget(self._wiz_step_summary(page))
+        v.addWidget(self.wiz_stack, 1)
+
+        foot = QHBoxLayout()
+        self.wiz_back = QPushButton(tr.t("wizard.back"))
+        self.wiz_back.setObjectName("ghost")
+        self.wiz_back.clicked.connect(self._wiz_back)
+        foot.addWidget(self.wiz_back)
+        self.wiz_hint = _muted(page, "")
+        self.wiz_hint.setWordWrap(True)
+        foot.addWidget(self.wiz_hint, 1)
+        self.wiz_next = QPushButton(tr.t("wizard.next"))
+        self.wiz_next.clicked.connect(self._wiz_next)
+        foot.addWidget(self.wiz_next)
+        v.addLayout(foot)
+
+        self._wiz_show(0)
+        return page
+
+    def _wiz_option(self, parent, layout, key: str, value: str,
+                    title: str, desc: str = "") -> QPushButton:
+        """Карточка-переключатель для шага мастера."""
+        text = title if not desc else f"{title}\n{desc}"
+        btn = QPushButton(text, parent)
+        btn.setObjectName("optionCard")
+        btn.setCheckable(True)
+        btn.setProperty("value", value)
+        btn.clicked.connect(lambda: self._wiz_select(key, value, layout))
+        layout.addWidget(btn)
+        return btn
+
+    def _wiz_select(self, key: str, value: str, layout):
+        state = self._wiz_state()
+        state[key] = value
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if isinstance(widget, QPushButton) and widget.property("value") is not None:
+                widget.setChecked(str(widget.property("value")) == value)
+        self._wiz_update_hint()
+
+    def _wiz_step_hw(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(10)
+        card = self._card(page)
+        cv = QVBoxLayout(card)
+        cv.setContentsMargins(16, 12, 16, 12)
+        cv.setSpacing(6)
+        self.wiz_hw_rows = QVBoxLayout()
+        self.wiz_hw_rows.setSpacing(6)
+        cv.addLayout(self.wiz_hw_rows)
+        self.wiz_hw_empty = _muted(page, tr.t("wizard.hw.empty"))
+        self.wiz_hw_empty.setWordWrap(True)
+        cv.addWidget(self.wiz_hw_empty)
+        lay.addWidget(card)
+        row = QHBoxLayout()
+        self.wiz_scan_btn = QPushButton(tr.t("wizard.hw.scan"))
+        self.wiz_scan_btn.clicked.connect(self._wiz_scan)
+        row.addWidget(self.wiz_scan_btn)
+        self.wiz_scan_bar = QProgressBar()
+        self.wiz_scan_bar.setMaximum(0)
+        self.wiz_scan_bar.setVisible(False)
+        row.addWidget(self.wiz_scan_bar, 1)
+        lay.addLayout(row)
+        lay.addStretch()
+        return widget
+
+    def _wiz_step_macos(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.wiz_macos_hint = _muted(page, "")
+        self.wiz_macos_hint.setWordWrap(True)
+        lay.addWidget(self.wiz_macos_hint)
+        self.wiz_macos_box = QVBoxLayout()
+        self.wiz_macos_box.setSpacing(6)
+        lay.addLayout(self.wiz_macos_box)
+        lay.addStretch()
+        return widget
+
+    def _wiz_step_target(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        hint = _muted(page, tr.t("wizard.target.hint"))
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.wiz_target_box = QVBoxLayout()
+        self.wiz_target_box.setSpacing(6)
+        lay.addLayout(self.wiz_target_box)
+        row = QHBoxLayout()
+        self.wiz_usb_refresh_btn = QPushButton(tr.t("usb.refresh"))
+        self.wiz_usb_refresh_btn.setObjectName("ghost")
+        self.wiz_usb_refresh_btn.clicked.connect(self._wiz_refresh_usb)
+        row.addWidget(self.wiz_usb_refresh_btn)
+        self.wiz_folder_btn = QPushButton(tr.t("wizard.target.folder"))
+        self.wiz_folder_btn.setObjectName("ghost")
+        self.wiz_folder_btn.clicked.connect(self._wiz_pick_folder)
+        row.addWidget(self.wiz_folder_btn)
+        row.addStretch()
+        lay.addLayout(row)
+        lay.addStretch()
+        return widget
+
+    def _wiz_step_mode(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.wiz_mode_box = QVBoxLayout()
+        self.wiz_mode_box.setSpacing(6)
+        for value, title, desc in (
+            ("full", "wizard.mode.full", "wizard.mode.full_desc"),
+            ("formatted", "wizard.mode.formatted", "wizard.mode.formatted_desc"),
+            ("repair", "wizard.mode.repair", "wizard.mode.repair_desc"),
+        ):
+            btn = self._wiz_option(page, self.wiz_mode_box, "mode", value,
+                                   tr.t(title), tr.t(desc))
+            btn.setChecked(value == "full")
+        lay.addLayout(self.wiz_mode_box)
+        lay.addStretch()
+        return widget
+
+    def _wiz_step_wifi(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.wiz_wifi_box = QVBoxLayout()
+        self.wiz_wifi_box.setSpacing(6)
+        for value, title, desc in (
+            ("itlwm", "wizard.wifi.itlwm", "wizard.wifi.itlwm_desc"),
+            ("airport", "wizard.wifi.airport", "wizard.wifi.airport_desc"),
+            ("none", "wizard.wifi.none", "wizard.wifi.none_desc"),
+        ):
+            btn = self._wiz_option(page, self.wiz_wifi_box, "wifi", value,
+                                   tr.t(title), tr.t(desc))
+            btn.setChecked(value == "itlwm")
+        lay.addLayout(self.wiz_wifi_box)
+        lay.addStretch()
+        return widget
+
+    def _wiz_step_summary(self, page) -> QWidget:
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        card = self._card(page)
+        cv = QVBoxLayout(card)
+        cv.setContentsMargins(16, 12, 16, 12)
+        cv.setSpacing(6)
+        self.wiz_sum_rows = QVBoxLayout()
+        self.wiz_sum_rows.setSpacing(4)
+        cv.addLayout(self.wiz_sum_rows)
+        lay.addWidget(card)
+        self.wiz_build_btn = QPushButton(tr.t("wizard.build.start"))
+        self.wiz_build_btn.clicked.connect(self._wiz_build)
+        lay.addWidget(self.wiz_build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.wiz_progress = QProgressBar()
+        self.wiz_progress.setRange(0, 100)
+        self.wiz_progress.setVisible(False)
+        lay.addWidget(self.wiz_progress)
+        self.wiz_log = QPlainTextEdit()
+        self.wiz_log.setReadOnly(True)
+        self.wiz_log.setPlaceholderText(tr.t("wizard.build.log_placeholder"))
+        self.wiz_log.setMaximumHeight(210)
+        lay.addWidget(self.wiz_log)
+        self.wiz_result = _val(page, "")
+        self.wiz_result.setWordWrap(True)
+        lay.addWidget(self.wiz_result)
+        row = QHBoxLayout()
+        self.wiz_open_btn = QPushButton(tr.t("wizard.build.open"))
+        self.wiz_open_btn.setObjectName("ghost")
+        self.wiz_open_btn.setVisible(False)
+        self.wiz_open_btn.clicked.connect(self._wiz_open_folder)
+        row.addWidget(self.wiz_open_btn)
+        self.wiz_usb_btn = QPushButton(tr.t("wizard.build.to_usb"))
+        self.wiz_usb_btn.setObjectName("ghost")
+        self.wiz_usb_btn.setVisible(False)
+        self.wiz_usb_btn.clicked.connect(self._wiz_to_usb)
+        row.addWidget(self.wiz_usb_btn)
+        row.addStretch()
+        lay.addLayout(row)
+        lay.addStretch()
+        return widget
+
+    # ---- wizard: данные и переходы ----
+    def _wiz_show(self, step: int):
+        state = self._wiz_state()
+        step = max(0, min(step, self.wiz_stack.count() - 1))
+        state["step"] = step
+        self.wiz_stack.setCurrentIndex(step)
+        for index, chip in enumerate(self.wiz_chips):
+            chip.setProperty("active", "true" if index == step else "false")
+            chip.style().unpolish(chip)
+            chip.style().polish(chip)
+        self.wiz_back.setVisible(step > 0)
+        self.wiz_next.setVisible(step < self.wiz_stack.count() - 1)
+        if step == 1:
+            self._wiz_fill_macos()
+        elif step == 2:
+            self._wiz_fill_target()
+        elif step == 5:
+            self._wiz_fill_summary()
+        self._wiz_update_hint()
+
+    def _wiz_back(self):
+        self._wiz_show(self._wiz_state()["step"] - 1)
+
+    def _wiz_next(self):
+        state = self._wiz_state()
+        step = state["step"]
+        if step == 0 and not state.get("profile"):
+            self.wiz_hint.setText(tr.t("wizard.hw.need_scan"))
+            return
+        if step == 1 and not state.get("macos"):
+            self.wiz_hint.setText(tr.t("wizard.macos.need"))
+            return
+        if step == 2 and not (state.get("device") or state.get("folder")):
+            self.wiz_hint.setText(tr.t("wizard.target.need"))
+            return
+        self._wiz_show(step + 1)
+
+    def _wiz_update_hint(self):
+        label = getattr(self, "wiz_hint", None)
+        if label is None:
+            return
+        state = self._wiz_state()
+        step = state["step"]
+        text = ""
+        if step == 0:
+            text = tr.t("wizard.hint.hw") if state.get("profile") else tr.t("wizard.hint.scan")
+        elif step == 1:
+            text = tr.t("wizard.hint.macos")
+        elif step == 2:
+            text = tr.t("wizard.hint.target")
+        elif step == 3:
+            text = tr.t("wizard.mode." + str(state.get("mode") or "full") + "_hint")
+        elif step == 4:
+            text = tr.t("wizard.wifi.hint")
+        label.setText(text)
+
+    def _wiz_fill_hw(self):
+        layout = getattr(self, "wiz_hw_rows", None)
+        if layout is None:
+            return
+        self._clear_layout(layout)
+        state = self._wiz_state()
+        rows = hardware_rows(state.get("profile"), state.get("macos") or "")
+        self.wiz_hw_empty.setVisible(not rows)
+        for item in rows:
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(10)
+            name = QLabel(tr.t(item["key"]), row)
+            name.setObjectName("kv")
+            name.setMinimumWidth(130)
+            rl.addWidget(name)
+            value = _val(row, item["value"])
+            value.setWordWrap(True)
+            rl.addWidget(value, 1)
+            note = item.get("note") or ""
+            if note:
+                hint = tr.t(note) if note.startswith("hw.") else note
+                note_label = _muted(row, hint)
+                note_label.setWordWrap(True)
+                rl.addWidget(note_label)
+            layout.addWidget(row)
+
+    def _wiz_fill_macos(self):
+        layout = getattr(self, "wiz_macos_box", None)
+        if layout is None:
+            return
+        self._clear_layout(layout)
+        state = self._wiz_state()
+        profile = state.get("profile")
+        if profile is None:
+            self.wiz_macos_hint.setText(tr.t("wizard.macos.no_profile"))
+            return
+        from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
+        ceiling = MAX_MACOS_BY_GEN.get(profile.cpu.generation, "Sonoma")
+        order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
+                 "Ventura", "Sonoma", "Sequoia", "Tahoe"]
+
+        def rank(name: str) -> int:
+            low = (name or "").lower()
+            return next((i for i, item in enumerate(order) if item.lower() in low), -1)
+
+        limit = rank(ceiling)
+        self.wiz_macos_hint.setText(tr.t("wizard.macos.hint").format(max=ceiling))
+        for entry in MACOS_VERSIONS:
+            name = entry.get("name", "")
+            if limit >= 0 and rank(name) > limit:
+                continue
+            desc = f"{entry.get('version', '')} · {entry.get('release', '')}"
+            if rank(name) == limit:
+                desc += " · " + tr.t("wizard.macos.max")
+            btn = self._wiz_option(None, layout, "macos", name, name, desc)
+            btn.setChecked(state.get("macos") == name)
+
+    def _wiz_fill_target(self):
+        layout = getattr(self, "wiz_target_box", None)
+        if layout is None:
+            return
+        self._clear_layout(layout)
+        state = self._wiz_state()
+        devices = list(getattr(self, "usb_devices", []) or [])
+        for device in devices:
+            letter = getattr(device, "letter", "") or ""
+            size = getattr(device, "size", "") or ""
+            model = getattr(device, "model", "") or getattr(device, "label", "") or "USB"
+            title = f"{letter or 'RAW'} · {model}"
+            btn = self._wiz_option(None, layout, "device", str(getattr(device, "device", "")),
+                                   title, size)
+            btn.setChecked(state.get("device") == str(getattr(device, "device", "")))
+        if state.get("folder"):
+            btn = self._wiz_option(None, layout, "folder", state["folder"],
+                                   tr.t("wizard.target.folder_ready"), state["folder"])
+            btn.setChecked(True)
+        if not devices and not state.get("folder"):
+            empty = _muted(None, tr.t("wizard.target.empty"))
+            empty.setWordWrap(True)
+            layout.addWidget(empty)
+        elif state.get("folder"):
+            state["kind"] = "folder"
+
+    def _wiz_fill_summary(self):
+        layout = getattr(self, "wiz_sum_rows", None)
+        if layout is None:
+            return
+        self._clear_layout(layout)
+        state = self._wiz_state()
+        profile = state.get("profile")
+        if profile is None:
+            return
+        smbios = ""
+        try:
+            from ..knowledge.kexts import smbios_model_for
+            smbios = smbios_model_for(profile, state.get("macos") or "")
+        except Exception:
+            smbios = ""
+        rows = [
+            ("wizard.sum.macos", state.get("macos") or "—"),
+            ("wizard.sum.target", self._wiz_target_label()),
+            ("wizard.sum.mode", tr.t("wizard.mode." + str(state.get("mode") or "full"))),
+            ("wizard.sum.wifi", tr.t("wizard.wifi." + str(state.get("wifi") or "itlwm"))),
+            ("hw.smbios", smbios or "—"),
+        ]
+        for key, value in rows:
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            name = QLabel(tr.t(key), row)
+            name.setObjectName("kv")
+            name.setMinimumWidth(130)
+            rl.addWidget(name)
+            text = _val(row, value)
+            text.setWordWrap(True)
+            rl.addWidget(text, 1)
+            layout.addWidget(row)
+
+    def _wiz_target_label(self) -> str:
+        state = self._wiz_state()
+        if state.get("kind") == "folder" and state.get("folder"):
+            return str(state["folder"])
+        for device in getattr(self, "usb_devices", []) or []:
+            if str(getattr(device, "device", "")) == str(state.get("device")):
+                letter = getattr(device, "letter", "") or "RAW"
+                model = getattr(device, "model", "") or getattr(device, "label", "") or "USB"
+                return f"{letter} · {model}"
+        return "—"
+
+    # ---- wizard: действия ----
+    def _wiz_scan(self):
+        if getattr(self, "_worker_scan", None) and self._worker_scan.isRunning():
+            return
+        self.wiz_scan_btn.setEnabled(False)
+        self.wiz_scan_bar.setVisible(True)
+        self._worker_scan = ScanWorker()
+        self._worker_scan.done.connect(self._wiz_scan_done)
+        self._worker_scan.failed.connect(self._wiz_scan_failed)
+        self._worker_scan.start()
+
+    def _wiz_scan_done(self, profile):
+        self.wiz_scan_btn.setEnabled(True)
+        self.wiz_scan_bar.setVisible(False)
+        self._wiz_state()["profile"] = profile
+        self._scan_done(profile)
+        self._wiz_fill_hw()
+        self._wiz_update_hint()
+
+    def _wiz_scan_failed(self, err):
+        self.wiz_scan_btn.setEnabled(True)
+        self.wiz_scan_bar.setVisible(False)
+        QMessageBox.critical(self, tr.t("wizard.title"), str(err))
+
+    def _wiz_refresh_usb(self):
+        if getattr(self, "usb_list_worker", None) and self.usb_list_worker.isRunning():
+            return
+        self.wiz_usb_refresh_btn.setEnabled(False)
+        self.usb_list_worker = UsbListWorker(self)
+        self.usb_list_worker.done.connect(self._wiz_usb_devices)
+        self.usb_list_worker.failed.connect(
+            lambda err: self.wiz_hint.setText(str(err)))
+        self.usb_list_worker.finished.connect(
+            lambda: self.wiz_usb_refresh_btn.setEnabled(True))
+        self.usb_list_worker.start()
+
+    def _wiz_usb_devices(self, devices: list):
+        self.usb_devices = devices or []
+        self._wiz_fill_target()
+
+    def _wiz_pick_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, tr.t("wizard.target.folder"))
+        if not folder:
+            return
+        state = self._wiz_state()
+        state["folder"] = folder
+        state["kind"] = "folder"
+        state["device"] = ""
+        self._wiz_fill_target()
+        self._wiz_update_hint()
+
+    def _wiz_target_dir(self) -> Path:
+        state = self._wiz_state()
+        if state.get("kind") == "folder" and state.get("folder"):
+            return Path(str(state["folder"])) / "EFI"
+        import time
+        stamp = time.strftime("%Y%m%d-%H%M")
+        return Path.home() / "Documents" / f"HackicLab-EFI-{stamp}"
+
+    def _wiz_build(self):
+        if getattr(self, "_worker_wiz", None) and self._worker_wiz.isRunning():
+            return
+        state = self._wiz_state()
+        profile = state.get("profile")
+        if profile is None:
+            QMessageBox.information(self, tr.t("wizard.title"), tr.t("wizard.hw.need_scan"))
+            return
+        opts = BuildOptions(
+            usb_toolbox=bool(state.get("usb_toolbox", True)),
+            disable_sip=True,
+            wifi_kext_mode=str(state.get("wifi") or "itlwm"),
+            target_macos=str(state.get("macos") or ""),
+        )
+        target = self._wiz_target_dir()
+        self._wiz_last_target = target
+        plan = BuildPlan(profile=profile, options=opts)
+        self._last_build_options = opts
+        self._last_build_smbios = plan.smbios
+        self.wiz_log.clear()
+        self.wiz_progress.setVisible(True)
+        self.wiz_progress.setValue(0)
+        self.wiz_result.setText("")
+        self.wiz_open_btn.setVisible(False)
+        self.wiz_usb_btn.setVisible(False)
+        self.wiz_build_btn.setEnabled(False)
+        self._worker_wiz = BuildWorker(plan, target)
+        self._worker_wiz.progress.connect(self._wiz_progress)
+        self._worker_wiz.done.connect(self._wiz_done)
+        self._worker_wiz.failed.connect(self._wiz_failed)
+        self._worker_wiz.start()
+
+    def _wiz_progress(self, percent: int, message: str):
+        self.wiz_log.appendPlainText(f"[{percent:3d}%] {message}")
+        self.wiz_log.verticalScrollBar().setValue(
+            self.wiz_log.verticalScrollBar().maximum())
+        self.wiz_progress.setValue(percent)
+
+    def _wiz_done(self, res):
+        self.wiz_build_btn.setEnabled(True)
+        self.wiz_progress.setValue(100)
+        ok = bool(getattr(res, "ok", False))
+        root = getattr(res, "root", None) or getattr(self, "_wiz_last_target", None)
+        if root:
+            self.last_build_dir = Path(root)
+            self._wiz_last_target = Path(root)
+            try:
+                self.val_last_label.setText(str(root))
+            except Exception:
+                pass
+        self.wiz_result.setText(
+            tr.t("wizard.build.ok") if ok else tr.t("wizard.build.fail"))
+        self.wiz_result.setProperty("tone", "ok" if ok else "err")
+        self.wiz_result.style().unpolish(self.wiz_result)
+        self.wiz_result.style().polish(self.wiz_result)
+        self.wiz_open_btn.setVisible(bool(root))
+        if self._wiz_state().get("kind") == "usb":
+            self.wiz_usb_btn.setVisible(bool(root))
+        errors = list(getattr(res, "errors", []) or [])
+        for error in errors[:10]:
+            self.wiz_log.appendPlainText(f"[err] {error}")
+        if root:
+            self.wiz_log.appendPlainText(tr.t("wizard.build.saved").format(path=root))
+        for line in (getattr(res, "log", []) or [])[-40:]:
+            self.wiz_log.appendPlainText(line)
+
+    def _wiz_failed(self, err):
+        self.wiz_build_btn.setEnabled(True)
+        self.wiz_progress.setVisible(False)
+        self.wiz_result.setText(str(err))
+        self.wiz_result.setProperty("tone", "err")
+        self.wiz_result.style().unpolish(self.wiz_result)
+        self.wiz_result.style().polish(self.wiz_result)
+
+    def _wiz_open_folder(self):
+        target = getattr(self, "_wiz_last_target", None)
+        if target:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+
+    def _wiz_to_usb(self):
+        state = self._wiz_state()
+        target = getattr(self, "_wiz_last_target", None)
+        if target:
+            self.usb_source.setText(str(target))
+        device = str(state.get("device") or "")
+        index = self.usb_combo.findData(device) if device else -1
+        if index >= 0:
+            self.usb_combo.setCurrentIndex(index)
+        self._go_page(4)
 
     def _build_build(self):
         page = QWidget()
@@ -1320,6 +1872,8 @@ class MainWindow(QMainWindow):
             self.usb_combo.addItem(label, d.device)
         self.usb_combo.blockSignals(False)
         self._usb_select()
+        if hasattr(self, "wiz_target_box"):
+            self._wiz_fill_target()
         self.statusBar().showMessage(
             f"{tr.t('usb.detected')}: {len(self.usb_devices)}", 3000)
 
@@ -2916,9 +3470,95 @@ class MainWindow(QMainWindow):
         return page
 
     # ---- nav / lang ----
+    NAV_GROUPS = (
+        ("nav.group.start", (
+            ("nav.wizard", "🧭", "nav.wizard.sub"),
+            ("nav.scan", "🖥", "nav.scan.sub"),
+        )),
+        ("nav.group.build", (
+            ("nav.build", "⚙", "nav.build.sub"),
+            ("nav.validate", "✔", "nav.validate.sub"),
+            ("usb.nav", "💾", "usb.nav.sub"),
+        )),
+        ("nav.group.tools", (
+            ("usbmap.nav", "🔌", "usbmap.nav.sub"),
+            ("nav.analyze", "🔍", "nav.analyze.sub"),
+            ("nav.sources", "📚", "nav.sources.sub"),
+        )),
+        ("nav.group.more", (
+            ("donate.nav", "💛", "donate.nav.sub"),
+            ("nav.settings", "⚙", "nav.settings.sub"),
+            ("nav.about", "ℹ", "nav.about.sub"),
+        )),
+    )
+
+    def _rebuild_nav(self):
+        """Меню с группами и подписью у каждого пункта.
+
+        Порядок пунктов совпадает с порядком страниц в стеке: он же
+        используется для перехода по клику и для восстановления после
+        смены языка.
+        """
+        current = self.stack.currentIndex() if hasattr(self, "stack") else 0
+        self.nav.blockSignals(True)
+        self.nav.clear()
+        self._nav_rows = []
+        self._page_rows = {}
+        self._nav_keys = []
+        self._nav_icons = []
+        page = 0
+        for group_key, items in self.NAV_GROUPS:
+            header = QListWidgetItem(tr.t(group_key))
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            header.setData(Qt.ItemDataRole.UserRole, "header")
+            header.setSizeHint(QSize(0, 30))
+            self.nav.addItem(header)
+            self._nav_rows.append(-1)
+            for title_key, icon, sub_key in items:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, title_key)
+                item.setSizeHint(QSize(0, 56))
+                self.nav.addItem(item)
+                widget = QWidget()
+                widget.setAttribute(
+                    Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                lay = QVBoxLayout(widget)
+                lay.setContentsMargins(14, 6, 10, 6)
+                lay.setSpacing(1)
+                title = QLabel(f"{icon}  {tr.t(title_key)}", widget)
+                title.setObjectName("navTitle")
+                subtitle = QLabel(tr.t(sub_key), widget)
+                subtitle.setObjectName("navSub")
+                subtitle.setWordWrap(True)
+                lay.addWidget(title)
+                lay.addWidget(subtitle)
+                self.nav.setItemWidget(item, widget)
+                self._nav_keys.append(title_key)
+                self._nav_icons.append(icon)
+                self._nav_rows.append(page)
+                self._page_rows[page] = self.nav.count() - 1
+                page += 1
+        self.nav.blockSignals(False)
+        self.nav.setCurrentRow(self._page_rows.get(current, 0))
+
+    def _nav_titles(self) -> list[str]:
+        """Подписи пунктов меню без групп — для самопроверки локализации."""
+        return [tr.t(key) for key in getattr(self, "_nav_keys", [])]
+
+    def _go_page(self, index: int):
+        row = getattr(self, "_page_rows", {}).get(index, 0)
+        self.nav.setCurrentRow(row)
+
     def _on_nav(self, row):
-        if row >= 0:
-            self.stack.setCurrentIndex(row)
+        stack = getattr(self, "stack", None)
+        if stack is None:
+            return
+        rows = getattr(self, "_nav_rows", [])
+        if row < 0 or row >= len(rows):
+            return
+        page = rows[row]
+        if 0 <= page < stack.count():
+            stack.setCurrentIndex(page)
 
     def _on_lang(self):
         sender = self.sender()
@@ -2996,14 +3636,7 @@ class MainWindow(QMainWindow):
             self.stack.removeWidget(w)
             w.deleteLater()
         self._create_pages()
-
-        icons = self._nav_icons
-        self.nav.blockSignals(True)
-        for i, key in enumerate(self._nav_keys):
-            item = self.nav.item(i)
-            if item is not None:
-                item.setText(f"{icons[i]}  {tr.t(key)}")
-        self.nav.blockSignals(False)
+        self._rebuild_nav()
         self._tagline_label.setText(tr.t("app.tagline"))
 
         self.last_build_dir = st["last_build_dir"]
@@ -3070,6 +3703,16 @@ class MainWindow(QMainWindow):
         self._worker_scan.failed.connect(self._scan_failed)
         self._worker_scan.start()
 
+    def _wizard_macos(self) -> str:
+        """Целевая macOS для подсказки SMBIOS: мастер, затем вкладка сборки."""
+        state = getattr(self, "_wiz", None) or {}
+        if state.get("macos"):
+            return str(state["macos"])
+        combo = getattr(self, "macos_combo", None)
+        if combo is not None:
+            return str(combo.currentData() or "")
+        return ""
+
     def _scan_done(self, profile):
         self.scan_progress.setVisible(False)
         card = getattr(self, "scan_empty_card", None)
@@ -3087,23 +3730,31 @@ class MainWindow(QMainWindow):
             if w is not None:
                 w.deleteLater()
         rows = [
-            ("scan.cpu", f"{profile.cpu.name} / {profile.cpu.codename} / {profile.cpu.generation} gen" if profile.cpu.name else "—"),
-            ("scan.gpu", ", ".join([g.name for g in [profile.igpu, profile.dgpu] if g]) or "—"),
-            ("scan.audio", profile.audio.name or "—"),
-            ("scan.net", f"LAN: {profile.net.eth_name or '—'}\nWiFi: {profile.net.wifi_name or '—'}"),
-            ("scan.storage", "NVMe" if profile.storage.nvme_present else "SATA"),
-            ("scan.platform", profile.platform),
-            ("scan.board", f"{profile.board_vendor} {profile.board_name}".strip() or "—"),
+            (item["key"], item["value"], item["note"])
+            for item in hardware_rows(profile, self._wizard_macos())
         ]
-        for key, val in rows:
+        for key, val, note in rows:
             c = self._card(self.page_scan)
             cv = QVBoxLayout(c); cv.setContentsMargins(14, 10, 14, 10); cv.setSpacing(2)
             cv.addWidget(_h2(self.page_scan, tr.t(key)))
             vv = _val(self.page_scan, val); vv.setWordWrap(True)
-            cv.addWidget(vv)
+            if note:
+                hint = tr.t(note) if note.startswith("hw.") else note
+                vv.setToolTip(hint)
+                row = QHBoxLayout()
+                row.addWidget(vv, 1)
+                note_lbl = QLabel(hint, self.page_scan)
+                note_lbl.setObjectName("muted")
+                row.addWidget(note_lbl)
+                cv.addLayout(row)
+            else:
+                cv.addWidget(vv)
             self.hw_grid.addWidget(c)
         self.scan_save_btn.setVisible(True)
         self._fill_sources_ctx()
+        if hasattr(self, "wiz_hw_rows"):
+            self._wiz_state()["profile"] = profile
+            self._wiz_fill_hw()
         self.statusBar().showMessage(tr.t("scan.done"), 3000)
 
     def _scan_failed(self, err):
@@ -3387,7 +4038,7 @@ def i18n_report() -> dict[str, object]:
         finally:
             QMessageBox.exec = original_exec
         report[lang] = {
-            "nav": [win.nav.item(i).text().strip() for i in range(win.nav.count())],
+            "nav": win._nav_titles(),
             "h1": titles,
             "dialogs": captured,
             "qt_yes": QCoreApplication.translate("QPlatformTheme", "&Yes"),
