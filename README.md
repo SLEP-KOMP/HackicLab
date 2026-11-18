@@ -6,10 +6,11 @@
 [![Downloads](https://img.shields.io/github/downloads/SLEP-KOMP/HackicLab/total?style=flat-square&label=Downloads)](https://github.com/SLEP-KOMP/HackicLab/releases)
 [![Лицензия: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Платформа: Windows](https://img.shields.io/badge/platform-Windows-0078d6.svg)](https://github.com/SLEP-KOMP/HackicLab)
+[![macOS: preview](https://img.shields.io/badge/macOS-preview-lightgrey.svg)](https://github.com/SLEP-KOMP/HackicLab/releases)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![GUI: PySide6](https://img.shields.io/badge/GUI-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
 
-> **Статус:** опубликованная версия v1.0.3 — обычный (Latest) релиз. Функции активно развиваются; перед операциями записи EFI на USB обязательно сохраняйте резервные копии важных данных.
+> **Статус:** опубликованная версия v1.0.4 — обычный (Latest) релиз. Функции активно развиваются; перед операциями записи EFI на USB обязательно сохраняйте резервные копии важных данных.
 
 ## Возможности
 
@@ -48,6 +49,8 @@
 ## Загрузка
 
 Готовый портативный дистрибутив для Windows — в разделе [Releases](https://github.com/SLEP-KOMP/HackicLab/releases). Просто скачайте `HackicLab.exe` и запустите — установка не требуется.
+
+Для macOS в релизе лежат отдельные сборки `HackicLab-macos-arm64.zip` (Apple Silicon) и `HackicLab-macos-x86_64.zip` (Intel). Это предварительная версия: она собирается в CI и ещё не проверялась на живом Маке.
 
 [Скачать последнюю опубликованную сборку](https://github.com/SLEP-KOMP/HackicLab/releases/latest).
 
