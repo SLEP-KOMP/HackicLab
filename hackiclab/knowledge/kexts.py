@@ -1,7 +1,9 @@
-"""Кекст-база и логика подбора кекстсов под аппаратный профиль.
+"""Кекст-база и подбор кекстсов под профиль железа.
 
-Источники логики: hackmate (kexts.py) + OpCore-Simplify (kext_maestro),
-адаптировано и расширено.
+Данные о кекстах — публичные репозитории acidanthera, OpenIntelWireless,
+VoodooI2C, Mieze, ChefKissInc и других проектов. Правила подбора собраны
+из открытой документации Dortania и проверены на живом железе; порядок
+в списке важен: Lilu и зависимости идут раньше потребителей.
 """
 
 from __future__ import annotations
@@ -31,8 +33,10 @@ class KextEntry:
 
 KEXT_DB: dict[str, KextEntry] = {}
 
+
 def _reg(d):
     KEXT_DB.update(d)
+
 
 _reg({
     "Lilu": KextEntry("Lilu", "acidanthera/Lilu", "Lilu-", "Базовый патчер, должен загружаться первым"),
@@ -143,21 +147,18 @@ _MACOS_ORDER = [
     "Ventura", "Sonoma", "Sequoia", "Tahoe",
 ]
 
+# Числовые версии macOS в том же порядке: индекс строки — это индекс версии.
+_MACOS_NUMBERS = ("10.13", "10.14", "10.15", "11", "12", "13", "14", "15", "26")
+
 
 def _macos_idx(target: str) -> int:
     t = (target or "").lower()
     for i, name in enumerate(_MACOS_ORDER):
         if name.lower() in t:
-            return i    # числовые версии
-    if "10.13" in t: return 0
-    if "10.14" in t: return 1
-    if "10.15" in t: return 2
-    if "11" in t: return 3
-    if "12" in t: return 4
-    if "13" in t: return 5
-    if "14" in t: return 6
-    if "15" in t: return 7
-    if "26" in t: return 8
+            return i
+    for i, num in enumerate(_MACOS_NUMBERS):
+        if num in t:
+            return i
     return len(_MACOS_ORDER) - 1  # неизвестно/авто — последняя (актуальная)
 
 
@@ -185,6 +186,27 @@ _INTEL_DESKTOP_MAX = {
 }
 
 
+def _amd_desktop_model(need: int) -> str:
+    """Ближайшая AMD-модель, которая держит нужную версию macOS."""
+    for model, maxv in _AMD_DESKTOP_SMBIOS:
+        if maxv >= need:
+            return model
+    return _AMD_DESKTOP_SMBIOS[-1][0]
+
+
+def _intel_desktop_model(generation: int, need: int) -> str:
+    """Базовая модель поколения, поднятая вверх, если macOS слишком новая."""
+    model = _INTEL_DESKTOP_BY_GEN.get(generation)
+    if model is None:
+        return "MacPro7,1"
+    if _INTEL_DESKTOP_MAX.get(model, 0) >= need:
+        return model
+    for candidate, maxv in sorted(_INTEL_DESKTOP_MAX.items(), key=lambda x: x[1]):
+        if maxv >= need:
+            return candidate
+    return "MacPro7,1"
+
+
 def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     """Выбирает SMBIOS-модель по железу и (опционально) по версии macOS.
 
@@ -203,27 +225,11 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     if profile.cpu.vendor == "amd":
         if profile.platform == "laptop":
             return "MacBookPro15,2"
-        # desktop: выбираем модель с max-версией >= целевой, иначе последнюю
-        best = _AMD_DESKTOP_SMBIOS[0][0]
-        for model, maxv in _AMD_DESKTOP_SMBIOS:
-            if maxv >= need:
-                best = model
-                break
-            best = model
-        return best
+        return _amd_desktop_model(need)
 
-    # Intel
-    base = _INTEL_DESKTOP_BY_GEN.get(profile.cpu.generation)
     if profile.platform == "laptop":
         return SMBIOS_MAP.get((profile.cpu.generation, "laptop"), "MacBookPro15,2")
-    if base is None:
-        return "MacPro7,1"
-    # если целевая версия новее, чем держит базовая модель — двигаемся вверх
-    cur = base
-    for model, maxv in sorted(_INTEL_DESKTOP_MAX.items(), key=lambda x: x[1]):
-        if _INTEL_DESKTOP_MAX.get(cur, 0) < need and maxv >= need:
-            cur = model
-    return cur
+    return _intel_desktop_model(profile.cpu.generation, need)
 
 
 _BRCM_LEGACY_FROM = _MACOS_ORDER.index("Ventura")
@@ -277,6 +283,128 @@ def _is_navi2x(gpu) -> bool:
                ("6600", "6650", "6700", "6750", "6800", "6900", "6950"))
 
 
+class _KextList:
+    """Накопитель подбора: держит порядок и не даёт дубликатов."""
+
+    def __init__(self) -> None:
+        self.items: list[KextEntry] = []
+        self._seen: set[str] = set()
+
+    def add(self, *names: str) -> None:
+        for name in names:
+            if name in self._seen:
+                continue
+            self._seen.add(name)
+            entry = KEXT_DB.get(name)
+            if entry is not None:
+                self.items.append(entry)
+
+
+def _cpu_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    if profile.cpu.vendor == "amd":
+        # Без AppleMCEReporterDisabler ядро падает на AppleMCEReporter.
+        chosen.add("SMCAMDProcessor", "CryptexFixup", "RestrictEvents",
+                   "AppleMCEReporterDisabler")
+        return
+    chosen.add("RestrictEvents", "CPUFriend")
+    if profile.cpu.generation >= 12:
+        chosen.add("CpuTopologyRebuild")
+
+
+def _storage_kexts(chosen: _KextList, profile: HardwareProfile, target_macos: str) -> None:
+    # NVMe: Power management и APST нужны с Monterey на любом железе
+    storage = getattr(profile, "storage", None)
+    if storage is None or not getattr(storage, "nvme_present", False):
+        return
+    if macos_in_range(KEXT_DB["NVMeFix"], target_macos):
+        chosen.add("NVMeFix")
+
+
+def _gpu_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    gpu = profile.dgpu or profile.igpu or None
+    if gpu is None:
+        return
+    if gpu.vendor == "intel" or (profile.igpu and profile.igpu.vendor == "intel"):
+        chosen.add("WhateverGreen")
+    if gpu.vendor == "amd":
+        chosen.add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
+        if profile.cpu.vendor == "amd" and _is_navi2x(gpu):
+            chosen.add("NootRX")
+
+
+def _audio_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    # AppleALC нужен и при неопознанном кодеке — иначе звука нет вовсе
+    audio = getattr(profile, "audio", None)
+    if audio is None:
+        return
+    if audio.codec or (audio.name and getattr(audio, "pci_device", -1) >= 0):
+        chosen.add("AppleALC")
+
+
+#: Подстроки в имени Ethernet-устройства -> кекст. Проверяются по порядку.
+_ETHERNET_RULES = (
+    (("i219", "i218", "i217"), "IntelMausiEthernet"),
+    (("i211", "i210"), "AppleIGB"),
+    (("i225", "i226"), "AppleIGC"),
+    (("rtl8125",), "RealtekRTL8125"),
+    (("rtl",), "RealtekRTL8111"),
+)
+
+
+def _ethernet_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    # Чипсет приходит общим («intel»), модель уточняется по имени устройства
+    text = f"{profile.net.eth_chipset or ''} {profile.net.eth_name or ''}".lower()
+    for markers, name in _ETHERNET_RULES:
+        if any(marker in text for marker in markers):
+            chosen.add(name)
+            return
+
+
+def _wifi_kexts(chosen: _KextList, profile: HardwareProfile, mode: str,
+                target_macos: str) -> None:
+    chipset = (profile.net.wifi_chipset or "").lower()
+    native = profile.net.bt_native_apple
+    if chipset == "intel":
+        airport = KEXT_DB["AirportItlwm"]
+        if mode != "itlwm" and not macos_in_range(airport, target_macos):
+            # AirportItlwm не публикуется для этой macOS — только itlwm+HeliPort
+            chosen.add("itlwm")
+        else:
+            chosen.add("itlwm" if mode == "itlwm" else "AirportItlwm")
+        return
+    if chipset == "broadcom":
+        if not native:
+            chosen.add("AirportBrcmFixup")
+        # BCM94360/BCM943602 (нативный Apple AirPort): до Ventura 13.2
+        # работает из коробки, на 13.3+ нужен набор OCLP.
+        if native and not _needs_brcm_legacy(target_macos):
+            return
+        chosen.add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")
+        return
+    if chipset == "atheros":
+        chosen.add("ATH9KFixup")
+
+
+def _bluetooth_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    wifi_chipset = (profile.net.wifi_chipset or "").lower()
+    if not profile.net.has_bt or profile.net.bt_native_apple:
+        # нативный Apple BT (VID 05AC) — драйвера не требуются
+        return
+    if wifi_chipset == "intel":
+        chosen.add("IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
+    elif wifi_chipset == "broadcom":
+        chosen.add("BlueToolFixup", "BrcmPatchRAM3", "BrcmFirmwareData")
+
+
+def _input_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+    if not profile.has_touchpad:
+        return
+    if profile.touchpad_type == "i2c":
+        chosen.add("VoodooI2C", "VoodooI2CHID", "VoodooInput")
+    elif profile.touchpad_type == "ps2":
+        chosen.add("VoodooPS2Controller", "VoodooInput")
+
+
 def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
                  usb_toolbox: bool = False,
                  target_macos: str = "") -> list[KextEntry]:
@@ -285,117 +413,29 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     ``target_macos`` учитывает версии-специфичные кексты: AirportItlwm есть
     только до Sonoma, поэтому на Sequoia/Tahoe выбирается itlwm.
     """
-    selected: list[KextEntry] = []
-    seen: set[str] = set()
-
-    def add(*names: str):
-        for n in names:
-            e = KEXT_DB.get(n)
-            if e and n not in seen:
-                seen.add(n)
-                selected.append(e)
-            elif not e and n not in seen:
-                seen.add(n)  # отмечено, но неизвестно в БД
-
+    chosen = _KextList()
     # Ядро всегда
-    add("Lilu", "VirtualSMC")
-
+    chosen.add("Lilu", "VirtualSMC")
     # USB-маппинг: USBToolBox.kext — инжектор для UTBMap.kext
     if usb_toolbox:
-        add("USBToolBox")
+        chosen.add("USBToolBox")
 
-    # CPU/платформа
-    if profile.cpu.vendor == "amd":
-        # Без AppleMCEReporterDisabler ядро падает на AppleMCEReporter.
-        add("SMCAMDProcessor", "CryptexFixup", "RestrictEvents",
-            "AppleMCEReporterDisabler")
-    else:
-        add("RestrictEvents", "CPUFriend")
-        if profile.cpu.generation >= 12:
-            add("CpuTopologyRebuild")
+    _cpu_kexts(chosen, profile)
+    _storage_kexts(chosen, profile, target_macos)
+    _gpu_kexts(chosen, profile)
+    _audio_kexts(chosen, profile)
+    _ethernet_kexts(chosen, profile)
 
-    # NVMe: Power management и APST нужны с Monterey на любом железе
-    storage = getattr(profile, "storage", None)
-    if (storage is not None and getattr(storage, "nvme_present", False)
-            and macos_in_range(KEXT_DB["NVMeFix"], target_macos)):
-        add("NVMeFix")
+    wifi_quiet = wifi_kext_mode == "none"
+    if not wifi_quiet:
+        _wifi_kexts(chosen, profile, wifi_kext_mode, target_macos)
+        _bluetooth_kexts(chosen, profile)
 
-    # GPU
-    g = profile.dgpu if profile.dgpu else (profile.igpu if profile.igpu else None)
-    if g:
-        if g.vendor == "intel" or (profile.igpu and profile.igpu.vendor == "intel"):
-            add("WhateverGreen")
-        if g.vendor == "amd":
-            add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
-            if profile.cpu.vendor == "amd" and _is_navi2x(g):
-                add("NootRX")
-
-    # Аудио: AppleALC нужен и при неопознанном кодеке — иначе звука нет вовсе
-    audio = getattr(profile, "audio", None)
-    if audio and (audio.codec or (audio.name and getattr(audio, "pci_device", -1) >= 0)):
-        add("AppleALC")
-
-    # Сеть: чипсет приходит общим («intel»), модель уточняется по имени устройства
-    el = f"{profile.net.eth_chipset or ''} {profile.net.eth_name or ''}".lower()
-    if "i219" in el or "i218" in el or "i217" in el:
-        add("IntelMausiEthernet")
-    elif "i211" in el or "i210" in el:
-        add("AppleIGB")
-    elif "i225" in el or "i226" in el:
-        add("AppleIGC")
-    elif "rtl8125" in el:
-        add("RealtekRTL8125")
-    elif "rtl" in el:
-        add("RealtekRTL8111")
-
-    # WiFi
-    w = (profile.net.wifi_chipset or "").lower()
-    native_apple = profile.net.bt_native_apple
-    wifi_disabled = wifi_kext_mode == "none"
-    if wifi_disabled:
-        pass  # встроенный Wi-Fi/BT отключён: пользователь ставит USB-адаптер
-    elif w == "intel":
-        entry = KEXT_DB["AirportItlwm"]
-        if wifi_kext_mode != "itlwm" and not macos_in_range(entry, target_macos):
-            # AirportItlwm не публикуется для этой macOS — только itlwm+HeliPort
-            add("itlwm")
-        else:
-            add("itlwm" if wifi_kext_mode == "itlwm" else "AirportItlwm")
-    elif w == "broadcom":
-        if native_apple:
-            # BCM94360/BCM943602 (нативный Apple AirPort): до Ventura 13.2
-            # работает из коробки, на 13.3+ нужен набор OCLP.
-            if _needs_brcm_legacy(target_macos):
-                add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")
-        else:
-            add("AirportBrcmFixup")
-            if _needs_brcm_legacy(target_macos):
-                add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")
-    elif w == "atheros":
-        add("ATH9KFixup")
-
-    # Bluetooth
-    if profile.net.has_bt and not wifi_disabled:
-        if native_apple:
-            # нативный Apple BT (VID 05AC) — драйвера не требуются
-            pass
-        elif w == "intel":
-            add("IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
-        elif w == "broadcom":
-            add("BlueToolFixup", "BrcmPatchRAM3", "BrcmFirmwareData")
-
-    # Тачпад
-    if profile.has_touchpad:
-        if profile.touchpad_type == "i2c":
-            add("VoodooI2C", "VoodooI2CHID", "VoodooInput")
-        elif profile.touchpad_type == "ps2":
-            add("VoodooPS2Controller", "VoodooInput")
-
+    _input_kexts(chosen, profile)
     # Батарея (ноутбук)
     if profile.platform == "laptop":
-        add("SMCBatteryManager", "ECEnabler")
-
-    return selected
+        chosen.add("SMCBatteryManager", "ECEnabler")
+    return chosen.items
 
 
 def kext_sources_ok() -> dict[str, bool]:

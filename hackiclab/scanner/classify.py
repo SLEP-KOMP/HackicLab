@@ -1,7 +1,8 @@
 """Классификация железа: CPU-поколения, GPU-вендоры, кодеки.
 
-Логика адаптирована из hackmate (hardware.py) и OpCore-Simplify,
-переработана под чистые структуры и полный охват Intel 1-15 / AMD Zen.
+Таблицы device-id и моделей собраны по публичной документации Intel, AMD
+и AppleALC. Все функции чистые: на вход строка из Windows или system_profiler,
+на выходе — поколение, кодовое имя и платформа OpenCore.
 """
 
 from __future__ import annotations

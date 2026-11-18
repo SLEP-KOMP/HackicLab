@@ -1,13 +1,15 @@
 """Загрузка компонентов из GitHub (OpenCore, кексты) с кэшем и валидацией.
 
-Логика адаптирована из hackmate (kexts.py kexts/_cached_or_download) и
-OpCore-Simplify (gathering_files.py). Использует GitHub API для релизов.
+Каждый байт, попадающий в EFI, проходит три проверки: TLS-сертификат,
+размер относительно метаданных релиза и формат архива. Кэш лежит в
+каталоге приложения и переиспользуется между сборками.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import shutil
 import ssl
 import urllib.request
 import zipfile
@@ -16,135 +18,161 @@ from typing import Optional
 
 from .cache_manager import cache_dir
 
+USER_AGENT = "HackicLab/0.1"
+_CONTEXTS: list[ssl.SSLContext] = []
 
-def _ssl_contexts():
-    """Контексты с обязательной проверкой сертификата: системный, затем certifi.
 
-    Незашифрованный fallback (CERT_NONE) намеренно убран: по этим загрузкам в
-    EFI попадают OpenCore и kext'ы, которые затем загружает ядро. Непроверенное
-    TLS-соединение здесь означало бы возможность подмены.
+def _ssl_contexts() -> list[ssl.SSLContext]:
+    """Проверяющие TLS-контексты: системный и certifi, по одному на попытку.
+
+    Отключение проверки сертификата здесь недопустимо: эти загрузки
+    становятся загрузчиком OpenCore и кекстами ядра.
     """
-    ctxs = []
+    if _CONTEXTS:
+        return _CONTEXTS
+    candidates: list[ssl.SSLContext] = []
     try:
-        ctxs.append(ssl.create_default_context())
+        candidates.append(ssl.create_default_context())
     except Exception:
         pass
     try:
         import certifi
-        ctxs.append(ssl.create_default_context(cafile=certifi.where()))
+
+        candidates.append(ssl.create_default_context(cafile=certifi.where()))
     except Exception:
         pass
-    if not ctxs:
-        ctxs.append(ssl.create_default_context())
-    return ctxs
+    if not candidates:
+        candidates.append(ssl.create_default_context())
+    _CONTEXTS.extend(candidates)
+    return _CONTEXTS
+
+
+def _request(url: str, headers: Optional[dict], method: Optional[str] = None) -> urllib.request.Request:
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": USER_AGENT})
+    if method:
+        req.method = method
+    return req
 
 
 def download_bytes(url: str, headers: Optional[dict] = None, timeout: int = 60) -> bytes:
-    """Скачивает URL с проверкой TLS (системное хранилище, затем certifi)."""
-    last = None
-    req = urllib.request.Request(url, headers=headers or {"User-Agent": "HackicLab/0.1"})
+    """Скачивает URL, пробуя хранилища сертификатов по очереди."""
+    req = _request(url, headers)
+    errors: list[str] = []
     for ctx in _ssl_contexts():
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
-                return r.read()
-        except Exception as e:
-            last = e
+            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as response:
+                return response.read()
+        except Exception as exc:
+            errors.append(str(exc))
+    reason = errors[-1] if errors else "нет доступных TLS-контекстов"
     raise RuntimeError(
-        f"Не удалось скачать {url}: {last}. Проверьте дату и время системы, "
+        f"Не удалось скачать {url}: {reason}. Проверьте дату и время системы, "
         f"доступ к сети и корневые сертификаты (пакет certifi)."
-    ) from last
+    )
+
+
+def _tag_from_redirect(url: str, timeout: int = 30) -> str:
+    """Достаёт тег из конечного адреса releases/latest, пробуя HEAD, затем GET."""
+    ctx = _ssl_contexts()[0]
+    for method in ("HEAD", "GET"):
+        req = _request(url, {"User-Agent": USER_AGENT}, method=method)
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as response:
+                final = (response.geturl() or "").rstrip("/")
+        except Exception:
+            continue
+        parts = [p for p in final.split("/") if p]
+        if "tag" in parts:
+            return parts[parts.index("tag") + 1]
+    return ""
 
 
 class GitHubFetcher:
-    """Минимальный доступ к GitHub releases.
+    """Доступ к релизам GitHub без токена и без API-лимита.
 
-    Не зависит от API rate-limit: использует HTTP-редирект releases/latest
-    для получения тега, а затем прямой URL архива. Работает без токена и
-    не расходует лимит 60/час на незарегистрированные запросы.
+    Тег берётся из редиректа страницы последнего релиза, поэтому лимит
+    в 60 запросов в час на анонимный API не расходуется.
     """
 
     BASE = "https://github.com"
 
     @staticmethod
     def latest_tag(owner_repo: str) -> str:
-        """Возвращает тег последнего релиза через redirect (без API)."""
-        url = f"{GitHubFetcher.BASE}/{owner_repo}/releases/latest"
-        req = urllib.request.Request(url, method="HEAD",
-                                     headers={"User-Agent": "HackicLab/0.1"})
-        ctx = _ssl_contexts()[0]
-        try:
-            with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
-                return r.geturl().rstrip("/").split("/")[-1]
-        except Exception:
-            # если HEAD не даёт redirect, вернёмся к GET
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": "HackicLab/0.1"})
-                with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
-                    return r.geturl().rstrip("/").split("/")[-1]
-            except Exception:
-                return ""
+        return _tag_from_redirect(f"{GitHubFetcher.BASE}/{owner_repo}/releases/latest")
 
     @staticmethod
     def release_download_url(owner_repo: str, tag: str) -> str:
-        """Прямой URL архива репозитория по тегу."""
         return f"{GitHubFetcher.BASE}/{owner_repo}/archive/refs/tags/{tag}.zip"
 
     @staticmethod
     def latest_release(owner_repo: str, headers: Optional[dict] = None) -> Optional[dict]:
-        """Пытается получить релиз через API; если API заблокирован — фолбэк на redirect."""
+        """Релиз через API, а при отказе — минимальное описание из редиректа."""
+        api = f"https://api.github.com/repos/{owner_repo}/releases/latest"
         try:
-            data = download_bytes(
-                f"https://api.github.com/repos/{owner_repo}/releases/latest",
-                headers=headers, timeout=30)
-            return json.loads(data.decode("utf-8"))
+            return json.loads(download_bytes(api, headers=headers, timeout=30).decode("utf-8"))
         except Exception:
-            tag = GitHubFetcher.latest_tag(owner_repo)
-            if tag:
-                return {"tag_name": tag, "name": tag, "assets": []}
+            pass
+        tag = GitHubFetcher.latest_tag(owner_repo)
+        if not tag:
             return None
+        return {"tag_name": tag, "name": tag, "assets": []}
 
     @staticmethod
     def find_asset(release: dict, pattern: str) -> Optional[dict]:
-        """Ищет asset-release по подстроке имени."""
-        assets = release.get("assets") or []
-        for a in assets:
-            if pattern in (a.get("name") or ""):
-                return a
+        for asset in release.get("assets") or []:
+            if pattern in (asset.get("name") or ""):
+                return asset
         return None
 
 
+def _looks_like_zip(name: str, payload: bytes) -> bool:
+    if not name.lower().endswith(".zip"):
+        return True
+    return zipfile.is_zipfile(io.BytesIO(payload))
+
+
+def _check_payload(name: str, payload: bytes, expected_size: int) -> None:
+    """Отсеивает страницы ошибок GitHub и обрезанные загрузки до записи."""
+    if expected_size and abs(len(payload) - expected_size) > 1024:
+        raise OSError(f"Size mismatch for {name}")
+    if len(payload) < 512:
+        raise OSError(f"{name}: ответ слишком короткий ({len(payload)} байт)")
+    if not _looks_like_zip(name, payload):
+        raise OSError(f"{name}: скачанный файл не является zip-архивом")
+
+
+def _cache_copy(source: Path, cached: Path) -> None:
+    try:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(source), str(cached))
+    except Exception:
+        pass
+
+
 def download_asset(release: dict, pattern: str, dest_dir: Path, cache_name: str = "kexts") -> Optional[Path]:
-    """Скачивает первый asset release по pattern в dest_dir, кэшируя по имени (hackmate-стиль)."""
+    """Скачивает первый подходящий asset в dest_dir и кладёт копию в кэш.
+
+    Совпадение размера с метаданными допускается с точностью до килобайта:
+    GitHub иногда отдаёт размер до сжатия на стороне CDN.
+    """
     asset = GitHubFetcher.find_asset(release, pattern)
     if not asset:
         return None
     name = asset.get("name")
     url = asset.get("browser_download_url")
-    size = asset.get("size") or 0
+    expected = int(asset.get("size") or 0)
     if not name or not url:
         return None
 
     cache_root = cache_dir() / cache_name
     cached = cache_root / name
-    if cached.exists() and (not size or abs(cached.stat().st_size - size) <= 1024):
+    if cached.is_file() and (expected == 0 or abs(cached.stat().st_size - expected) <= 1024):
         return cached
 
-    out = dest_dir / name
-    data = download_bytes(url, timeout=120)
-    # Проверка размера и формата до записи: иначе страница ошибки GitHub
-    # или обрезанный архив ложится в кэш как «скачанный» файл.
-    if size and abs(len(data) - size) > 1024:
-        raise IOError(f"Size mismatch for {name}")
-    if len(data) < 512:
-        raise IOError(f"{name}: ответ слишком короткий ({len(data)} байт)")
-    if name.lower().endswith(".zip") and not zipfile.is_zipfile(io.BytesIO(data)):
-        raise IOError(f"{name}: скачанный файл не является zip-архивом")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(data)
-    try:
-        cache_root.mkdir(parents=True, exist_ok=True)
-        import shutil
-        shutil.copy2(str(out), str(cached))
-    except Exception:
-        pass
-    return out
+    payload = download_bytes(url, timeout=120)
+    _check_payload(name, payload, expected)
+    target = dest_dir / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+    _cache_copy(target, cached)
+    return target

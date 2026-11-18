@@ -5,8 +5,8 @@
 и порядок их загрузки, ACPI-добавления и «осиротевшие» ренеймы, USB-маппинг,
 PlatformInfo, SIP и известные конфликты квирков.
 
-Логика вдохновлена аудитором hackmate (efi_health.py, MIT) и переписана под
-структуры HackicLab (AnalysisIssue/Severity), без внешних зависимостей.
+Результат — список AnalysisIssue с уровнями Severity; внешних зависимостей нет,
+файлы только читаются.
 """
 
 from __future__ import annotations

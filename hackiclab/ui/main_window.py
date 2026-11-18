@@ -2118,7 +2118,7 @@ class MainWindow(QMainWindow):
                 self.val_hw_box.addWidget(_val(self.val_hw_card, tr.t("validate.bt_broadcom")))
 
     def _build_usb(self):
-        """Мастер записи EFI на флешку (аналог Build Mode в hackmate, современнее)."""
+        """Мастер записи EFI на флешку: выбор носителя, разметка, проверка."""
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "usb.title", "usb.subtitle")

@@ -9,7 +9,8 @@
      DSDT не дал пригодного результата.
 
 Результат — Info.plist карты (plist-only бандл UTBMap.kext), который кладётся
-в EFI/OC/Kexts. Логика адаптирована из hackmate (auto_usb_map.py, MIT).
+в EFI/OC/Kexts. Источники дополняют друг друга: DSDT даёт тип коннектора,
+usbdump — реальную топологию, если прошивка бедна описанием портов.
 """
 
 from __future__ import annotations

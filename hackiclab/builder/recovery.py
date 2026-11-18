@@ -1,8 +1,8 @@
-"""Скачивание macOS Recovery через macrecovery.py (подход acidanthera/hackmate).
+"""Скачивание macOS Recovery офлайн-загрузчиком macrecovery.py.
 
 macrecovery.py скачивает загрузочные recovery-файлы (BaseSystem.dmg, *.chunklist,
 com.apple.recovery.*) с Apple CDN под конкретную версию macOS. HackicLab
-использует ту же схему board_id + mlb, что и hackmate.
+передаёт ему board_id и MLB, соответствующие выбранной модели SMBIOS.
 """
 
 from __future__ import annotations
@@ -147,8 +147,8 @@ def ensure_macrecovery() -> Path:
 
 
 def _ensure_cert_bundle_env() -> None:
-    """Как в hackmate: на Windows (особенно в замороженном EXE) urllib может
-    не достучаться до системного хранилища сертификатов — подскажем certifi."""
+    """На Windows (особенно в замороженном EXE) urllib может не достучаться до
+    системного хранилища сертификатов — подскажем certifi."""
     if sys.platform != "win32":
         return
     import os

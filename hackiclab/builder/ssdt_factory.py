@@ -1,9 +1,12 @@
-"""Генерация SSDT-таблиц: DSL-шаблоны + компиляция в .aml через iasl.
+"""Генерация SSDT-таблиц: DSL-шаблоны и компиляция в .aml через iasl.
 
-Логика адаптирована из SSDTTime (corpnewt) и hackmate (ssdt.py):
-- встроенные DSL-шаблоны для стандартных таблиц (PLUG, EC, USBX, AWAC…);
-- компиляция DSL -> AML через iasl (скачивается при необходимости);
-- фолбэк на встроенные .aml, если iasl недоступен.
+Таблицы собираются тремя путями, по убыванию точности:
+- DSL-шаблон под профиль железа, скомпилированный iasl (скачивается сам);
+- готовый .aml из ``assets/acpi``, если компилятора нет;
+- только исходник .dsl — когда нет ни того, ни другого.
+
+Пути контроллеров для USB-сброса и AWAC берутся из DSDT пользователя,
+поэтому таблицы не привязаны к одной материнской плате.
 """
 
 from __future__ import annotations
@@ -389,41 +392,52 @@ class SSDTFactory:
                 return p
         return None
 
+    def _effective_names(self) -> list[str]:
+        """Список таблиц под профиль, с поправкой на содержимое DSDT.
+
+        AWAC добавляется, только если в DSDT действительно есть эти часы:
+        на старых платах таблица бессмысленна и только злит валидатор.
+        """
+        names = [spec.name for spec in required_ssdts(self.profile)]
+        if self.dsdt_text and "AWAC" not in self.dsdt_text:
+            names = [n for n in names if n != "SSDT-AWAC"]
+        return names
+
+    def _compiled(self, name: str, out_dir: Path) -> Optional[Path]:
+        try:
+            return generate_ssdt(name, self.profile, out_dir, dsdt_text=self.dsdt_text)
+        except Exception:
+            return None
+
+    def _bundled(self, name: str, out_dir: Path) -> Optional[Path]:
+        source = self._bundled_aml_path(name)
+        if source is None:
+            return None
+        target = out_dir / source.name
+        if not target.exists():
+            target.write_bytes(source.read_bytes())
+        return target
+
     def generate_all(self, out_dir: Path) -> list[dict]:
         """Генерирует все SSDT для профиля.
 
-        Три уровня (аналог hackmate ssdt.py):
-          1) iasl-компиляция DSL-шаблона  -> compiled
-          2) встроенный готовый .aml      -> bundled
-          3) только шаблон .dsl (без бинарника) -> template-only
+        Для каждой таблицы пробуются уровни по порядку, и первый удачный
+        определяет статус: скомпилированный iasl ``compiled``, готовый
+        встроенный бинарник ``bundled`` или только исходник ``template-only``.
         """
-        names = [s.name for s in required_ssdts(self.profile)]
-        # AWAC-таблица нужна только если часы AWAC вообще есть в DSDT:
-        # на старых платах её добавление бессмысленно (подход SSDTTime).
-        if self.dsdt_text and "AWAC" not in self.dsdt_text:
-            names = [n for n in names if n != "SSDT-AWAC"]
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        results = []
-        for n in names:
-            status, target = "template-only", None
-            # 1) iasl
-            try:
-                aml = generate_ssdt(n, self.profile, out_dir, dsdt_text=self.dsdt_text)
-                if aml:
-                    status, target = "compiled", aml
-            except Exception:
-                pass
-            # 2) bundled .aml
-            if not target:
-                bundled = self._bundled_aml_path(n)
-                if bundled:
-                    out_aml = out_dir / bundled.name
-                    if not out_aml.exists():
-                        out_aml.write_bytes(bundled.read_bytes())
-                    status, target = "bundled", out_aml
+        results: list[dict] = []
+        for name in self._effective_names():
+            target = self._compiled(name, out_dir)
+            status = "compiled"
+            if target is None:
+                target = self._bundled(name, out_dir)
+                status = "bundled"
+            if target is None:
+                status = "template-only"
             results.append({
-                "name": n,
+                "name": name,
                 "status": status,
                 "path": str(target) if target else "",
             })

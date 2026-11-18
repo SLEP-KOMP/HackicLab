@@ -1,8 +1,8 @@
-"""Запись собранной EFI на USB-флешку (подход из hackmate, адаптирован для Windows).
+"""Запись собранной EFI на USB-флешку.
 
 Этапы:
-  1) форматуем флешку как GPT + ESP (FAT32) через diskpart;
-  2) раскладываем готовую папку EFI на целевую флешку;
+  1) разметка носителя и FAT32 через diskpart (MBR для флешек, GPT+ESP для SSD);
+  2) раскладываем готовую папку EFI на целевой носитель;
   3) монтируем диск (Windows монтирует сам), отдаём путь.
 """
 
@@ -527,7 +527,7 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
 
     letter = target_letter.rstrip(":\\")
 
-    # EFI/ на флешку (корень флешки = буква) — как у hackmate: EFI папка в корень
+    # EFI/ на флешку (корень флешки = буква) — папка EFI кладётся в корень
     dst_root = Path(f"{letter}:\\")
     if not dst_root.exists():
         raise RuntimeError(f"Флешка {letter}: недоступна.")

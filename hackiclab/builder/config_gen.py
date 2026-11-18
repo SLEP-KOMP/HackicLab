@@ -1,7 +1,9 @@
 """Генерация config.plist OpenCore под аппаратный профиль.
 
-Логика ключей / ig-platform-id адаптирована из hackmate (config_gen.py)
-и OpCore-Simplify (config_prodigy.py) под чистую структуру данных.
+plist собирается из dataclass-профиля: ACPI, Kernel, DeviceProperties,
+PlatformInfo и квирки заполняются по правилам, а не копируются из шаблона.
+Значения ig-platform-id и device-id — публичные идентификаторы Intel из
+документации Apple и WhateverGreen.
 """
 
 from __future__ import annotations
@@ -66,36 +68,32 @@ def _int(name: str) -> bytes:
     return bytes((int(name, 16) & 0xFF, (int(name, 16) >> 8) & 0xFF, 0, 0))
 
 
+#: Поколение -> ключи IG_PLATFORM_IDS для ноутбука, десктопа и режима без вывода.
+_IGPU_RULES = {
+    2: {"laptop": "snb_mobile", "desktop": "snb_desktop", "headless": "snb_headless"},
+    3: {"laptop": "ivb_mobile", "desktop": "ivb_desktop"},
+    4: {"laptop": "hsw_mobile", "desktop": "hsw_desktop"},
+    6: {"laptop": "skl_mobile", "desktop": "skl_desktop", "headless": "skl_headless"},
+    7: {"laptop": "hd630_mb", "desktop": "hd630_dt", "headless": "hd630_headless"},
+    8: {"laptop": "uhd630_mb", "desktop": "uhd630_dt", "headless": "uhd630_dt"},
+    9: {"laptop": "uhd630_mb", "desktop": "uhd630_dt", "headless": "uhd630_dt"},
+    10: {"laptop": "cml_mb", "desktop": "uhd630_dt", "headless": "uhd630_dt"},
+}
+
+
 def _igpu_config(profile: HardwareProfile, headless: bool = False):
     """(ig-platform-id, device-id или None) для Intel iGPU."""
-    gen = profile.cpu.generation
-    if gen == 2:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["snb_mobile"], None
-        if headless: return IG_PLATFORM_IDS["snb_headless"], None
-        return IG_PLATFORM_IDS["snb_desktop"], None
-    if gen == 3:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["ivb_mobile"], None
-        return IG_PLATFORM_IDS["ivb_desktop"], None
-    if gen == 4:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["hsw_mobile"], None
-        return IG_PLATFORM_IDS["hsw_desktop"], None
-    if gen == 6:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["skl_mobile"], None
-        if headless: return IG_PLATFORM_IDS["skl_headless"] if "skl_headless" in IG_PLATFORM_IDS else (IG_PLATFORM_IDS["skl_desktop"], None)
-        return IG_PLATFORM_IDS["skl_desktop"], None
-    if gen == 7:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["hd630_mb"], None
-        if headless: return IG_PLATFORM_IDS["hd630_headless"] if "hd630_headless" in IG_PLATFORM_IDS else (IG_PLATFORM_IDS["hd630_dt"], None)
-        return IG_PLATFORM_IDS["hd630_dt"], None
-    if gen in (8, 9):
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["uhd630_mb"], None
-        if headless: return IG_PLATFORM_IDS["uhd630_dt"], None
-        return IG_PLATFORM_IDS["uhd630_dt"], None
-    if gen == 10:
-        if profile.platform == "laptop": return IG_PLATFORM_IDS["cml_mb"], None
-        return IG_PLATFORM_IDS["uhd630_dt"], None
-    # Слишком новые/неизвестные — без конфигурации iGPU
-    return None, None
+    rule = _IGPU_RULES.get(profile.cpu.generation)
+    if rule is None:
+        # Слишком новые/неизвестные — без конфигурации iGPU
+        return None, None
+    if profile.platform == "laptop":
+        key = rule["laptop"]
+    elif headless:
+        key = rule.get("headless", rule["desktop"])
+    else:
+        key = rule["desktop"]
+    return IG_PLATFORM_IDS.get(key), None
 
 
 def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> bytes:

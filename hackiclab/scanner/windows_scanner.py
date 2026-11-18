@@ -1,7 +1,8 @@
-"""Сканирование железа на Windows через WMI/PnP/PowerShell.
+"""Сканирование железа на Windows через WMI, PnP и PowerShell.
 
-Логика сканирования адаптирована и усовершенствована из hackmate
-(hardware.py) и опирается на практики OpCore-Simplify / HackOS.
+Данные берутся из CIM-классов, Win32_PnPEntity, реестра и вывода PowerShell;
+затем разрозненные устройства сводятся в один HardwareProfile. Модуль
+только читает систему и ничего не меняет.
 """
 
 from __future__ import annotations
