@@ -553,3 +553,47 @@ class RationaleSaveTests(unittest.TestCase):
             window._save_rationale()
         self.assertTrue(target.exists())
         self.assertIn("SMBIOS", target.read_text(encoding="utf-8"))
+
+class LanguageSwitchKeepsPageTests(unittest.TestCase):
+    """Смена языка пересобирает страницы, но не уводит с текущей вкладки."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _window(self):
+        from hackiclab.ui.main_window import MainWindow
+        return MainWindow()
+
+    def test_rebuild_keeps_selected_page(self):
+        window = self._window()
+        try:
+            target = min(3, window.stack.count() - 1)
+            window.stack.setCurrentIndex(target)
+            window._rebuild_pages()
+            self.assertEqual(window.stack.currentIndex(), target)
+            self.assertEqual(window.nav.currentRow(), window._page_rows[target])
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_language_switch_keeps_selected_page(self):
+        from hackiclab.i18n import tr
+
+        window = self._window()
+        previous = tr.current
+        try:
+            target = min(3, window.stack.count() - 1)
+            window.stack.setCurrentIndex(target)
+            tr.set_lang("en" if previous == "ru" else "ru")
+            window._rebuild_pages()
+            self.assertEqual(window.stack.currentIndex(), target)
+            self.assertEqual(window.nav.currentRow(), window._page_rows[target])
+        finally:
+            tr.set_lang(previous)
+            window.close()
+            window.deleteLater()

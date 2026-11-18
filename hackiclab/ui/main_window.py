@@ -3967,14 +3967,15 @@ class MainWindow(QMainWindow):
         )),
     )
 
-    def _rebuild_nav(self):
+    def _rebuild_nav(self, current: int | None = None):
         """Меню с группами и подписью у каждого пункта.
 
-        Порядок пунктов совпадает с порядком страниц в стеке: он же
-        используется для перехода по клику и для восстановления после
-        смены языка.
+        Порядок пунктов совпадает с порядком страниц в стеке, но в списке
+        между группами стоят разделители, поэтому номер строки и номер
+        страницы различаются — пересчёт идёт через ``_page_rows``.
         """
-        current = self.stack.currentIndex() if hasattr(self, "stack") else 0
+        if current is None:
+            current = self.stack.currentIndex() if hasattr(self, "stack") else 0
         self.nav.blockSignals(True)
         self.nav.clear()
         self._nav_rows = []
@@ -4019,7 +4020,14 @@ class MainWindow(QMainWindow):
                 self._page_rows[page] = self.nav.count() - 1
                 page += 1
         self.nav.blockSignals(False)
-        self.nav.setCurrentRow(self._page_rows.get(current, 0))
+        self._select_nav(current)
+
+    def _select_nav(self, page: int) -> None:
+        """Выделяет пункт меню, соответствующий странице, без перехода по сигналу."""
+        row = self._page_rows.get(page, 0)
+        self.nav.blockSignals(True)
+        self.nav.setCurrentRow(row)
+        self.nav.blockSignals(False)
 
     def _nav_titles(self) -> list[str]:
         """Подписи пунктов меню без групп — для самопроверки локализации."""
@@ -4116,7 +4124,7 @@ class MainWindow(QMainWindow):
             self.stack.removeWidget(w)
             w.deleteLater()
         self._create_pages()
-        self._rebuild_nav()
+        self._rebuild_nav(idx)
         self._tagline_label.setText(tr.t("app.tagline"))
 
         self.last_build_dir = st["last_build_dir"]
@@ -4163,7 +4171,7 @@ class MainWindow(QMainWindow):
             pass
 
         self.stack.setCurrentIndex(max(0, min(idx, self.stack.count() - 1)))
-        self.nav.setCurrentRow(self.stack.currentIndex())
+        self._select_nav(self.stack.currentIndex())
         self._sync_lang_combos()
         self._sync_theme_tiles()
         self.statusBar().showMessage(tr.t("app.lang_changed"), 2500)
