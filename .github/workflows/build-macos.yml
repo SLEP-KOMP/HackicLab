@@ -20,11 +20,15 @@ env:
 jobs:
   build:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Отдельные сборки: universal2 весит вдвое больше, а нужна одна из двух.
+        arch: [arm64, x86_64]
     steps:
       - uses: actions/checkout@v4
 
-      # Официальная сборка python.org — universal2, поэтому .app получается
-      # и для Apple Silicon, и для Intel. Из setup-python приходит arm64-only.
+      # python.org — universal2, поэтому из него можно собрать любую из архитектур.
       - name: Python universal2
         run: |
           curl -fsSL -o /tmp/python.pkg "https://www.python.org/ftp/python/3.12.10/${PYTHON_PKG}"
@@ -42,11 +46,10 @@ jobs:
         run: |
           python3 main.py --check-i18n=out-macos.json
           python3 -c "import json;d=json.load(open('out-macos.json'));print('nav:',len(d['ru']['nav']))"
-          python3 -c "import platform;print('machine:',platform.machine())"
 
-      - name: Сборка .app
+      - name: Сборка .app (${{ matrix.arch }})
         run: |
-          pyinstaller --noconfirm --windowed --target-arch universal2 --name HackicLab \
+          pyinstaller --noconfirm --windowed --target-arch ${{ matrix.arch }} --name HackicLab \
             --add-data "hackiclab/assets:hackiclab/assets" \
             --hidden-import hackiclab.scanner \
             --hidden-import hackiclab.knowledge \
@@ -60,19 +63,17 @@ jobs:
             --hidden-import hackiclab.builder.amd_patches \
             --hidden-import hackiclab.analyzer.oc_log \
             main.py
-
-      - name: Проверка архитектур
-        run: |
-          lipo -archs dist/HackicLab.app/Contents/MacOS/HackicLab
+          echo "архитектура: $(lipo -archs dist/HackicLab.app/Contents/MacOS/HackicLab)"
 
       - name: Архив
         run: |
-          ditto -c -k --keepParent dist/HackicLab.app HackicLab-macos.zip
-          shasum -a 256 HackicLab-macos.zip | tee HackicLab-macos.zip.sha256
+          ditto -c -k --keepParent dist/HackicLab.app "HackicLab-macos-${{ matrix.arch }}.zip"
+          shasum -a 256 "HackicLab-macos-${{ matrix.arch }}.zip" \
+            | tee "HackicLab-macos-${{ matrix.arch }}.zip.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: HackicLab-macos
+          name: HackicLab-macos-${{ matrix.arch }}
           path: |
-            HackicLab-macos.zip
-            HackicLab-macos.zip.sha256
+            HackicLab-macos-${{ matrix.arch }}.zip
+            HackicLab-macos-${{ matrix.arch }}.zip.sha256
