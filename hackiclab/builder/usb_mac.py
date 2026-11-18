@@ -202,9 +202,14 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
         res.backup_path = copy_efi(Path(source_efi), mount, log=log_fn,
                                    backup=backup, backup_root=backup_root)
         if recovery_macos:
-            log_fn("Установщик macOS на macOS пока не скачивается — записана только EFI.")
+            from .usb_writer import install_recovery_to
+            log_fn(f"Скачиваю установщик macOS ({recovery_macos})…")
+            message = install_recovery_to(Path(mount), recovery_macos, log=log_fn)
+            log_fn(message)
+            res.message = f"EFI записана на {mount} | {message}"
+        else:
+            res.message = f"EFI записана на {mount}"
         res.ok = True
-        res.message = f"EFI записана на {mount}"
     except Exception as exc:
         res.ok = False
         res.message = str(exc)

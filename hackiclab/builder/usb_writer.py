@@ -794,9 +794,19 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
 
 
 def install_recovery_layer(target_letter: str, macos_name: str, log=None) -> str:
-    """Скачивает macOS recovery и раскладывает com.apple.recovery.boot на флешку.
+    """Windows-обёртка: корень флешки берётся по букве диска."""
+    letter = target_letter.rstrip(":\\")
+    root = Path(f"{letter}:\\")
+    if not root.exists():
+        raise RuntimeError(f"Флешка {letter}: недоступна.")
+    return install_recovery_to(root, macos_name, log=log)
 
-    Используется для полноценного установщика (как в hackmate). Возвращает сообщение.
+
+def install_recovery_to(dst_root: Path, macos_name: str, log=None) -> str:
+    """Скачивает macOS recovery и раскладывает com.apple.recovery.boot на носитель.
+
+    Не зависит от платформы: принимает корень смонтированного тома, поэтому
+    подходит и для Windows-буквы, и для /Volumes/…
     """
     def _log(msg):
         if log:
@@ -813,10 +823,9 @@ def install_recovery_layer(target_letter: str, macos_name: str, log=None) -> str
     if version is None:
         raise RuntimeError("Не удалось определить версию macOS для recovery.")
 
-    letter = target_letter.rstrip(":\\")
-    dst_root = Path(f"{letter}:\\")
+    dst_root = Path(dst_root)
     if not dst_root.exists():
-        raise RuntimeError(f"Флешка {letter}: недоступна.")
+        raise RuntimeError(f"Носитель недоступен: {dst_root}")
 
     import tempfile
     tmp = Path(tempfile.mkdtemp(prefix="hackiclab_recovery_"))
