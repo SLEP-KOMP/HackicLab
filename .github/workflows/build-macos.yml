@@ -1,0 +1,64 @@
+name: macOS build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "hackiclab/**"
+      - "main.py"
+      - "requirements*.txt"
+      - ".github/workflows/build-macos.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Смоук-тест интерфейса (offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python main.py --check-i18n=out-macos.json
+          python -c "import json;d=json.load(open('out-macos.json'));print('nav:',len(d['ru']['nav']))"
+
+      - name: Сборка .app
+        run: |
+          pyinstaller --noconfirm --windowed --name HackicLab \
+            --add-data "hackiclab/assets:hackiclab/assets" \
+            --hidden-import psutil \
+            --hidden-import hackiclab.scanner \
+            --hidden-import hackiclab.knowledge \
+            --hidden-import hackiclab.builder \
+            --hidden-import hackiclab.analyzer \
+            --hidden-import hackiclab.ui \
+            --hidden-import hackiclab.scanner.diskmap \
+            --hidden-import hackiclab.builder.usb_map \
+            --hidden-import hackiclab.builder.config_editor \
+            --hidden-import hackiclab.builder.history \
+            --hidden-import hackiclab.builder.amd_patches \
+            --hidden-import hackiclab.analyzer.oc_log \
+            main.py
+
+      - name: Архив
+        run: |
+          ditto -c -k --keepParent dist/HackicLab.app HackicLab-macos.zip
+          shasum -a 256 HackicLab-macos.zip | tee HackicLab-macos.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HackicLab-macos
+          path: |
+            HackicLab-macos.zip
+            HackicLab-macos.zip.sha256
