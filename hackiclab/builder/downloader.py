@@ -182,15 +182,20 @@ class Downloader:
         Возвращает путь к распакованной папке kext (если она .kext),
         или корень распаковки, если архив содержит несколько kext.
         """
-        tag = GitHubFetcher.latest_tag(entry.repo)
-        # Если тег резолвится в страницу /releases (нереведённый проект),
-        # пропускаем с предупреждением — не блокируем сборку.
-        if not tag or tag.lower() == "releases":
-            self._log(f"{entry.name}: тег релиза не определён (пропуск)")
-            return None
-        base = f"https://github.com/{entry.repo}/releases/download/{tag}/"
-        asset_name = self.kext_release_file(entry, tag, target_macos=target_macos)
-        url = base + asset_name
+        if entry.url:
+            # Прямая ссылка (payloads OCLP): тег и имя ассета не нужны.
+            asset_name = entry.url.rstrip("/").split("/")[-1] or f"{entry.name}.zip"
+            url = entry.url
+        else:
+            tag = GitHubFetcher.latest_tag(entry.repo)
+            # Если тег резолвится в страницу /releases (нереведённый проект),
+            # пропускаем с предупреждением — не блокируем сборку.
+            if not tag or tag.lower() == "releases":
+                self._log(f"{entry.name}: тег релиза не определён (пропуск)")
+                return None
+            base = f"https://github.com/{entry.repo}/releases/download/{tag}/"
+            asset_name = self.kext_release_file(entry, tag, target_macos=target_macos)
+            url = base + asset_name
         dest_dir.mkdir(parents=True, exist_ok=True)
         # архив и распаковка — в кэше; в EFI/OC/Kexts попадают только .kext
         work = cache_dir() / "kexts" / entry.name

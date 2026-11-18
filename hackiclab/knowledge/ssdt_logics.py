@@ -1,7 +1,9 @@
-"""Логика требуемых SSDT-таблиц и шаблонов патчей ACPI.
+"""Какие SSDT-таблицы нужны профилю и откуда их брать.
 
-SSDT = таблицы ACPI, генерируемые из реального DSDT либо из встроенных шаблонов.
-Логика выбора адаптирована из SSDTTime и hackmate (ssdt.py).
+SSDT — таблицы ACPI: часть собирается из DSL-шаблона, часть кладётся готовым
+`.aml` из `assets/ssdt`, а что-то строится SSDTTime по DSDT конкретной платы.
+В EFI попадают только применимые таблицы: лишний `.aml` без записи в
+`ACPI > Add` лишь мешает, а запись без файла ломает загрузку.
 """
 
 from __future__ import annotations
@@ -22,40 +24,65 @@ class SSDTSpec:
 
 
 SSDT_DB: list[SSDTSpec] = [
-    SSDTSpec("SSDT-PLUG", "Power management (plugin-type)", "Включает CPU power management — нужен почти всем Intel.", template=True, bundled=True),
-    SSDTSpec("SSDT-PLUG-AMD", "Power management (AMD)", "Plugin-type для Ryzen: собирается из DSL-шаблона, готового .aml нет.", template=True, bundled=False),
-    SSDTSpec("SSDT-GPRW", "Sleep fix (GPRW)", "Патч GPRW/PRW — сон и пробуждение ноутбуков.", template=False, bundled=True),
-    SSDTSpec("SSDT-IMEI", "IMEI device", "Добавляет IMEI на платах без него (Sandy/Ivy Bridge).", template=False, bundled=True),
-    SSDTSpec("SSDT-EC", "Fake EC (desktop)", "Фейковый Embedded Controller для desktop — обязателен.", template=True, bundled=True),
-    SSDTSpec("SSDT-EC-USBX", "Fake EC + USB power (laptop)", "Фейковый EC + силы USB для ноутбуков.", template=True, bundled=True),
-    SSDTSpec("SSDT-PNLF", "Backlight (laptop)", "Управление яркостью экрана — только для ноутбуков.", template=True, bundled=True),
-    SSDTSpec("SSDT-AWAC", "AWAC → RTC", "Переключение AWAC-часов на RTC (обычно 300-серия и новее).", template=True, bundled=True),
-    SSDTSpec("SSDT-XOSI", "_OSI compatibility", "Возвращает 'Windows'-ответы для ACPI-совместимости.", template=True, bundled=True),
-    SSDTSpec("SSDT-HPET", "Fix IRQ conflicts", "Убирает IRQ-конфликты HPET — часто нужен на ноутбуках.", template=True, bundled=True),
-    SSDTSpec("SSDT-PMC", "PMCR (300-series)", "Добавляет устройство PMCR для нативной NVRAM на 300-серии.", template=True, bundled=True),
-    SSDTSpec("SSDT-USBX", "USB power properties", "Базовые свойства питания USB.", template=True, bundled=True),
-    SSDTSpec("SSDT-GPI0", "GPIO (laptop)", "Разблокирует GPIO для I2C-тачпадов.", template=True, bundled=True),
+    SSDTSpec("SSDT-PLUG", "Power management (plugin-type)",
+             "Включает CPU power management — нужен почти всем Intel."),
+    SSDTSpec("SSDT-PLUG-AMD", "Power management (AMD)",
+             "Plugin-type для Ryzen: собирается из DSL-шаблона, готового .aml нет.",
+             template=True, bundled=False),
+    SSDTSpec("SSDT-GPRW", "Sleep fix (GPRW)",
+             "Патч GPRW/PRW — сон и пробуждение ноутбуков.", template=False),
+    SSDTSpec("SSDT-IMEI", "IMEI device",
+             "Добавляет IMEI на платах без него (Sandy/Ivy Bridge).", template=False),
+    SSDTSpec("SSDT-EC", "Fake EC (desktop)",
+             "Фейковый Embedded Controller для desktop — обязателен."),
+    SSDTSpec("SSDT-EC-USBX", "Fake EC + USB power (laptop)",
+             "Фейковый EC + силы USB для ноутбуков."),
+    SSDTSpec("SSDT-PNLF", "Backlight (laptop)",
+             "Управление яркостью экрана — только для ноутбуков."),
+    SSDTSpec("SSDT-AWAC", "AWAC → RTC",
+             "Переключение AWAC-часов на RTC (обычно 300-серия и новее)."),
+    SSDTSpec("SSDT-XOSI", "_OSI compatibility",
+             "Возвращает 'Windows'-ответы для ACPI-совместимости."),
+    SSDTSpec("SSDT-HPET", "Fix IRQ conflicts",
+             "Убирает IRQ-конфликты HPET — часто нужен на ноутбуках."),
+    SSDTSpec("SSDT-PMC", "PMCR (300-series)",
+             "Добавляет устройство PMCR для нативной NVRAM на 300-серии."),
+    SSDTSpec("SSDT-USBX", "USB power properties",
+             "Базовые свойства питания USB."),
+    SSDTSpec("SSDT-GPI0", "GPIO (laptop)",
+             "Разблокирует GPIO для I2C-тачпадов."),
+    SSDTSpec("SSDT-USB-Reset", "USB reset (RHUB)",
+             "Гасит корневой хаб RHUB, чтобы macOS поднял порты заново; "
+             "собирается по DSDT, готового .aml нет.",
+             template=True, bundled=False,
+             conditions="В DSDT есть Device (RHUB) — обычно Intel Skylake и новее."),
 ]
+
+_BY_NAME = {spec.name: spec for spec in SSDT_DB}
 
 
 def required_ssdts(profile: HardwareProfile) -> list[SSDTSpec]:
-    """Список SSDT, нужных данному профилю.
+    """Применимые к профилю таблицы в порядке загрузки.
 
-    В EFI попадают только применимые таблицы: PMC — Intel 300-серии,
-    GPI0/PNLF — ноутбуки, PLUG — только Intel. Лишние .aml в ACPI
-    сбивают с толку и не регистрируются в config.plist.
+    Ноутбукам нужен EC-USBX вместо EC и добавляются PNLF, HPET, XOSI, GPI0;
+    десктопам — EC и USBX, у Intel ещё AWAC, а на 300-серии и PMCR.
+    AMD получает PLUG-AMD без AWAC: часов AWAC на этих платах нет.
     """
     amd = (profile.cpu.vendor or "").lower() == "amd"
     laptop = profile.platform == "laptop"
 
-    names: list[str] = ["SSDT-PLUG-AMD" if amd else "SSDT-PLUG"]
+    names = ["SSDT-PLUG-AMD"] if amd else ["SSDT-PLUG"]
     if laptop:
-        names += ["SSDT-EC-USBX", "SSDT-PNLF", "SSDT-HPET", "SSDT-XOSI", "SSDT-GPI0"]
+        names.extend(("SSDT-EC-USBX", "SSDT-PNLF", "SSDT-HPET", "SSDT-XOSI", "SSDT-GPI0"))
     else:
-        names += ["SSDT-EC", "SSDT-USBX"]
+        names.extend(("SSDT-EC", "SSDT-USBX"))
         if not amd:
             names.append("SSDT-AWAC")
             if profile.platform in ("desktop", "workstation", "mini"):
                 names.append("SSDT-PMC")
-    by_name = {s.name: s for s in SSDT_DB}
-    return [by_name[n] for n in names if n in by_name]
+
+    # Собирается только при наличии RHUB в DSDT: без него генератор вернёт
+    # пустоту, и таблица просто не попадёт в ACPI.
+    names.append("SSDT-USB-Reset")
+
+    return [_BY_NAME[name] for name in names if name in _BY_NAME]

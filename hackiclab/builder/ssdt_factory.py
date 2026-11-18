@@ -219,6 +219,64 @@ def get_template(name: str) -> str:
     return _TEMPLATES.get(name, "")
 
 
+def _enclosing_scopes(dsl_text: str, index: int) -> list[str]:
+    """Имена Scope/Device, внутри которых стоит позиция ``index`` (снаружи внутрь)."""
+    prefix = dsl_text[:index]
+    names: list[str] = []
+    depth = 0
+    for pos in range(len(prefix) - 1, -1, -1):
+        char = prefix[pos]
+        if char == "}":
+            depth += 1
+        elif char == "{":
+            depth -= 1
+            if depth < 0:
+                depth = 0
+                head = prefix[:pos]
+                match = re.search(r"(Device|Scope|Processor)\s*\(\s*([^)]+)\)\s*$", head)
+                if match:
+                    names.append(match.group(2).strip())
+    names.reverse()
+    return names
+
+
+def rhub_path(dsl_text: str) -> str:
+    """Полный ACPI-путь устройства RHUB внутри XHCI (пусто, если его нет).
+
+    USB-хаб на новых платах объявлен как ``Device (RHUB)``; SSDT-RHUB гасит его
+    через ``_STA = 0``, и macOS сам поднимает порты заново.
+    """
+    match = re.search(r"Device\s*\(\s*RHUB\s*\)", dsl_text or "", re.IGNORECASE)
+    if not match:
+        return ""
+    parts: list[str] = []
+    for scope in _enclosing_scopes(dsl_text, match.start()):
+        parts.extend(part for part in scope.split(".") if part)
+    parts.append("RHUB")
+    return "\\" + ".".join(parts)
+
+
+def build_usb_reset(dsl_text: str) -> str:
+    """DSL для SSDT-USB-Reset по декомпилированному DSDT (пусто без RHUB)."""
+    path = rhub_path(dsl_text)
+    if not path:
+        return ""
+    return f'''
+DefinitionBlock ("", "SSDT", 2, "Hackic", "UsbReset", 0x00000000)
+{{
+    External ({path}, DeviceObj)
+
+    Scope ({path})
+    {{
+        Method (_STA, 0, NotSerialized)
+        {{
+            Return (Zero)
+        }}
+    }}
+}}
+'''
+
+
 def _iasl_available() -> bool:
     try:
         r = hidden_run(["iasl", "--version"], capture_output=True, timeout=10)
@@ -283,8 +341,12 @@ def compile_dsl(dsl_text: str, out_dir: Path, name: str) -> Optional[Path]:
     return aml if aml.exists() else None
 
 
-def generate_ssdt(name: str, profile: HardwareProfile, out_dir: Path) -> Optional[Path]:
-    """Генерирует один SSDT-файл .aml из шаблона, где возможно."""
+def generate_ssdt(name: str, profile: HardwareProfile, out_dir: Path,
+                  dsdt_text: str = "") -> Optional[Path]:
+    """Генерирует один SSDT-файл .aml; USB-Reset строится по DSDT."""
+    if name == "SSDT-USB-Reset":
+        dsl = build_usb_reset(dsdt_text)
+        return compile_dsl(dsl, out_dir, name) if dsl else None
     tmpl = get_template(name)
     if not tmpl:
         return None  # нет шаблона — фолбэк на встроенный .aml/SSDTTime
@@ -295,11 +357,14 @@ def generate_ssdt(name: str, profile: HardwareProfile, out_dir: Path) -> Optiona
 class SSDTFactory:
     """Точка входа для генерации набора SSDT."""
 
-    def __init__(self, profile: HardwareProfile):
+    def __init__(self, profile: HardwareProfile, dsdt_text: str = ""):
         self.profile = profile
+        # Декомпилированный DSDT: нужен для таблиц, которые строятся по железу
+        # (сейчас — SSDT-USB-Reset по устройству RHUB).
+        self.dsdt_text = dsdt_text
 
     def _assets_acpi_dir(self) -> Path:
-        """Папка со встроенными готовыми .aml (fallback, как в hackmate)."""
+        """Папка со встроенными готовыми .aml — фолбэк, если iasl недоступен."""
         return Path(__file__).resolve().parent.parent / "assets" / "acpi"
 
     def _bundled_aml_path(self, name: str) -> Optional[Path]:
@@ -324,6 +389,10 @@ class SSDTFactory:
           3) только шаблон .dsl (без бинарника) -> template-only
         """
         names = [s.name for s in required_ssdts(self.profile)]
+        # AWAC-таблица нужна только если часы AWAC вообще есть в DSDT:
+        # на старых платах её добавление бессмысленно (подход SSDTTime).
+        if self.dsdt_text and "AWAC" not in self.dsdt_text:
+            names = [n for n in names if n != "SSDT-AWAC"]
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         results = []
@@ -331,7 +400,7 @@ class SSDTFactory:
             status, target = "template-only", None
             # 1) iasl
             try:
-                aml = generate_ssdt(n, self.profile, out_dir)
+                aml = generate_ssdt(n, self.profile, out_dir, dsdt_text=self.dsdt_text)
                 if aml:
                     status, target = "compiled", aml
             except Exception:

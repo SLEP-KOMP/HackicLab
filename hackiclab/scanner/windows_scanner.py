@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from . import pci_paths
 from .classify import (
     ALC_LAYOUTS,
     INTEL_IGPU_GENERATIONS,
@@ -58,7 +59,49 @@ class WindowsScanner:
         self._detect_storage(p)
         self._detect_peripherals(p)
         self._disable_gpu_for_vm(p)
+        self._attach_pci_paths(p)
         return p
+
+    # --- UEFI-пути устройств ---
+    def _attach_pci_paths(self, p: HardwareProfile):
+        """Дописывает PciRoot-пути аудио, Ethernet и Wi-Fi.
+
+        Нужны для DeviceProperties: layout-id аудио и built-in для сетевых
+        контроллеров (iMessage/App Store видят их как встроенные).
+        """
+        try:
+            rows = pci_paths.collect()
+        except Exception:
+            return
+        if not rows:
+            return
+        lookup = pci_paths.table(rows)
+
+        def pick(*needles: str):
+            for needle in needles:
+                for row in rows:
+                    if needle and needle in str(row.get("name") or "").lower():
+                        return pci_paths.compose_path(str(row.get("id")), lookup)
+            return ""
+
+        audio_path = pick("high definition audio controller", "audio")
+        if audio_path:
+            p.audio.pci_path = audio_path
+
+        eth_hint = (p.net.eth_name or "").lower()
+        eth_needle = ""
+        for token in ("i211", "i210", "i219", "i218", "i217", "i225", "i226",
+                      "rtl8125", "rtl8111", "realtek", "gigabit", "ethernet"):
+            if token in eth_hint:
+                eth_needle = token
+                break
+        eth_path = pick(eth_needle, "gigabit", "ethernet") if eth_hint else ""
+        if eth_path:
+            p.net.eth_pci_path = eth_path
+
+        wifi_path = pick("wireless", "802.11", "wi-fi", "wifi")
+        if wifi_path:
+            p.net.wifi_pci_path = wifi_path
 
     # --- system ---
     def _detect_system(self, p: HardwareProfile):
@@ -233,8 +276,9 @@ class WindowsScanner:
             codec = "Realtek"
         p.audio.codec = codec
         if codec in ALC_LAYOUTS:
-            p.audio.layout_candidates = ALC_LAYOUTS[codec]
-            p.audio.layout_id = p.audio.layout_candidates[0]
+            from ..knowledge.audio_layouts import recommended
+            p.audio.layout_candidates = list(ALC_LAYOUTS[codec])
+            p.audio.layout_id = recommended(codec)
 
     def _hda_codec_windows(self) -> str:
         raw = ps.run(

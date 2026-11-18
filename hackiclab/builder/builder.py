@@ -240,10 +240,26 @@ class EFIBuilder:
 
         # 3) SSDT генерация (via SSDTFactory + iasl)
         self._step(72, "Готовлю SSDT…")
+        dsdt_text = ""
+        try:
+            from .usb_map import decompile_dsdt, dump_dsdt
+            dsdt_dir = tmp / "dsdt"
+            dsdt_dir.mkdir(parents=True, exist_ok=True)
+            dsdt_aml = dump_dsdt(dsdt_dir)
+            if dsdt_aml:
+                dsdt_text = decompile_dsdt(dsdt_aml, dsdt_dir, log=self._log) or ""
+                if dsdt_text:
+                    self._log("DSDT: прочитан для таблиц по железу")
+                else:
+                    self._log("DSDT: декомпилировать не удалось — SSDT по DSDT пропущены")
+            else:
+                self._log("DSDT: дамп недоступен — SSDT по DSDT пропущены")
+        except Exception as exc:
+            self._log(f"DSDT: ошибка ({exc})")
         try:
             ssdt_out = target / ".ssdt"
             ssdt_out.mkdir(parents=True, exist_ok=True)
-            factory = SSDTFactory(self.plan.profile)
+            factory = SSDTFactory(self.plan.profile, dsdt_text=dsdt_text)
             ssdt_results = factory.generate_all(ssdt_out)
             # попытка подтянуть iasl и перекомпилировать, если не собралось
             if not find_iasl(ensure=True):
@@ -252,7 +268,8 @@ class EFIBuilder:
                 for r in ssdt_results:
                     if r["status"] == "template-only":
                         from .ssdt_factory import generate_ssdt
-                        aml = generate_ssdt(r["name"], self.plan.profile, ssdt_out)
+                        aml = generate_ssdt(r["name"], self.plan.profile, ssdt_out,
+                                            dsdt_text=dsdt_text)
                         if aml:
                             r["status"] = "compiled"
                             r["path"] = str(aml)
@@ -290,6 +307,18 @@ class EFIBuilder:
                                       driver_names=res.stats.get("drivers_placed", []),
                                       kernel_patches=amd_patches,
                                       acpi_names=res.stats.get("ssdt_placed", []))
+
+        # Запись в локальную базу отчётов: и удачные, и неудачные сборки.
+        # Из неё же строится страница новой задачи GitHub для общей базы.
+        try:
+            from ..knowledge import community
+            cfg_bytes = (layout.oc / "config.plist").read_bytes()
+            record = community.record_from_result(self.plan.profile, opts, res,
+                                                  kexts=kexts_placed, config=cfg_bytes)
+            res.stats["community_record"] = str(record)
+            self._log(f"Отчёт о сборке сохранён: {record.name}")
+        except Exception as exc:
+            self._log(f"Отчёт о сборке не сохранён ({exc})")
 
         # 4.5) HeliPort для режима itlwm: без него в macOS нет меню Wi-Fi
         if (self.plan.options.wifi_kext_mode == "itlwm"

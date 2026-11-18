@@ -24,6 +24,9 @@ class KextEntry:
     os_max: str = ""                           # максимальная macOS, где кекст ещё работает
     # Версии-специфичные сборки в одном релизе: (macOS, подстрока имени ассета).
     macos_assets: tuple = ()
+    # Прямая ссылка на архив: для кекстов, которые публикуются не релизами
+    # GitHub, а файлами в другом репозитории (payloads OCLP).
+    url: str = ""
 
 
 KEXT_DB: dict[str, KextEntry] = {}
@@ -84,6 +87,16 @@ _reg({
         ),
     ),
     "AirportBrcmFixup": KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup", "AirportBrcmFixup-", "Broadcom WiFi патчи"),
+    # С macOS 13.3 Apple вырезала драйверы Broadcom: нативный модуль работает
+    # только с этим набором — блокировкой штатного IOSkywalkFamily и AMFIPass.
+    "AMFIPass": KextEntry("AMFIPass", "acidanthera/AMFIPass", "AMFIPass-", "Замена amfi=0x80 для патчей OCLP", os_min="big sur"),
+    "IOSkywalkFamily": KextEntry("IOSkywalkFamily", "acidanthera/IOSkywalkFamily", "IOSkywalkFamily-", "Legacy Wi-Fi: каркас IOSkywalk для Broadcom", os_min="ventura"),
+    "IO80211FamilyLegacy": KextEntry(
+        "IO80211FamilyLegacy", "dortania/OpenCore-Legacy-Patcher", "IO80211FamilyLegacy",
+        "Legacy Wi-Fi: AirPort для Broadcom на Ventura+", os_min="ventura",
+        url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/Kexts/Wifi/"
+            "IO80211FamilyLegacy-v1.0.0.zip",
+    ),
     "ATH9KFixup": KextEntry("ATH9KFixup", "black-dragon74/ATH9KFixup", "release", "Atheros WiFi патчи"),
 
     "IntelBluetoothFirmware": KextEntry("IntelBluetoothFirmware", "OpenIntelWireless/IntelBluetoothFirmware", "IntelBluetooth", "Intel BT"),
@@ -135,8 +148,7 @@ def _macos_idx(target: str) -> int:
     t = (target or "").lower()
     for i, name in enumerate(_MACOS_ORDER):
         if name.lower() in t:
-            return i
-    # числовые версии
+            return i    # числовые версии
     if "10.13" in t: return 0
     if "10.14" in t: return 1
     if "10.15" in t: return 2
@@ -214,6 +226,19 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     return cur
 
 
+_BRCM_LEGACY_FROM = _MACOS_ORDER.index("Ventura")
+
+
+def _needs_brcm_legacy(target_macos: str = "") -> bool:
+    """Нужен ли набор OCLP для Broadcom: с 13.3 Apple убрала драйверы.
+
+    Пустая цель считается актуальной macOS — тогда набор тоже нужен.
+    """
+    if not target_macos:
+        return True
+    return _macos_idx(target_macos) >= _BRCM_LEGACY_FROM
+
+
 def macos_in_range(entry: KextEntry, target_macos: str = "") -> bool:
     """Попадает ли целевая macOS в диапазон, где кекст реально работает."""
     if not target_macos:
@@ -281,11 +306,19 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
 
     # CPU/платформа
     if profile.cpu.vendor == "amd":
-        add("SMCAMDProcessor", "CryptexFixup", "RestrictEvents")
+        # Без AppleMCEReporterDisabler ядро падает на AppleMCEReporter.
+        add("SMCAMDProcessor", "CryptexFixup", "RestrictEvents",
+            "AppleMCEReporterDisabler")
     else:
-        add("RestrictEvents", "CPUFriend", "NVMeFix")
+        add("RestrictEvents", "CPUFriend")
         if profile.cpu.generation >= 12:
             add("CpuTopologyRebuild")
+
+    # NVMe: Power management и APST нужны с Monterey на любом железе
+    storage = getattr(profile, "storage", None)
+    if (storage is not None and getattr(storage, "nvme_present", False)
+            and macos_in_range(KEXT_DB["NVMeFix"], target_macos)):
+        add("NVMeFix")
 
     # GPU
     g = profile.dgpu if profile.dgpu else (profile.igpu if profile.igpu else None)
@@ -330,11 +363,14 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
             add("itlwm" if wifi_kext_mode == "itlwm" else "AirportItlwm")
     elif w == "broadcom":
         if native_apple:
-            # BCM94360/BCM943602 (нативный Apple AirPort): работает из коробки,
-            # никаких патчей не нужно
-            pass
+            # BCM94360/BCM943602 (нативный Apple AirPort): до Ventura 13.2
+            # работает из коробки, на 13.3+ нужен набор OCLP.
+            if _needs_brcm_legacy(target_macos):
+                add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")
         else:
             add("AirportBrcmFixup")
+            if _needs_brcm_legacy(target_macos):
+                add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")
     elif w == "atheros":
         add("ATH9KFixup")
 

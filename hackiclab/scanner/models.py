@@ -66,6 +66,7 @@ class AudioInfo:
     pci_function: int = -1
     layout_id: int = 0
     layout_candidates: list = field(default_factory=list)
+    pci_path: str = ""          # UEFI-путь контроллера: PciRoot(0x0)/Pci(...)
 
     def as_dict(self) -> dict:
         return {
@@ -75,6 +76,7 @@ class AudioInfo:
             "pci_function": self.pci_function,
             "layout_id": self.layout_id,
             "layout_candidates": self.layout_candidates,
+            "pci_path": self.pci_path,
         }
 
 
@@ -85,11 +87,13 @@ class NetInfo:
     eth_chipset: str = ""       # i219 / i225 / rtl8111 ...
     eth_pci_device: int = -1
     eth_pci_function: int = -1
+    eth_pci_path: str = ""
     # WiFi
     wifi_name: str = ""
     wifi_chipset: str = ""      # intel / broadcom / atheros / realtek / mediatek
     wifi_pci_device: int = -1
     wifi_pci_function: int = -1
+    wifi_pci_path: str = ""
     # Bluetooth
     bt_chipset: str = ""
     has_bt: bool = False
@@ -105,10 +109,12 @@ class NetInfo:
             "eth_chipset": self.eth_chipset,
             "eth_pci_device": self.eth_pci_device,
             "eth_pci_function": self.eth_pci_function,
+            "eth_pci_path": self.eth_pci_path,
             "wifi_name": self.wifi_name,
             "wifi_chipset": self.wifi_chipset,
             "wifi_pci_device": self.wifi_pci_device,
             "wifi_pci_function": self.wifi_pci_function,
+            "wifi_pci_path": self.wifi_pci_path,
             "bt_chipset": self.bt_chipset,
             "has_bt": self.has_bt,
             "bt_native_apple": self.bt_native_apple,

@@ -16,7 +16,7 @@
 ### Прочее
 
 - Переводы интерфейса **RU/EN** для всех новых элементов.
-- Ядро переиспользует подходы open-source экосистемы OpenCore: macrecovery (acidanthera), форматирование из hackmate.
+- Ядро переиспользует подходы open-source экосистемы OpenCore: macrecovery (acidanthera), форматирование GPT+ESP из открытых руководств Dortania.
 
 ### Установка
 

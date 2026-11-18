@@ -248,3 +248,69 @@ class SmbiosDefaultTargetTests(unittest.TestCase):
             smbios_model_for(p, ""),
             smbios_model_for(p, "macOS Sequoia"),
         )
+
+
+def _amd_profile(nvme: bool = True, wifi: str = "broadcom", bt_native: bool = True):
+    """Профиль этой машины: Ryzen 5 3600, RX 580, ALC1220, I211, NVMe."""
+    from hackiclab.scanner.models import StorageInfo
+
+    p = HardwareProfile(platform="desktop")
+    p.cpu = CPUInfo(name="AMD Ryzen 5 3600", vendor="amd", generation=10, codename="Zen 2")
+    p.audio = AudioInfo(codec="ALC1220")
+    p.net = NetInfo(eth_chipset="i211", wifi_chipset=wifi, bt_native_apple=bt_native)
+    p.storage = StorageInfo(nvme_present=nvme)
+    p.dgpu = GPUInfo(name="AMD Radeon RX 580 2048SP", vendor="amd")
+    return p
+
+
+class AmdAndLegacyWifiTests(unittest.TestCase):
+    def test_amd_gets_mce_disabler(self):
+        names = [k.name for k in select_kexts(_amd_profile(), target_macos="Sonoma")]
+        self.assertIn("AppleMCEReporterDisabler", names)
+
+    def test_nvme_fix_follows_storage(self):
+        with_nvme = [k.name for k in select_kexts(_amd_profile(nvme=True),
+                                                  target_macos="Sonoma")]
+        without = [k.name for k in select_kexts(_amd_profile(nvme=False),
+                                                target_macos="Sonoma")]
+        self.assertIn("NVMeFix", with_nvme)
+        self.assertNotIn("NVMeFix", without)
+
+    def test_broadcom_legacy_set_from_ventura(self):
+        for target in ("Ventura", "Sonoma", "Tahoe"):
+            names = [k.name for k in select_kexts(_amd_profile(), target_macos=target)]
+            for kext in ("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy"):
+                self.assertIn(kext, names, target)
+
+    def test_broadcom_on_monterey_needs_no_legacy_set(self):
+        names = [k.name for k in select_kexts(_amd_profile(), target_macos="Monterey")]
+        self.assertNotIn("IOSkywalkFamily", names)
+        self.assertNotIn("IO80211FamilyLegacy", names)
+
+    def test_non_native_broadcom_also_gets_fixup(self):
+        names = [k.name for k in select_kexts(_amd_profile(bt_native=False),
+                                              target_macos="Ventura")]
+        self.assertIn("AirportBrcmFixup", names)
+
+    def test_config_blocks_stock_ioskywalk_on_ventura_plus(self):
+        cfg = plistlib.loads(generate_config_plist(_amd_profile(),
+                                                   BuildOptions(target_macos="Sonoma")))
+        blocks = cfg["Kernel"]["Block"]
+        self.assertIn("com.apple.iokit.IOSkywalkFamily",
+                      [b["Identifier"] for b in blocks])
+        self.assertEqual(blocks[0]["Strategy"], "Exclude")
+
+    def test_config_keeps_block_empty_on_monterey(self):
+        cfg = plistlib.loads(generate_config_plist(_amd_profile(),
+                                                   BuildOptions(target_macos="Monterey")))
+        self.assertEqual(cfg["Kernel"]["Block"], [])
+
+    def test_direct_url_skips_release_lookup(self):
+        entry = KEXT_DB["IO80211FamilyLegacy"]
+        self.assertTrue(entry.url.startswith("https://"))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with mock.patch.object(dl_mod.GitHubFetcher, "latest_tag",
+                               side_effect=AssertionError("тег не нужен")), \
+                mock.patch.object(dl_mod, "download_bytes", return_value=b"<html>"):
+            self.assertIsNone(Downloader().download_kext(entry, Path(tmp.name)))

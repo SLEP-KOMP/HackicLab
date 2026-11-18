@@ -1,12 +1,14 @@
-"""Генерация SMBIOS-данных: Serial, MLB, SystemUUID, ROM.
+"""Генерация SMBIOS-полей: Serial, MLB, SystemUUID, ROM под выбранную модель.
 
-Логика форматов адаптирована из hackmate (smbios.py) и GenSMBIOS/macserial.
+Формат серийного номера — 12 символов нового образца: место сборки (3),
+год (1), неделя (1), линия (3), код продукта (4). Год и неделя согласованы:
+первая половина года даёт недели 1–26, вторая — 27–53. Используется base34
+без букв I и O, как в серийных номерах Apple.
 """
 
 from __future__ import annotations
 
 import random
-import string
 import uuid
 from dataclasses import dataclass
 
@@ -20,50 +22,77 @@ class SMBIOSData:
     model: str = ""          # MacPro7,1 и т.д.
 
 
-# 3-4 буквенных префикса MLB на модель (для реалистичности)
-MLB_PREFIXES = {
-    "MacBookPro": ["C02", "CO7", "C1M", "C1Q", "C2FL", "C2G7"],
-    "MacBookAir": ["C02", "COV", "C1X", "C22", "C2JZ"],
-    "iMac":       ["C02", "C02JK", "C02N4", "C03K", "C04Z"],
-    "MacPro":     ["C02", "C07", "C0XM", "C1ZX", "C2QN"],
-    "Macmini":    ["C02", "C07N", "C0XW", "C1X6"],
+# Правдоподобные заводские префиксы по семейству модели.
+PLANT_PREFIXES = {
+    "MacBookPro": ("C02", "CO7", "C1M", "C1Q", "C2FL", "C2G7"),
+    "MacBookAir": ("C02", "COV", "C1X", "C22", "C2JZ"),
+    "iMac": ("C02", "C02JK", "C02N4", "C03K", "C04Z"),
+    "MacPro": ("C02", "C07", "C0XM", "C1ZX", "C2QN"),
+    "Macmini": ("C02", "C07N", "C0XW", "C1X6"),
 }
 
-_ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ"   # без I, O — как Apple
-_DIGITS = "0123456789"
-_MIXED = _ALPHA + _DIGITS
+_BASE34 = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+# Год в новом формате: пара символов — первая и вторая половина года.
+_YEAR_HALVES = {
+    2010: ("C", "D"), 2011: ("F", "G"), 2012: ("H", "J"), 2013: ("K", "L"),
+    2014: ("M", "N"), 2015: ("P", "Q"), 2016: ("R", "S"), 2017: ("T", "V"),
+    2018: ("W", "X"), 2019: ("Y", "Z"), 2020: ("C", "D"), 2021: ("F", "G"),
+}
+
+# Неделя: символ базы 34, первая половина года — 1–26, вторая — 27–53.
+_WEEK_FIRST = "123456789" + "CDFGHJKLMNPQRTVWX"
+_WEEK_SECOND = "123456789" + "CDFGHJKLMNPQRTVWXY"
+
+_SERIAL_LEN = 12
+_MLB_LEN = 17
 
 
-def _serial_for(model: str) -> str:
-    """Серийник Apple: 11-12 символов, формат региональный+сборка."""
-    # Формат: XXY ZZZZ Z // префикс + год-неделя (2) + код завода (1) + рандом
-    prefix = "C02"
-    year_week = random.choice(string.digits) + random.choice(string.digits + _ALPHA)
-    line = random.choice("ABCDEFGHJKMNP")
-    mid = "".join(random.choice(_MIXED) for _ in range(4))
-    return f"{prefix}{year_week}{line}{mid}"
+def _plant(model: str) -> str:
+    family = model.split(",")[0].strip()
+    return random.choice(PLANT_PREFIXES.get(family, PLANT_PREFIXES["MacPro"]))
 
 
-def _mlb_for(model: str, serial: str) -> str:
-    """MLB: 17 символов, формат: заводской префикс + серийник + контрольные символы."""
-    pre = random.choice(MLB_PREFIXES.get(model.split(",")[0], MLB_PREFIXES["MacPro"]))
-    # Строим MLB так, чтобы по длине совпадал с ожидаемым для модели
-    budget = 17 - len(pre)
-    if budget < 8:
-        pre = pre[: max(4, 17 - 8)]
-        budget = 17 - len(pre)
-    tail = serial[:budget]
-    extra = "".join(random.choice(_MIXED) for _ in range(max(0, budget - len(tail))))
-    return (pre + tail + extra)[:17]
+def _year_week(year: int | None = None) -> tuple[str, str]:
+    """Символ года и согласованный символ недели."""
+    year = year or random.choice(sorted(_YEAR_HALVES))
+    first, second = _YEAR_HALVES[year]
+    if random.random() < 0.5:
+        return first, random.choice(_WEEK_FIRST)
+    return second, random.choice(_WEEK_SECOND)
+
+
+def _code(length: int) -> str:
+    return "".join(random.choice(_BASE34) for _ in range(length))
+
+
+def _serial(model: str) -> str:
+    year_char, week_char = _year_week()
+    return f"{_plant(model)}{year_char}{week_char}{_code(3)}{_code(4)}"[:_SERIAL_LEN]
+
+
+def _mlb(model: str, serial: str) -> str:
+    plant = _plant(model)
+    need = _MLB_LEN - len(plant)
+    body = (serial * 2)[:need]
+    if len(body) < need:
+        body += _code(need - len(body))
+    return plant + body
+
+
+def _rom() -> str:
+    first = random.randrange(0, 254, 2)          # чётный старший байт — unicast
+    rest = bytes(random.getrandbits(8) for _ in range(5))
+    return (bytes([first]) + rest).hex()
 
 
 def generate_smbios(model: str) -> SMBIOSData:
-    """Генерирует полный набор SMBIOS для данной модели Mac."""
-    d = SMBIOSData(model=model)
-    d.serial = _serial_for(model)
-    d.mlb = _mlb_for(model, d.serial)
-    d.system_uuid = str(uuid.uuid4()).upper()
-    # ROM — 6 байт, первый байт принудительно чётный (unicast MAC)
-    rom_bytes = bytes([random.randrange(0, 255, 2)]) + bytes(random.getrandbits(8) for _ in range(5))
-    d.rom = rom_bytes.hex()
-    return d
+    """Полный набор SMBIOS для указанной модели Mac."""
+    serial = _serial(model)
+    return SMBIOSData(
+        serial=serial,
+        mlb=_mlb(model, serial),
+        system_uuid=str(uuid.uuid4()).upper(),
+        rom=_rom(),
+        model=model,
+    )

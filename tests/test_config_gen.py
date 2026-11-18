@@ -98,3 +98,33 @@ class GpuAndDualBootTests(unittest.TestCase):
             cfg = plistlib.loads(Path(path).read_bytes())
         drivers = [d["Path"] for d in cfg["UEFI"]["Drivers"]]
         self.assertIn("OpenLinuxBoot.efi", drivers)
+
+
+class DevicePropertiesTests(unittest.TestCase):
+    AUDIO = "PciRoot(0x0)/Pci(0x8,0x1)/Pci(0x0,0x4)"
+    ETH = "PciRoot(0x0)/Pci(0x1,0x3)/Pci(0x0,0x2)/Pci(0x3,0x0)/Pci(0x0,0x0)"
+    WIFI = "PciRoot(0x0)/Pci(0x1,0x3)/Pci(0x0,0x2)/Pci(0x0,0x0)/Pci(0x0,0x0)"
+
+    def _profile(self):
+        from hackiclab.scanner.models import AudioInfo, NetInfo
+
+        p = desktop_profile()
+        p.audio = AudioInfo(codec="ALC1220", layout_id=1, pci_path=self.AUDIO)
+        p.net = NetInfo(eth_chipset="i211", wifi_chipset="broadcom",
+                        eth_pci_path=self.ETH, wifi_pci_path=self.WIFI)
+        return p
+
+    def test_audio_layout_id_is_written_by_path(self):
+        cfg = plistlib.loads(generate_config_plist(self._profile(), BuildOptions()))
+        self.assertEqual(cfg["DeviceProperties"]["Add"][self.AUDIO]["layout-id"], 1)
+
+    def test_network_controllers_are_built_in(self):
+        cfg = plistlib.loads(generate_config_plist(self._profile(), BuildOptions()))
+        props = cfg["DeviceProperties"]["Add"]
+        self.assertEqual(props[self.ETH]["built-in"], b"\x01")
+        self.assertEqual(props[self.WIFI]["built-in"], b"\x01")
+
+    def test_no_paths_means_no_entries(self):
+        cfg = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
+        keys = [k for k in cfg["DeviceProperties"]["Add"] if k != "PciRoot(0x0)/Pci(0x2,0x0)"]
+        self.assertEqual(keys, [])

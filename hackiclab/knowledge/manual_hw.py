@@ -240,10 +240,10 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
     audio_codec = (selection.audio_codec or "").strip().upper()
     profile.audio = AudioInfo(codec=audio_codec, name=audio_codec)
     if audio_codec:
-        from ..scanner.classify import ALC_LAYOUTS
-        candidates = ALC_LAYOUTS.get(audio_codec, [])
+        from .audio_layouts import layouts_for, recommended
+        candidates = layouts_for(audio_codec)
         profile.audio.layout_candidates = list(candidates)
-        profile.audio.layout_id = candidates[0] if candidates else 0
+        profile.audio.layout_id = recommended(audio_codec)
     profile.net = NetInfo(eth_chipset=selection.ethernet,
                           eth_name=selection.ethernet.upper(),
                           wifi_chipset=selection.wifi)

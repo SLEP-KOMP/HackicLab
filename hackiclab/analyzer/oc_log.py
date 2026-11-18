@@ -1,8 +1,8 @@
-"""Разбор логов OpenCore: типовые ошибки загрузки -> причина и что делать.
+"""Разбор логов OpenCore: находим типовую ошибку загрузки и подсказываем шаг.
 
-Логика адаптирована из hackmate (oc_log.py, MIT): регулярные выражения
-терпимы к изменениям формата между версиями OpenCore, тексты подсказок
-живут в i18n (`oclog.hint.*`), чтобы работали RU и EN.
+Правила ниже терпимы к различиям в формате между версиями OpenCore: сверяем
+характерные фрагменты строк, а не точный текст. Подсказки живут в i18n
+(`oclog.hint.<код>`), поэтому работают и по-русски, и по-английски.
 """
 
 from __future__ import annotations
@@ -20,45 +20,49 @@ class LogFinding:
     detail: str = ""       # техническая строка из лога (без перевода)
 
 
-# (код -> регулярка); код превращается в ключ i18n "oclog.hint.<код>".
-_PATTERNS: list[tuple[str, str]] = [
-    ("root_hash", r"Err\(0xE\).*root_hash"),
-    ("eb_ld", r"Err\(0xE\).*EB\.LD"),
-    ("mmio_stall", r"OCABC.*MMIO.*stall"),
-    ("panic_init", r"panic.*prior to initialization"),
-    ("kext_load", r"Could not load.*\.kext"),
-    ("lilu_missing", r"Lilu.*not found|requires Lilu"),
-    ("kext_inject", r"Failed to inject.*kext"),
-    ("driver_load", r"OC: Failed to load.*efi"),
-    ("board_id", r"board-id.*not supported|board id.*mismatch"),
-    ("security_policy", r"Blocked by.*security policy|apfs.*security"),
-    ("hidden_recovery", r"HideAuxiliary.*recovery.*hidden|auxiliary.*not.*show"),
-    ("malloc", r"malloc.*failed|alloc.*failed"),
-    ("gpio_timeout", r"VoodooI2C.*gpio.*timeout|GPIO.*timeout"),
-    ("alcid", r"AppleALC.*layout.*not found|layout.*id.*invalid"),
-    ("weg_patch", r"WhateverGreen.*failed|WEG.*patch.*failed"),
-    ("nvme_power", r"NVMeFix.*not.*supported|nvme.*power.*management.*failed"),
-    ("smc_key", r"SMC.*key.*not found|VirtualSMC.*failed"),
-]
+# Код правила совпадает с суффиксом ключа i18n "oclog.hint.<код>".
+# Порядок важен: первое совпадение выигрывает, частные случаи идут раньше общих.
+_RULES: tuple[tuple[str, str], ...] = (
+    ("root_hash", r"root_?hash[^\n]*Err\(|Err\(0xE\)[^\n]*root_?hash"),
+    ("eb_ld", r"Err\(0xE\)[^\n]*EB\.LD|Cannot open EB\.LD"),
+    ("mmio_stall", r"OCABC[^\n]*MMIO[^\n]*stall|MMIO[^\n]*(?:not|un)supported"),
+    ("panic_init", r"panic[^\n]*(?:prior to|before)[^\n]*init"),
+    ("lilu_missing", r"(?:requires|needs) Lilu|Lilu(?:\.kext)?[^\n]*(?:absent|not (?:found|loaded))"),
+    ("kext_load", r"Could not load[^\n]*\.kext"),
+    ("kext_inject", r"inject[^\n]*kext[^\n]*(?:fail|error)|fail[^\n]*inject[^\n]*kext"),
+    ("driver_load", r"OC:[^\n]*load[^\n]*\.efi[^\n]*fail|fail[^\n]*load[^\n]*\.efi"),
+    ("board_id", r"board-?id[^\n]*(?:not supported|mismatch|unsupported)"),
+    ("security_policy", r"(?:blocked|denied)[^\n]*security policy|apfs[^\n]*security"),
+    ("hidden_recovery", r"(?:HideAuxiliary|auxiliary)[^\n]*(?:hidden|not (?:shown|visible))"),
+    ("malloc", r"(?:malloc|alloc)[^\n]*fail"),
+    ("gpio_timeout", r"(?:VoodooI2C|GPIO)[^\n]*timeout"),
+    ("alcid", r"AppleALC[^\n]*layout[^\n]*(?:not found|missing)|layout-?id[^\n]*invalid"),
+    ("weg_patch", r"(?:WhateverGreen|WEG)[^\n]*(?:fail|patch[^\n]*fail)"),
+    ("nvme_power", r"NVMeFix[^\n]*(?:not supported|fail)|nvme[^\n]*power[^\n]*fail"),
+    ("smc_key", r"SMC[^\n]*(?:key[^\n]*not found|fail)|VirtualSMC[^\n]*fail"),
+)
 
-_RAW_ERROR_RE = re.compile(r"Err\(|FAIL|panic", re.IGNORECASE)
+_COMPILED: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (code, re.compile(pattern, re.IGNORECASE)) for code, pattern in _RULES
+)
+
+# Строки без известного шаблона: показываем их как «сырые» ошибки.
+_RUMBLE = re.compile(r"Err\(|error|panic|fail", re.IGNORECASE)
 
 
 def parse_log_text(text: str) -> list[LogFinding]:
-    """Ищет известные ошибки; если их нет — сырые строки ошибок или «чисто»."""
-    findings: list[LogFinding] = []
-    for code, pattern in _PATTERNS:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            findings.append(LogFinding("error", f"oclog.hint.{code}",
-                                       match.group(0).strip()))
-    if findings:
-        return findings
+    """Все совпавшие правила; иначе — сырые строки ошибок; иначе «чисто»."""
+    found: list[LogFinding] = []
+    for code, regex in _COMPILED:
+        hit = regex.search(text)
+        if hit is not None:
+            found.append(LogFinding("error", f"oclog.hint.{code}", hit.group(0).strip()))
+    if found:
+        return found
 
-    raw = [line.strip() for line in text.splitlines() if _RAW_ERROR_RE.search(line)]
-    if raw:
-        return [LogFinding("warn", "oclog.raw_unknown", "\n".join(raw[:10]))]
-
+    noise = [row.strip() for row in text.splitlines() if _RUMBLE.search(row)]
+    if noise:
+        return [LogFinding("warn", "oclog.raw_unknown", "\n".join(noise[:10]))]
     return [LogFinding("info", "oclog.clean")]
 
 
@@ -66,13 +70,13 @@ def parse_log_file(path: Path) -> list[LogFinding]:
     """Разбирает файл лога; ошибка чтения — отдельная запись."""
     try:
         text = Path(path).read_text(errors="replace")
-    except Exception:
+    except OSError:
         return [LogFinding("error", "oclog.read_error")]
     return parse_log_text(text)
 
 
 def find_oc_log(root: Path) -> Optional[Path]:
-    """Ищет свежий opencore-*.txt в папке (или принимает сам файл)."""
+    """Свежий opencore-*.txt в папке сборки; можно передать и сам файл."""
     root = Path(root)
     if root.is_file():
         return root
@@ -80,7 +84,7 @@ def find_oc_log(root: Path) -> Optional[Path]:
         try:
             logs = sorted(folder.glob("opencore-*.txt"),
                           key=lambda p: p.stat().st_mtime, reverse=True)
-        except Exception:
+        except OSError:
             continue
         if logs:
             return logs[0]
@@ -88,34 +92,36 @@ def find_oc_log(root: Path) -> Optional[Path]:
 
 
 def enable_logging(config_path: Path) -> bool:
-    """Включает файловый лог OpenCore в config.plist (с резервной копией)."""
+    """Включает файловый лог OpenCore в config.plist, оставляя .bak рядом."""
     import plistlib
     import shutil
 
     path = Path(config_path)
     try:
-        with open(path, "rb") as f:
-            cfg = plistlib.load(f)
-        debug = (cfg.setdefault("Misc", {})).setdefault("Debug", {})
-        debug["AppleDebug"] = True
-        debug["ApplePanic"] = True
-        debug["DisableWatchDog"] = True
-        debug["Target"] = 67            # файл + последовательный порт
-        debug["DisplayLevel"] = 2147483650
+        with open(path, "rb") as fh:
+            cfg = plistlib.load(fh)
+        debug = cfg.setdefault("Misc", {}).setdefault("Debug", {})
+        debug.update({
+            "AppleDebug": True,
+            "ApplePanic": True,
+            "DisableWatchDog": True,
+            "Target": 67,               # файл + последовательный порт
+            "DisplayLevel": 2147483650,
+        })
         try:
             shutil.copy2(path, path.with_name(path.name + ".bak"))
-        except Exception:
+        except OSError:
             pass
-        with open(path, "wb") as f:
-            plistlib.dump(cfg, f)
+        with open(path, "wb") as fh:
+            plistlib.dump(cfg, fh)
         return True
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 
 def summarise(findings: list[LogFinding]) -> dict:
     """Счётчики по уровням для интерфейса."""
     counts = {"error": 0, "warn": 0, "info": 0}
-    for f in findings:
-        counts[f.severity] = counts.get(f.severity, 0) + 1
+    for item in findings:
+        counts[item.severity] = counts.get(item.severity, 0) + 1
     return counts

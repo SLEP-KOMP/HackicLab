@@ -1,7 +1,8 @@
-"""Формирование файловой структуры EFI и запись на диск."""
+"""Структура папки EFI: создание каталогов, раскладка файлов, config.plist."""
 
 from __future__ import annotations
 
+import plistlib
 import shutil
 import zipfile
 from dataclasses import dataclass, field
@@ -17,8 +18,24 @@ class EFIBuildResult:
     stats: dict = field(default_factory=dict)  # {categ: [names]}
 
 
+# Порядок в Kernel > Add: Lilu и VirtualSMC обязаны идти раньше плагинов,
+# иначе ocvalidate ругается «Parent … is placed after».
+_KEXT_ORDER = {"Lilu": 0, "VirtualSMC": 1}
+_ACPI_ORDER = {"SSDT-PLUG": 0, "SSDT-PLUG-AMD": 0, "SSDT-EC": 1,
+               "SSDT-EC-USBX": 1, "SSDT-USBX": 2}
+
+# OpenCanopy работает только с PickerMode=External, а у нас встроенный пикер.
+_DRIVERS_SKIP = frozenset({"OpenCanopy.efi"})
+
+
+def _plain_name(name: str, suffix: str) -> str:
+    """Имя без расширения: нужен для сортировки по таблицам приоритетов."""
+    return name[: -len(suffix)] if name.endswith(suffix) else name
+
+
 class EFILayout:
     """Создаёт типовую структуру EFI/OC и раскладывает компоненты."""
+
     OC_FOLDERS = ("ACPI", "Drivers", "Kexts", "Tools")
 
     def __init__(self, root: Path):
@@ -27,141 +44,136 @@ class EFILayout:
         self.warnings: list[str] = []
         self.errors: list[str] = []
 
+    # ---- каталоги и файлы ----
+    def _ensure(self, *parts: str) -> Path:
+        folder = self.oc.joinpath(*parts)
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def _copy_into(self, folder: Path, src: Path, label: str) -> None:
+        try:
+            shutil.copy2(str(src), str(folder / src.name))
+        except OSError as exc:
+            self.errors.append(f"{label}: {exc}")
+
     def create(self) -> None:
         self.oc.mkdir(parents=True, exist_ok=True)
-        for f in self.OC_FOLDERS:
-            (self.oc / f).mkdir(parents=True, exist_ok=True)
+        for folder in self.OC_FOLDERS:
+            (self.oc / folder).mkdir(parents=True, exist_ok=True)
 
     def place_opencore(self, source_efi: Path) -> None:
-        """Копирует OpenCore.efi в EFI/OC/OpenCore.efi (его грузит BOOTx64.efi)."""
-        try:
-            shutil.copy2(str(source_efi), str(self.oc / "OpenCore.efi"))
-        except Exception as e:
-            self.errors.append(f"OpenCore.efi: {e}")
+        """OpenCore.efi грузится из EFI/OC — его запускает BOOTx64.efi."""
+        self._copy_into(self._ensure(), source_efi, "OpenCore.efi")
 
     def place_bootx64(self, source_efi: Path) -> None:
-        """Копирует настоящий BOOTx64.efi в EFI/BOOT/BOOTx64.efi."""
+        """BOOTx64.efi из архива OpenCore кладём в EFI/BOOT."""
         if source_efi.name.lower() == "opencore.efi":
             self.errors.append("BOOTx64: передан OpenCore.efi вместо BOOTx64.efi")
             return
         boot = self.root / "EFI" / "BOOT"
         boot.mkdir(parents=True, exist_ok=True)
-        dst = boot / "BOOTx64.efi"
-        try:
-            shutil.copy2(str(source_efi), str(dst))
-        except Exception as e:
-            self.errors.append(f"BOOTx64: {e}")
+        self._copy_into(boot, source_efi, "BOOTx64")
 
     def place_driver(self, src: Path) -> None:
-        (self.oc / "Drivers").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src), str(self.oc / "Drivers" / src.name))
+        self._copy_into(self._ensure("Drivers"), src, "Driver")
 
     def place_kext(self, src: Path) -> None:
-        (self.oc / "Kexts").mkdir(parents=True, exist_ok=True)
-        dst = self.oc / "Kexts" / src.name
-        if src.is_dir():
-            if dst.exists():
-                shutil.rmtree(str(dst))
-            shutil.copytree(str(src), str(dst))
-        else:
-            shutil.copy2(str(src), str(dst))
+        kexts = self._ensure("Kexts")
+        dst = kexts / src.name
+        if not src.is_dir():
+            self._copy_into(kexts, src, "Kext")
+            return
+        if dst.exists():
+            shutil.rmtree(str(dst))
+        shutil.copytree(str(src), str(dst))
 
     def place_acpi(self, src: Path) -> None:
-        (self.oc / "ACPI").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src), str(self.oc / "ACPI" / src.name))
+        self._copy_into(self._ensure("ACPI"), src, "ACPI")
 
     def place_tool(self, src: Path) -> None:
-        (self.oc / "Tools").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src), str(self.oc / "Tools" / src.name))
+        self._copy_into(self._ensure("Tools"), src, "Tool")
 
     def write_plist(self, data: bytes, name: str = "config.plist") -> Path:
-        p = self.oc / name
-        p.write_bytes(data)
-        return p
+        target = self.oc / name
+        target.write_bytes(data)
+        return target
 
-    def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
-                               driver_names: list | None = None,
-                               kernel_patches: list | None = None,
-                               acpi_names: list | None = None) -> Path:
-        """Записывает config.plist, заполняя Kernel/Add реальными kext и UEFI/Drivers.
-
-        Порядок Kernel/Add важен для загрузчика: Lilu и VirtualSMC должны идти
-        раньше своих плагинов, иначе ocvalidate выдаёт «Parent … is placed after».
-        """
-        import plistlib
-        cfg = plistlib.loads(data)
-        # приоритет загрузки: Lilu, VirtualSMC, затем остальные по алфавиту
-        _PRIO = {"Lilu": 0, "VirtualSMC": 1}
-        ordered = sorted(kext_names, key=lambda n: (_PRIO.get(n[:-5] if n.endswith('.kext') else n, 99), n))
-        adds = []
-        for k in ordered:
-            if not k.endswith(".kext"):
-                k = k + ".kext"
-            exe = k[:-5]
-            arch = "Any" if exe in ("Lilu", "VirtualSMC") else "x86_64"
-            bundle = self.oc / "Kexts" / k
-            macos_dir = bundle / "Contents" / "MacOS"
-            exe_path = (f"Contents/MacOS/{exe}"
-                        if (macos_dir / exe).is_file() else "")
-            adds.append({
-                "Arch": arch,
-                "BundlePath": k,
+    # ---- config.plist ----
+    def _kext_entries(self, kext_names: list) -> list[dict]:
+        names = sorted(kext_names,
+                       key=lambda n: (_KEXT_ORDER.get(_plain_name(n, ".kext"), 99),
+                                      _plain_name(n, ".kext")))
+        entries = []
+        for raw in names:
+            bundle_path = raw if raw.endswith(".kext") else f"{raw}.kext"
+            bundle = bundle_path[: -len(".kext")]
+            executable = self.oc / "Kexts" / bundle_path / "Contents" / "MacOS" / bundle
+            entries.append({
+                "Arch": "Any" if bundle in _KEXT_ORDER else "x86_64",
+                "BundlePath": bundle_path,
                 "Enabled": True,
-                "ExecutablePath": exe_path,
+                "ExecutablePath": f"Contents/MacOS/{bundle}" if executable.is_file() else "",
                 "MaxKernel": "",
                 "MinKernel": "",
                 "PlistPath": "Contents/Info.plist",
                 "Comment": "",
             })
-        cfg["Kernel"]["Add"] = adds
-        # регистрируем размещённые драйверы в UEFI->Drivers (полный набор ключей схемы)
-        _skip = {"OpenCanopy.efi"}  # Builtin-пикер: OpenCanopy не нужен (требует PickerMode=External)
-        drivers = [
+        return entries
+
+    def _driver_entries(self, driver_names: list | None) -> list[dict]:
+        return [
             {
-                "Path": d,
+                "Path": name,
                 "Enabled": True,
                 "Comment": "",
                 "Arguments": "",
                 "HideVerbose": False,
-                "LoadEarly": False,  # OpenVariableRuntimeDxe не используется → OpenRuntime грузится как обычно
+                "LoadEarly": False,   # OpenVariableRuntimeDxe не используется
             }
-            for d in (driver_names or [])
-            if d and d not in _skip
+            for name in (driver_names or [])
+            if name and name not in _DRIVERS_SKIP
         ]
-        cfg["UEFI"]["Drivers"] = drivers
-        # ACPI/Add строим из реально разложенных .aml: файл без записи в конфиге
-        # (или выключенная запись) — мёртвый груз, а запись без файла ломает загрузку
+
+    def _acpi_entries(self, acpi_names: list) -> list[dict]:
+        ordered = sorted(acpi_names,
+                         key=lambda n: (_ACPI_ORDER.get(_plain_name(n, ".aml"), 50),
+                                        _plain_name(n, ".aml")))
+        return [
+            {
+                "Comment": Path(name).stem,
+                "Enabled": True,
+                "Path": name if name.endswith(".aml") else f"{name}.aml",
+            }
+            for name in ordered
+        ]
+
+    def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
+                               driver_names: list | None = None,
+                               kernel_patches: list | None = None,
+                               acpi_names: list | None = None) -> Path:
+        """Пишет config.plist, подставляя реальные Kernel/Add, UEFI/Drivers и ACPI/Add."""
+        cfg = plistlib.loads(data)
+        cfg["Kernel"]["Add"] = self._kext_entries(kext_names)
+        cfg["UEFI"]["Drivers"] = self._driver_entries(driver_names)
         if acpi_names:
-            priority = {"SSDT-PLUG": 0, "SSDT-PLUG-AMD": 0, "SSDT-EC": 1,
-                        "SSDT-EC-USBX": 1, "SSDT-USBX": 2}
-            ordered_acpi = sorted(
-                acpi_names,
-                key=lambda n: (priority.get(n[:-4] if n.endswith(".aml") else n, 50), n))
-            cfg["ACPI"]["Add"] = [
-                {
-                    "Comment": Path(n).stem,
-                    "Enabled": True,
-                    "Path": n if n.endswith(".aml") else f"{n}.aml",
-                }
-                for n in ordered_acpi
-            ]
+            cfg["ACPI"]["Add"] = self._acpi_entries(acpi_names)
         if kernel_patches:
             cfg["Kernel"]["Patch"] = kernel_patches
         elif "Patch" not in cfg["Kernel"]:
             cfg["Kernel"]["Patch"] = []
-        out = plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
-        return self.write_plist(out, name)
+        payload = plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
+        return self.write_plist(payload, name)
 
 
 def extract_zip_clean(zip_path: Path, dest: Path) -> None:
-    """Распаковка zip без __MACOSX и dSYM (hackmate-подход)."""
-    dest = dest.resolve()
-    with zipfile.ZipFile(str(zip_path)) as z:
-        for member in z.namelist():
-            low = member.lower()
-            if "__macosx" in low or ".dsym" in low:
+    """Распаковка архива без служебных __MACOSX и отладочных .dSYM."""
+    root = Path(dest).resolve()
+    with zipfile.ZipFile(str(zip_path)) as archive:
+        for member in archive.namelist():
+            lowered = member.lower()
+            if "__macosx" in lowered or lowered.endswith(".dsym") or "/.dsym" in lowered:
                 continue
-            target = (dest / member).resolve()
-            if target != dest and dest not in target.parents:
-                continue  # zip-slip guard
-            z.extract(member, str(dest))
+            target = (root / member).resolve()
+            if target != root and root not in target.parents:
+                continue  # не даём архиву писать за пределы папки
+            archive.extract(member, str(root))

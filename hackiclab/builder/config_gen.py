@@ -142,6 +142,21 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
                 props["framebuffer-fbmem"] = bytes([0x00, 0x00, 0x90, 0x00])
             dp["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"] = props
 
+    # Аудио: layout-id по UEFI-пути контроллера (AppleALC читает его раньше,
+    # чем boot-args, и работает без alcid в обоих режимах).
+    audio = getattr(profile, "audio", None)
+    if audio is not None and getattr(audio, "layout_id", 0) and audio.pci_path:
+        dp["Add"].setdefault(audio.pci_path, {})["layout-id"] = int(audio.layout_id)
+
+    # Сеть: built-in делает контроллер «встроенным» — иначе iMessage и App Store
+    # не считают машину настоящим Mac. Путь известен только из PnP.
+    net = getattr(profile, "net", None)
+    if net is not None:
+        if net.eth_pci_path:
+            dp["Add"].setdefault(net.eth_pci_path, {})["built-in"] = b"\x01"
+        if net.wifi_pci_path:
+            dp["Add"].setdefault(net.wifi_pci_path, {})["built-in"] = b"\x01"
+
     # --- Kernel ---
     k = cfg["Kernel"]
     k["Add"] = []   # заполняется сборщиком по выбранным kext
@@ -151,6 +166,20 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         k["Patch"] = []  # заполняется AMD_Vanilla в сборщике
     else:
         cfg["Kernel"]["Patch"] = []
+
+    # Broadcom Wi-Fi на Ventura 13.3+: штатный IOSkywalkFamily не даёт
+    # загрузиться legacy-драйверу из набора OCLP — исключаем его на 23.x+.
+    if ((profile.net.wifi_chipset or "").lower() == "broadcom"
+            and _macos_major(options.target_macos) >= 13):
+        k["Block"] = [{
+            "Arch": "x86_64",
+            "Comment": "Broadcom legacy Wi-Fi: IOSkywalk downgrade",
+            "Enabled": True,
+            "Identifier": "com.apple.iokit.IOSkywalkFamily",
+            "MaxKernel": "",
+            "MinKernel": "23.0.0",
+            "Strategy": "Exclude",
+        }]
 
     # --- Booter: квирки под AMD (Ryzen) ---
     if profile.cpu.vendor == "amd":

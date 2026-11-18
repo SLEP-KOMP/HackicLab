@@ -73,7 +73,6 @@ from ..knowledge.sources import (
     SOURCES,
     note_of,
     sources_by_group,
-    sources_for,
     title_of,
 )
 from ..scanner import HardwareProfile, WindowsScanner
@@ -980,6 +979,12 @@ class MainWindow(QMainWindow):
         self.wiz_usb_btn.setVisible(False)
         self.wiz_usb_btn.clicked.connect(self._wiz_to_usb)
         row.addWidget(self.wiz_usb_btn)
+        self.wiz_share_btn = QPushButton(tr.t("community.share"))
+        self.wiz_share_btn.setObjectName("ghost")
+        self.wiz_share_btn.setToolTip(tr.t("community.share_hint"))
+        self.wiz_share_btn.setVisible(False)
+        self.wiz_share_btn.clicked.connect(self._wiz_share)
+        row.addWidget(self.wiz_share_btn)
         row.addStretch()
         lay.addLayout(row)
         lay.addStretch()
@@ -1314,6 +1319,9 @@ class MainWindow(QMainWindow):
         self.wiz_open_btn.setVisible(bool(root))
         if self._wiz_state().get("kind") == "usb":
             self.wiz_usb_btn.setVisible(bool(root))
+        record = getattr(res, "stats", {}).get("community_record", "") if res else ""
+        self._wiz_record = record
+        self.wiz_share_btn.setVisible(bool(record))
         errors = list(getattr(res, "errors", []) or [])
         for error in errors[:10]:
             self.wiz_log.appendPlainText(f"[err] {error}")
@@ -1321,10 +1329,10 @@ class MainWindow(QMainWindow):
             self.wiz_log.appendPlainText(tr.t("wizard.build.saved").format(path=root))
             if self._wiz_state().get("share_log"):
                 try:
-                    from ..knowledge import hwdb
-                    text = hwdb.build_report(self._wiz_state().get("profile"),
-                                             getattr(self, "_last_build_options", None),
-                                             res)
+                    from ..knowledge.build_report import build_report
+                    text = build_report(self._wiz_state().get("profile"),
+                                        getattr(self, "_last_build_options", None),
+                                        res)
                     report_path = Path(root) / "HackicLab-build-report.log"
                     report_path.write_text(text, encoding="utf-8")
                     self.wiz_log.appendPlainText(
@@ -1346,6 +1354,20 @@ class MainWindow(QMainWindow):
         target = getattr(self, "_wiz_last_target", None)
         if target:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+
+    def _wiz_share(self):
+        """Отправка отчёта в общую базу: страница новой задачи GitHub."""
+        record = getattr(self, "_wiz_record", "")
+        if not record:
+            return
+        try:
+            from ..knowledge import community
+            payload = community.load(Path(record))
+            self.wiz_log.appendPlainText(tr.t("community.share_hint"))
+            if community.open_issue(payload):
+                self.wiz_log.appendPlainText(tr.t("community.share_opened"))
+        except Exception as exc:
+            self.wiz_log.appendPlainText(f"[warn] {exc}")
 
     def _wiz_to_usb(self):
         state = self._wiz_state()
@@ -3130,59 +3152,6 @@ class MainWindow(QMainWindow):
             btn.setObjectName("ghost")
             btn.clicked.connect(self._suggest_config)
             lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
-        # реальные отчёты сообщества из базы hackmate-hwdb
-        self._fill_hwdb_reports(page, lay, prof)
-        # специфичные ссылки
-        skip = {"oc_guide", "insanelymac", "tonymacx86"}
-        picked = [s for s in sources_for(prof) if s.key not in skip]
-        for src in picked:
-            lay.addWidget(self._link_label(page, src))
-
-    def _fill_hwdb_reports(self, page, lay, prof):
-        """Реальные отчёты сообщества из вшитой базы hackmate-hwdb."""
-        try:
-            from ..knowledge import hwdb
-            data = hwdb.summary(prof)
-            source_url = hwdb.SOURCE_URL
-        except Exception:
-            return
-        if not data.get("total"):
-            return
-        lay.addWidget(_h2(page, tr.t("sources.hwdb_title")))
-        body = _muted(page, tr.t("sources.hwdb_body").format(
-            total=data["total"], similar=data["similar"]))
-        body.setWordWrap(True)
-        lay.addWidget(body)
-        if not data["similar"]:
-            none = _muted(page, tr.t("sources.hwdb_none"))
-            none.setWordWrap(True)
-            lay.addWidget(none)
-        for report, _score in data["reports"]:
-            row = QHBoxLayout()
-            title = _val(page, report.device or report.cpu)
-            title.setWordWrap(True)
-            row.addWidget(title, 1)
-            if report.succeeded:
-                key, tone = "sources.hwdb_ok", "ok"
-            elif report.failed:
-                key, tone = "sources.hwdb_fail", "err"
-            else:
-                key, tone = "sources.hwdb_partial", "warn"
-            badge = QLabel(tr.t(key), page)
-            badge.setObjectName("badge")
-            badge.setProperty("tone", tone)
-            row.addWidget(badge)
-            lay.addLayout(row)
-            line = _muted(page, f"{report.cpu or '—'} · {report.macos or '—'}")
-            line.setWordWrap(True)
-            if report.issues:
-                line.setToolTip(f"{tr.t('sources.hwdb_issues')}: {report.issues[:400]}")
-            lay.addWidget(line)
-        note = _muted(page, tr.t("sources.hwdb_note"))
-        note.setWordWrap(True)
-        lay.addWidget(note)
-        lay.addWidget(self._mini_link(page, tr.t("sources.hwdb_source"), source_url))
-
     def _build_analyze(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
