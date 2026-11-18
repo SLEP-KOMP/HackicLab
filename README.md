@@ -75,6 +75,15 @@ python main.py
 
 Приложение запускается без прав администратора: UAC-запрос появляется только в момент записи EFI на флешку, и HackicLab предлагает перезапуститься с повышенными правами сам.
 
+### macOS
+
+```bash
+python -m pip install -r requirements.txt
+python main.py
+```
+
+Железо читается через `system_profiler`, запись на флешку — через `diskutil` (нужны права администратора). Для компиляции SSDT на macOS поставьте компилятор ACPI: `brew install acpica`; без него используются встроенные `.aml`, а таблицы, которые строятся по DSDT, пропускаются. Готовая сборка `.app` собирается в GitHub Actions (workflow `macOS build`).
+
 ## Тесты
 
 ```powershell

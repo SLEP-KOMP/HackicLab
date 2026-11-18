@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -299,6 +300,14 @@ def find_iasl(ensure: bool = False) -> Optional[Path]:
     p = shutil.which("iasl")
     if p:
         return Path(p)
+    if os.name != "nt":
+        # macOS/Linux: Windows-архив iasl не подойдёт, ищем системный компилятор
+        # (на macOS ставится через `brew install acpica`).
+        for folder in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
+            candidate = Path(folder) / "iasl"
+            if candidate.is_file():
+                return candidate
+        return None
     # кэш-тулзы приложения: ELF из старых загрузок не годится
     try:
         from ..builder.cache_manager import cache_dir

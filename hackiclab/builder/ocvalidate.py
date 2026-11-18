@@ -8,6 +8,7 @@ ocvalidate проверяет config.plist на соответствие схе�
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -46,29 +47,29 @@ class OCVResult:
         return out
 
 
+def binary_name() -> str:
+    """Имя бинарника ocvalidate для текущей ОС (в пакете лежат все три)."""
+    return "ocvalidate.exe" if os.name == "nt" else "ocvalidate"
+
 def find_ocvalidate(in_open_core_root: Optional[Path] = None) -> Optional[Path]:
     """Ищет бинарник ocvalidate.
 
     Сначала в распакованном OpenCore-пакете (Utilities/ocvalidate/*/ocvalidate*),
     затем в PATH. На Windows предпочитает .exe (в пакете есть и Linux/DSYM копии).
     """
-    import os
-    is_win = os.name == "nt"
+    wanted = binary_name()
     if in_open_core_root:
         candidates = list(in_open_core_root.rglob("ocvalidate*"))
         # приоритет: .exe на Windows, иначе первый файл
         for p in candidates:
-            if p.is_file():
-                if is_win and p.name == "ocvalidate.exe":
-                    return p
-                if not is_win and p.name == "ocvalidate":
-                    return p
+            if p.is_file() and p.name == wanted:
+                return p
         for p in candidates:
             if p.is_file():
                 return p
     try:
         from .cache_manager import cache_dir
-        cached = cache_dir() / "tools" / "ocvalidate.exe"
+        cached = cache_dir() / "tools" / wanted
         if cached.is_file():
             return cached
     except Exception:
@@ -94,11 +95,14 @@ def ensure_ocvalidate() -> Optional[Path]:
         if not zip_path or not Path(zip_path).is_file():
             return None
         with zipfile.ZipFile(str(zip_path)) as z:
+            wanted = binary_name()
             for name in z.namelist():
-                if name.lower().endswith("ocvalidate.exe"):
-                    out = cache / "tools" / "ocvalidate.exe"
+                if Path(name).name == wanted:
+                    out = cache / "tools" / wanted
                     out.parent.mkdir(parents=True, exist_ok=True)
                     out.write_bytes(z.read(name))
+                    if os.name != "nt":
+                        out.chmod(0o755)
                     return out
     except Exception:
         return None

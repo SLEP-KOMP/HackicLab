@@ -191,7 +191,7 @@ class USBWriteWorker(QThread):
 
     def run(self):
         try:
-            from ..builder.usb_writer import write_efi_to_usb
+            from ..builder.usb_backend import write_efi_to_usb
             res = write_efi_to_usb(self.source_efi, self.device,
                                    skip_format=self.skip_format,
                                    recovery_macos=self.recovery_macos,
@@ -337,7 +337,7 @@ class UsbListWorker(QThread):
 
     def run(self):
         try:
-            from ..builder.usb_writer import get_usb_devices
+            from ..builder.usb_backend import get_usb_devices
             self.done.emit(get_usb_devices())
         except Exception as e:
             self.failed.emit(str(e))
@@ -2477,7 +2477,7 @@ class MainWindow(QMainWindow):
         if combo is None:
             return
         try:
-            from ..builder.usb_writer import list_backups
+            from ..builder.usb_backend import list_backups
             backups = list_backups()
         except Exception:
             backups = []
@@ -2611,7 +2611,7 @@ class MainWindow(QMainWindow):
         planned = ""
         if dev and dev.raw:
             try:
-                from ..builder.usb_writer import _find_free_drive_letter
+                from ..builder.usb_backend import _find_free_drive_letter
                 planned = _find_free_drive_letter()
             except Exception:
                 planned = ""
@@ -2667,7 +2667,7 @@ class MainWindow(QMainWindow):
     def _ensure_admin(self) -> bool:
         """Проверяет права администратора и при необходимости перезапускает с UAC."""
         try:
-            from ..builder.usb_writer import is_admin, relaunch_as_admin
+            from ..builder.usb_backend import is_admin, relaunch_as_admin
         except Exception as e:
             QMessageBox.warning(self, tr.t("usb.admin_title"), str(e))
             return False
