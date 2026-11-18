@@ -229,6 +229,19 @@ class MacOSScanner:
         profile.board_name = board
         if "macbook" in board.lower() or "imac" in board.lower():
             profile.board_vendor = "Apple"
+
+        # UEFI-пути для DeviceProperties: layout-id аудио и built-in для сети.
+        try:
+            from .pci_paths_mac import device_paths
+            audio_path, eth_path, wifi_path = device_paths()
+            if audio_path:
+                profile.audio.pci_path = audio_path
+            if eth_path:
+                profile.net.eth_pci_path = eth_path
+            if wifi_path:
+                profile.net.wifi_pci_path = wifi_path
+        except Exception:
+            pass
         return profile
 
 
