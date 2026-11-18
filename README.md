@@ -83,6 +83,17 @@ python -m unittest discover -s tests -t tests -v
 
 Тесты проверяют чистую логику без обращения к реальным дискам и сети: разбор вывода diskpart-скриптов, генерацию `config.plist`, стабильность идентификатора устройства, полноту переводов RU/EN.
 
+## Проверка EFI в виртуальной машине
+
+Собранный EFI можно прогнать в QEMU с прошивкой OVMF и убедиться, что загрузчик доходит до меню — без ребута и без флешки:
+
+```powershell
+python tools/vm_boot_test.py --efi out\EFI          # ждёт меню до 70 секунд
+python tools/vm_boot_test.py --efi out\EFI --keep   # оставить VHD и снимок экрана
+```
+
+Скрипт сам создаёт VHD с FAT32, копирует туда `EFI/`, поднимает QEMU, снимает экран через монитор и проверяет, что в верхней части кадра появился текст меню. Нужны установленный QEMU (`winget install SoftwareFreedomConservancy.QEMU`) и права администратора — для `diskpart`.
+
 ## Сборка EXE
 
 ```powershell
@@ -106,6 +117,7 @@ hackiclab/
   themes.py     # темы оформления
   license.py    # Free/Premium
 main.py         # точка входа
+tools/          # vm_boot_test.py — прогон EFI в QEMU до меню OpenCore
 HackicLab.spec  # конфигурация PyInstaller
 requirements.txt       # зависимости для запуска
 requirements-dev.txt   # зависимости для сборки EXE
