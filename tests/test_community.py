@@ -107,5 +107,47 @@ class IssueUrlTests(_Store):
         self.assertLess(len(url), 16000)
 
 
+class IssueParsingTests(unittest.TestCase):
+    BODY = "Отчёт\n\n```json\n{\"hardware\": {\"cpu\": \"Ryzen\"}, \"ok\": true}\n```\n"
+
+    def test_record_is_extracted_from_body(self):
+        record = community.parse_issue_body(self.BODY)
+        assert record is not None
+        self.assertEqual(record["hardware"]["cpu"], "Ryzen")
+
+    def test_body_without_json_gives_none(self):
+        self.assertIsNone(community.parse_issue_body("просто текст"))
+
+    def test_broken_json_gives_none(self):
+        self.assertIsNone(community.parse_issue_body("```json\n{битый\n```"))
+
+    def test_issues_payload_is_parsed(self):
+        import json
+
+        payload = json.dumps([{
+            "number": 7, "title": "t", "html_url": "https://example/7",
+            "body": self.BODY,
+        }, {"number": 8, "title": "no report", "body": "текст"}])
+        records = community.parse_issues(payload)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["issue"], 7)
+        self.assertEqual(records[0]["issue_url"], "https://example/7")
+
+    def test_fetch_reports_survives_network_error(self):
+        with mock.patch("hackiclab.builder.fetcher.download_bytes",
+                        side_effect=OSError("нет сети")):
+            self.assertEqual(community.fetch_reports(), [])
+
+    def test_fetch_reports_reads_payload(self):
+        import json
+
+        payload = json.dumps([{"number": 1, "body": self.BODY, "html_url": "",
+                               "title": "t"}]).encode("utf-8")
+        with mock.patch("hackiclab.builder.fetcher.download_bytes", return_value=payload):
+            records = community.fetch_reports()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["issue"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

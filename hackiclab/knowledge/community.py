@@ -191,6 +191,57 @@ def record_from_result(profile: "HardwareProfile", options=None, result=None,
                                    kexts=kexts, config=config, feature=feature))
 
 
+def parse_issue_body(body: str) -> Optional[dict]:
+    """Достаёт JSON-отчёт из тела задачи (между ```json и ```)."""
+    start = body.find("```json")
+    if start < 0:
+        return None
+    start = body.find("\n", start) + 1
+    end = body.find("```", start)
+    if end < 0:
+        return None
+    try:
+        data = json.loads(body[start:end])
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) and "hardware" in data else None
+
+
+def parse_issues(payload: str) -> list[dict]:
+    """Разбирает ответ API со списком задач в записи о сборках."""
+    try:
+        issues = json.loads(payload)
+    except ValueError:
+        return []
+    if not isinstance(issues, list):
+        return []
+    records = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        record = parse_issue_body(str(issue.get("body") or ""))
+        if record:
+            record["issue"] = issue.get("number")
+            record["issue_url"] = issue.get("html_url", "")
+            record["issue_title"] = issue.get("title", "")
+            records.append(record)
+    return records
+
+
+def fetch_reports(repo: str = REPO, limit: int = 50) -> list[dict]:
+    """Читает отчёты из трекера (задачи с меткой) — для разбора и базы."""
+    from ..builder.fetcher import download_bytes
+
+    url = (f"https://api.github.com/repos/{repo}/issues"
+           f"?labels={LABEL}&state=all&per_page={max(1, min(limit, 100))}")
+    try:
+        payload = download_bytes(url, headers={"Accept": "application/vnd.github+json",
+                                               "User-Agent": "HackicLab"}).decode("utf-8")
+    except Exception:
+        return []
+    return parse_issues(payload)
+
+
 def as_plain(record: dict) -> dict:
     """Копия записи для интерфейса (без служебных полей)."""
     plain = dict(record)
