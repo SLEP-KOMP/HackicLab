@@ -17,7 +17,6 @@ a = Analysis(
         (QT_TRANSLATIONS + '/qtbase_ru.qm', 'PySide6/translations'),
     ],
     hiddenimports=[
-        'psutil',
         'hackiclab.scanner',
         'hackiclab.knowledge',
         'hackiclab.builder',

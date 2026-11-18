@@ -48,7 +48,6 @@ jobs:
         run: |
           pyinstaller --noconfirm --windowed --target-arch universal2 --name HackicLab \
             --add-data "hackiclab/assets:hackiclab/assets" \
-            --hidden-import psutil \
             --hidden-import hackiclab.scanner \
             --hidden-import hackiclab.knowledge \
             --hidden-import hackiclab.builder \
