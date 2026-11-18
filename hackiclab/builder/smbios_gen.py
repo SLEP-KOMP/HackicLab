@@ -67,8 +67,11 @@ def _code(length: int) -> str:
 
 
 def _serial(model: str) -> str:
+    # В серийнике место сборки занимает ровно три символа; длинные заводские
+    # префиксы (C02JK) годятся только для MLB.
     year_char, week_char = _year_week()
-    return f"{_plant(model)}{year_char}{week_char}{_code(3)}{_code(4)}"[:_SERIAL_LEN]
+    plant = _plant(model)[:3]
+    return f"{plant}{year_char}{week_char}{_code(3)}{_code(4)}"
 
 
 def _mlb(model: str, serial: str) -> str:

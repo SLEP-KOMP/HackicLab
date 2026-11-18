@@ -75,7 +75,7 @@ from ..knowledge.sources import (
     sources_by_group,
     title_of,
 )
-from ..scanner import HardwareProfile, WindowsScanner
+from ..scanner import HardwareProfile, Scanner
 from ..themes import BASE_THEMES, BUILTIN_THEMES, detect_system_scheme, get_qss, tone
 from .apple_progress import AppleProgressBar
 from .hwview import hardware_rows
@@ -144,7 +144,7 @@ class ScanWorker(QThread):
 
     def run(self):
         try:
-            p = WindowsScanner().scan()
+            p = Scanner().scan()
             self.done.emit(p)
         except Exception as e:
             self.failed.emit(str(e))
