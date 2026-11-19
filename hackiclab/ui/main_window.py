@@ -2197,6 +2197,9 @@ class MainWindow(QMainWindow):
             (3, self.val_audit, "validate.audit_title"),
         ):
             lines = [ln for ln in wdg.toPlainText().splitlines() if ln.strip() and ln.strip() not in skip]
+            if key == "validate.audit_title":
+                # В аудите считаем только строки-замечания, а не пояснения к ним.
+                lines = [ln for ln in lines if ln.lstrip().startswith(("✖", "⚠", "ℹ"))]
             tabs.setTabText(idx, tr.t(key) + (f" ({len(lines)})" if lines else ""))
 
     def _labelled(self, parent, title, widget):
