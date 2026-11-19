@@ -839,6 +839,18 @@ class MainWindow(QMainWindow):
         lay.addStretch()
         return widget
 
+    _WIFI_INTEL = (
+        ("itlwm", "wizard.wifi.itlwm", "wizard.wifi.itlwm_desc"),
+        ("airport", "wizard.wifi.airport", "wizard.wifi.airport_desc"),
+        ("none", "wizard.wifi.none", "wizard.wifi.none_desc"),
+    )
+    _WIFI_NATIVE = (
+        ("none", "wizard.wifi.native", "wizard.wifi.native_desc"),
+    )
+    _WIFI_BRCM = (
+        ("none", "wizard.wifi.brcm", "wizard.wifi.brcm_desc"),
+    )
+
     def _wiz_step_wifi(self, page) -> QWidget:
         widget = QWidget()
         lay = QVBoxLayout(widget)
@@ -846,17 +858,44 @@ class MainWindow(QMainWindow):
         lay.setSpacing(6)
         self.wiz_wifi_box = QVBoxLayout()
         self.wiz_wifi_box.setSpacing(6)
-        for value, title, desc in (
-            ("itlwm", "wizard.wifi.itlwm", "wizard.wifi.itlwm_desc"),
-            ("airport", "wizard.wifi.airport", "wizard.wifi.airport_desc"),
-            ("none", "wizard.wifi.none", "wizard.wifi.none_desc"),
-        ):
-            btn = self._wiz_option(page, self.wiz_wifi_box, "wifi", value,
-                                   tr.t(title), tr.t(desc))
-            btn.setChecked(value == "itlwm")
         lay.addLayout(self.wiz_wifi_box)
         lay.addStretch()
+        self._wiz_build_wifi_options()
         return widget
+
+    def _wiz_build_wifi_options(self) -> None:
+        """Показывает только те режимы Wi-Fi, что подходят к найденному чипу.
+
+        Intel — itlwm/AirportItlwm, Broadcom — без Intel-кекстов (нативный
+        AirPort или AirportBrcmFixup). Раньше шаг всегда предлагал Intel.
+        """
+        layout = getattr(self, "wiz_wifi_box", None)
+        if layout is None:
+            return
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        state = self._wiz_state()
+        profile = state.get("profile")
+        net = getattr(profile, "net", None) if profile is not None else None
+        chipset = (getattr(net, "wifi_chipset", "") or "").lower()
+        native = bool(getattr(net, "bt_native_apple", False))
+        if profile is None or chipset == "intel":
+            options = self._WIFI_INTEL
+            if state.get("wifi") not in {value for value, _, _ in options}:
+                state["wifi"] = "itlwm"
+        elif chipset == "broadcom":
+            options = self._WIFI_NATIVE if native else self._WIFI_BRCM
+            state["wifi"] = "none"
+        else:
+            options = (("none", "wizard.wifi.none", "wizard.wifi.none_desc"),)
+            state["wifi"] = "none"
+        for value, title, desc in options:
+            button = self._wiz_option(self, layout, "wifi", value,
+                                      tr.t(title), tr.t(desc))
+            button.setChecked(value == state.get("wifi"))
 
     def _wiz_step_options(self, page) -> QWidget:
         widget = QWidget()
@@ -984,6 +1023,8 @@ class MainWindow(QMainWindow):
             self._wiz_fill_macos()
         elif step == 2:
             self._wiz_fill_target()
+        elif step == 4:
+            self._wiz_build_wifi_options()
         elif step == 5:
             self._wiz_fill_options()
         elif step == 6:
@@ -1428,6 +1469,22 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.statusBar().showMessage(f"[warn] {exc}", 6000)
 
+    def _sync_recovery_version(self, target: str) -> None:
+        """Ставит в «Записи на USB» ту же macOS, под которую собрана EFI.
+
+        Иначе под Sonoma легко записать установщик Tahoe: EFI не загрузит
+        чужой recovery.
+        """
+        combo = getattr(self, "usb_recovery_ver", None)
+        name = (target or "").strip()
+        if combo is None or not name:
+            return
+        for i in range(combo.count()):
+            data = str(combo.itemData(i) or "")
+            if name.lower() in data.lower() or data.lower() in name.lower():
+                combo.setCurrentIndex(i)
+                return
+
     def _wiz_to_usb(self):
         state = self._wiz_state()
         target = getattr(self, "_wiz_last_target", None)
@@ -1437,6 +1494,7 @@ class MainWindow(QMainWindow):
         index = self.usb_combo.findData(device) if device else -1
         if index >= 0:
             self.usb_combo.setCurrentIndex(index)
+        self._sync_recovery_version(str(state.get("macos") or ""))
         self._go_page(self.page_usb)
 
     # ---- manual hardware setup ----
@@ -4451,6 +4509,8 @@ class MainWindow(QMainWindow):
             self._maybe_auto_share(self._manual_record)
         # --- объяснение решений ---
         self._render_rationale()
+        self._sync_recovery_version(
+            getattr(getattr(self, "_last_build_options", None), "target_macos", "") or "")
         # статус
         if res.stats and res.stats.get("ocvalidate_ok") is False:
             self.statusBar().showMessage(

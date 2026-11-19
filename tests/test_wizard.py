@@ -288,3 +288,18 @@ class MergedPagesTests(unittest.TestCase):
         self.win._rebuild_pages()
         self.assertIn("ready", self.win.wiz_log.toPlainText())
         self.assertFalse(self.win.wiz_share_btn.isHidden())
+
+    def test_recovery_version_follows_wizard_macos(self):
+        self.win._wiz_state()["macos"] = "macOS Sonoma"
+        self.win._sync_recovery_version("macOS Sonoma")
+        self.assertTrue(str(self.win.usb_recovery_ver.currentData()).startswith("macOS Sonoma"))
+
+    def test_wifi_step_hides_intel_modes_for_broadcom(self):
+        from hackiclab.scanner.models import HardwareProfile, NetInfo
+
+        profile = HardwareProfile(platform="desktop")
+        profile.net = NetInfo(wifi_chipset="broadcom", bt_native_apple=True)
+        self.win._wiz_state()["profile"] = profile
+        self.win._wiz_build_wifi_options()
+        self.assertEqual(self.win._wiz_state()["wifi"], "none")
+        self.assertEqual(self.win.wiz_wifi_box.count(), 1)
