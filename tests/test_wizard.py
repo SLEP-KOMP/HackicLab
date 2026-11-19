@@ -83,8 +83,8 @@ class WindowTests(unittest.TestCase):
 
     def test_nav_has_groups_and_all_pages(self):
         titles = self.win._nav_titles()
-        self.assertEqual(len(titles), 9)
-        self.assertEqual(titles[0], tr.t("nav.wizard"))
+        self.assertEqual(len(titles), 8)
+        self.assertEqual(titles[0], tr.t("nav.auto"))
         headers = [self.win.nav.item(i) for i in range(self.win.nav.count())
                    if self.win._nav_rows[i] < 0]
         self.assertEqual(len(headers), 2)
@@ -240,3 +240,39 @@ class OptionsStepTests(unittest.TestCase):
         with mock.patch.object(self.win, "_confirm") as confirm:
             self.win._updates_found(info)
         confirm.assert_not_called()
+
+
+class MergedPagesTests(unittest.TestCase):
+    """Первая вкладка убрана: скан живёт в автоматической сборке."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        self.win = MainWindow()
+        self.addCleanup(self.win.close)
+        self.addCleanup(self.win.deleteLater)
+
+    def test_scan_lives_in_auto_page(self):
+        self.assertTrue(self.win.page_auto.isAncestorOf(self.win.wiz_scan_btn))
+        self.assertTrue(self.win.page_auto.isAncestorOf(self.win.hw_grid.parentWidget()))
+
+    def test_manual_form_lives_in_build_page(self):
+        self.assertTrue(self.win.page_build.isAncestorOf(self.win.manual_cpu))
+        self.assertTrue(self.win.page_build.isAncestorOf(self.win.manual_share_btn))
+
+    def test_summary_shows_vendor_badges(self):
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="AMD Ryzen 5 3600", vendor="amd", generation=12)
+        self.win._wiz_state()["profile"] = profile
+        self.win._wiz_fill_summary()
+        self.assertGreater(self.win.wiz_badges.count(), 1)

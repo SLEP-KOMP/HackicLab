@@ -578,8 +578,7 @@ class MainWindow(QMainWindow):
 
     def _create_pages(self):
         """Создаёт страницы заново — используется при старте и смене языка."""
-        self.page_wizard = self._build_wizard()
-        self.page_scan = self._build_scan()
+        self.page_auto = self._build_wizard()
         self.page_build = self._build_build()
         self.page_validate = self._build_validate()
         self.page_usb = self._build_usb()
@@ -587,7 +586,7 @@ class MainWindow(QMainWindow):
         self.page_donate = self._build_donate()
         self.page_settings = self._build_settings()
         self.page_about = self._build_about()
-        for page in (self.page_wizard, self.page_scan, self.page_build,
+        for page in (self.page_auto, self.page_build,
                      self.page_validate, self.page_usb, self.page_sources,
                      self.page_donate, self.page_settings, self.page_about):
             page.setObjectName("pageRoot")
@@ -651,46 +650,6 @@ class MainWindow(QMainWindow):
         area.setWidget(shell)
         return area
 
-    def _build_scan(self):
-        page = QWidget()
-        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "scan.title", "scan.subtitle")
-        self._stat_tiles(page, v, [
-            (tr.t("tile.scan_engine_v"), tr.t("tile.scan_engine")),
-            (tr.t("tile.scan_offline_v"), tr.t("tile.scan_offline")),
-            (tr.t("tile.scan_safe_v"), tr.t("tile.scan_safe")),
-        ])
-        btn = QPushButton(tr.t("scan.button"))
-        btn.clicked.connect(self._do_scan)
-        v.addWidget(btn, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        self.scan_progress = QProgressBar(); self.scan_progress.setMaximum(0); self.scan_progress.setVisible(False)
-        v.addWidget(self.scan_progress)
-
-        self.hw_grid = QVBoxLayout()
-        self.hw_grid.setSpacing(10)
-        v.addLayout(self.hw_grid)
-
-        from PySide6.QtWidgets import QLabel as _QLabel
-
-        self.scan_empty_card = self._card(page)
-        ev = QVBoxLayout(self.scan_empty_card)
-        ev.setContentsMargins(16, 14, 16, 14)
-        empty = _QLabel(tr.t("scan.empty"))
-        empty.setObjectName("muted")
-        empty.setWordWrap(True)
-        ev.addWidget(empty)
-        v.addWidget(self.scan_empty_card)
-        v.addStretch()
-
-        self.scan_save_btn = QPushButton(tr.t("scan.save"))
-        self.scan_save_btn.setObjectName("ghost")
-        self.scan_save_btn.setVisible(False)
-        self.scan_save_btn.clicked.connect(self._save_profile)
-        v.addWidget(self.scan_save_btn)
-        v.addWidget(self._build_manual())
-        return page
-
     # ---- wizard: быстрая сборка ----
     def _wiz_state(self) -> dict:
         state = getattr(self, "_wiz", None)
@@ -710,6 +669,11 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(28, 24, 28, 24)
         v.setSpacing(10)
         self._page_header(page, v, "wizard.title", "wizard.subtitle")
+        self._stat_tiles(page, v, [
+            (tr.t("tile.scan_engine_v"), tr.t("tile.scan_engine")),
+            (tr.t("tile.scan_offline_v"), tr.t("tile.scan_offline")),
+            (tr.t("tile.scan_safe_v"), tr.t("tile.scan_safe")),
+        ])
 
         steps = QHBoxLayout()
         steps.setSpacing(6)
@@ -803,6 +767,17 @@ class MainWindow(QMainWindow):
         self.wiz_scan_bar.setVisible(False)
         row.addWidget(self.wiz_scan_bar, 1)
         lay.addLayout(row)
+
+        # Скан живёт здесь: отдельной страницы «Сканирование» больше нет,
+        # а эти имена используют общие обработчики _do_scan/_scan_done.
+        self.hw_grid = self.wiz_hw_rows
+        self.scan_progress = self.wiz_scan_bar
+        self.scan_empty_card = self.wiz_hw_empty
+        self.scan_save_btn = QPushButton(tr.t("scan.save"))
+        self.scan_save_btn.setObjectName("ghost")
+        self.scan_save_btn.setVisible(False)
+        self.scan_save_btn.clicked.connect(self._save_profile)
+        lay.addWidget(self.scan_save_btn)
         lay.addStretch()
         return widget
 
@@ -953,6 +928,9 @@ class MainWindow(QMainWindow):
         self.wiz_sum_rows.setSpacing(4)
         cv.addLayout(self.wiz_sum_rows)
         lay.addWidget(card)
+        self.wiz_badges = QHBoxLayout()
+        self.wiz_badges.setSpacing(8)
+        lay.addLayout(self.wiz_badges)
         self.wiz_build_btn = QPushButton(tr.t("wizard.build.start"))
         self.wiz_build_btn.clicked.connect(self._wiz_build)
         lay.addWidget(self.wiz_build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -1135,6 +1113,56 @@ class MainWindow(QMainWindow):
         elif state.get("folder"):
             state["kind"] = "folder"
 
+    _VENDOR_TONES = {
+        "intel": "#2f6fb3",
+        "amd": "#b3352f",
+        "nvidia": "#3f8f4f",
+        "audio": "#7a5cd6",
+        "other": "#56606e",
+    }
+
+    def _badge(self, parent, text: str, tone: str) -> QLabel:
+        badge = QLabel(text, parent)
+        color = self._VENDOR_TONES.get(tone, self._VENDOR_TONES["other"])
+        badge.setStyleSheet(
+            f"background:{color}; color:#ffffff; border-radius:9px;"
+            "padding:3px 10px; font-weight:600;")
+        badge.setWordWrap(False)
+        return badge
+
+    def _badge_texts(self, profile) -> list[tuple[str, str]]:
+        """Короткие подписи железа: CPU, GPU, аудиокодек."""
+        items: list[tuple[str, str]] = []
+        cpu = getattr(profile, "cpu", None)
+        if cpu is not None and getattr(cpu, "name", ""):
+            tone = "amd" if (getattr(cpu, "vendor", "") or "").lower() == "amd" else "intel"
+            items.append((str(cpu.name), tone))
+        for gpu in (getattr(profile, "dgpu", None), getattr(profile, "igpu", None)):
+            name = getattr(gpu, "name", "") if gpu is not None else ""
+            if not name:
+                continue
+            vendor = (getattr(gpu, "vendor", "") or "").lower()
+            items.append((str(name), vendor if vendor in ("intel", "amd", "nvidia") else "other"))
+        audio = getattr(profile, "audio", None)
+        codec = getattr(audio, "codec", "") if audio is not None else ""
+        if codec:
+            items.append((str(codec), "audio"))
+        return items
+
+    def _fill_badges(self, layout, profile) -> None:
+        if layout is None:
+            return
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        if profile is None:
+            return
+        for text, tone_name in self._badge_texts(profile):
+            layout.addWidget(self._badge(self, text, tone_name))
+        layout.addStretch()
+
     def _wiz_fill_summary(self):
         layout = getattr(self, "wiz_sum_rows", None)
         if layout is None:
@@ -1142,6 +1170,7 @@ class MainWindow(QMainWindow):
         self._clear_layout(layout)
         state = self._wiz_state()
         profile = state.get("profile")
+        self._fill_badges(getattr(self, "wiz_badges", None), profile)
         if profile is None:
             return
         smbios = ""
@@ -1341,6 +1370,22 @@ class MainWindow(QMainWindow):
                     self.wiz_log.appendPlainText(f"[warn] {exc}")
         for line in (getattr(res, "log", []) or [])[-40:]:
             self.wiz_log.appendPlainText(line)
+        if self._wiz_state().get("share_log") and record:
+            self._maybe_auto_share(record)
+
+    def _maybe_auto_share(self, record: str) -> None:
+        """После сборки открывает готовый отчёт на GitHub, если это включено.
+
+        Ничего не отправляется само: GitHub показывает форму с текстом,
+        отправить её может только пользователь кнопкой «Submit new issue».
+        """
+        try:
+            from ..knowledge import community
+            payload = community.load(Path(record))
+            if community.open_issue(payload):
+                self.statusBar().showMessage(tr.t("community.share_opened"), 6000)
+        except Exception:
+            pass
 
     def _wiz_failed(self, err):
         self.wiz_build_btn.setEnabled(True)
@@ -1368,6 +1413,20 @@ class MainWindow(QMainWindow):
                 self.wiz_log.appendPlainText(tr.t("community.share_opened"))
         except Exception as exc:
             self.wiz_log.appendPlainText(f"[warn] {exc}")
+
+    def _manual_share(self):
+        """Отчёт ручной сборки: страница новой задачи GitHub."""
+        record = getattr(self, "_manual_record", "")
+        if not record:
+            self.statusBar().showMessage(tr.t("community.nothing"), 5000)
+            return
+        try:
+            from ..knowledge import community
+            payload = community.load(Path(record))
+            if community.open_issue(payload):
+                self.statusBar().showMessage(tr.t("community.share_opened"), 6000)
+        except Exception as exc:
+            self.statusBar().showMessage(f"[warn] {exc}", 6000)
 
     def _wiz_to_usb(self):
         state = self._wiz_state()
@@ -1659,6 +1718,13 @@ class MainWindow(QMainWindow):
             (tr.t("tile.build_oc_v"), tr.t("tile.build_oc")),
             (tr.t("tile.build_check_v"), tr.t("tile.build_check")),
         ])
+
+        # Шаг 1: железо вручную. Форма переехала сюда со страницы сканирования.
+        v.addWidget(_h2(page, tr.t("manual.step_hw")))
+        v.addWidget(self._build_manual())
+
+        # Шаг 2: параметры сборки и журнал.
+        v.addWidget(_h2(page, tr.t("manual.step_build")))
         bios = self._card(page)
         bv = QVBoxLayout(bios)
         bv.addWidget(_h2(page, tr.t("bios.title")))
@@ -1776,6 +1842,26 @@ class MainWindow(QMainWindow):
         self.build_rationale.setMinimumHeight(140)
         self.build_rationale.setPlaceholderText(tr.t("build.rationale_empty"))
         main.addWidget(self.build_rationale, 1)
+
+        # --- помощь проекту: отчёт о сборке ---
+        share = self._card(page)
+        sv = QVBoxLayout(share)
+        sv.setContentsMargins(16, 12, 16, 12)
+        sv.addWidget(_h2(page, tr.t("community.title")))
+        share_hint = _muted(page, tr.t("community.manual_hint"))
+        share_hint.setWordWrap(True)
+        sv.addWidget(share_hint)
+        self.manual_share_chk = QCheckBox(tr.t("community.manual_auto"))
+        self.manual_share_chk.setChecked(bool(uistate.get("share_reports", False)))
+        self.manual_share_chk.toggled.connect(
+            lambda on: uistate.save(share_reports=bool(on)))
+        sv.addWidget(self.manual_share_chk)
+        self.manual_share_btn = QPushButton(tr.t("community.share"))
+        self.manual_share_btn.setObjectName("ghost")
+        self.manual_share_btn.setToolTip(tr.t("community.share_hint"))
+        self.manual_share_btn.clicked.connect(self._manual_share)
+        sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        v.addWidget(share)
         return page
 
     def _build_validate(self):
@@ -3951,8 +4037,7 @@ class MainWindow(QMainWindow):
     # ---- nav / lang ----
     NAV_GROUPS = (
         ("nav.group.start", (
-            ("nav.wizard", "✨", "nav.wizard.sub"),
-            ("nav.scan", "🖥", "nav.scan.sub"),
+            ("nav.auto", "✨", "nav.auto.sub"),
         )),
         ("nav.group.build", (
             ("nav.build", "⚙", "nav.build.sub"),
@@ -4177,20 +4262,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr.t("app.lang_changed"), 2500)
 
     # ---- scan ----
-    def _do_scan(self):
-        if getattr(self, "_worker_scan", None) and self._worker_scan.isRunning():
-            return
-        # очистим сетку
-        while (it := self.hw_grid.takeAt(0)) is not None:
-            w = it.widget()
-            if w is not None:
-                w.deleteLater()
-        self.scan_progress.setVisible(True)
-        self._worker_scan = ScanWorker()
-        self._worker_scan.done.connect(self._scan_done)
-        self._worker_scan.failed.connect(self._scan_failed)
-        self._worker_scan.start()
-
     def _wizard_macos(self) -> str:
         """Целевая macOS для подсказки SMBIOS: мастер, затем вкладка сборки."""
         state = getattr(self, "_wiz", None) or {}
@@ -4222,16 +4293,16 @@ class MainWindow(QMainWindow):
             for item in hardware_rows(profile, self._wizard_macos())
         ]
         for key, val, note in rows:
-            c = self._card(self.page_scan)
+            c = self._card(self.page_auto)
             cv = QVBoxLayout(c); cv.setContentsMargins(14, 10, 14, 10); cv.setSpacing(2)
-            cv.addWidget(_h2(self.page_scan, tr.t(key)))
-            vv = _val(self.page_scan, val); vv.setWordWrap(True)
+            cv.addWidget(_h2(self.page_auto, tr.t(key)))
+            vv = _val(self.page_auto, val); vv.setWordWrap(True)
             if note:
                 hint = tr.t(note) if note.startswith("hw.") else note
                 vv.setToolTip(hint)
                 row = QHBoxLayout()
                 row.addWidget(vv, 1)
-                note_lbl = QLabel(hint, self.page_scan)
+                note_lbl = QLabel(hint, self)
                 note_lbl.setObjectName("muted")
                 row.addWidget(note_lbl)
                 cv.addLayout(row)
@@ -4240,14 +4311,9 @@ class MainWindow(QMainWindow):
             self.hw_grid.addWidget(c)
         self.scan_save_btn.setVisible(True)
         self._fill_sources_ctx()
-        if hasattr(self, "wiz_hw_rows"):
-            self._wiz_state()["profile"] = profile
-            self._wiz_fill_hw()
+        self._wiz_state()["profile"] = profile
+        self._wiz_update_hint()
         self.statusBar().showMessage(tr.t("scan.done"), 3000)
-
-    def _scan_failed(self, err):
-        self.scan_progress.setVisible(False)
-        QMessageBox.critical(self, tr.t("scan.title"), str(err))
 
     def _save_profile(self):
         if not self.profile:
@@ -4360,6 +4426,9 @@ class MainWindow(QMainWindow):
                 for w in ocv_warn[:15]:
                     log += f"\n  [warn] {w}"
         self.build_log.setPlainText(log)
+        self._manual_record = getattr(res, "stats", {}).get("community_record", "")
+        if getattr(self, "manual_share_chk", None) is not None and self._manual_record:
+            self._maybe_auto_share(self._manual_record)
         # --- объяснение решений ---
         self._render_rationale()
         # статус

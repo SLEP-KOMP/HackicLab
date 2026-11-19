@@ -90,8 +90,8 @@ class PageTests(unittest.TestCase):
 
     def test_page_is_in_menu(self):
         self.assertTrue(hasattr(self.win, "manual_cpu"))
-        self.assertEqual(self.win.stack.count(), 9)
-        pages = (self.win.page_wizard, self.win.page_scan, self.win.page_build,
+        self.assertEqual(self.win.stack.count(), 8)
+        pages = (self.win.page_auto, self.win.page_build,
                  self.win.page_validate, self.win.page_usb, self.win.page_sources,
                  self.win.page_donate, self.win.page_settings, self.win.page_about)
         self.assertEqual(len(set(pages)), self.win.stack.count())
