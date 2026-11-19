@@ -128,20 +128,6 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "CpuPlug", 0x00003000)
 }}
 '''
 
-_TEMPLATES["SSDT-PLUG-AMD"] = '''
-DefinitionBlock ("", "SSDT", 2, "CORP", "CpuPlug", 0x00003000)
-{{
-    External (_SB_.PR00, ProcessorObj)
-    Scope (_SB)
-    {{
-        Processor (PR00, 0x01, 0x00001810, 0x06)
-        {{
-            Name (_DSM, Buffer (0x04) {{ 0x00, 0x00, 0x00, 0x00 }})
-        }}
-    }}
-}}
-'''
-
 _TEMPLATES["SSDT-EC"] = '''
 DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtEc", 0x00001000)
 {{
@@ -221,6 +207,14 @@ _TEMPLATES["SSDT-XOSI"] = ''
 
 def get_template(name: str) -> str:
     return _TEMPLATES.get(name, "")
+
+
+def render_template(name: str) -> str:
+    """Шаблон в виде готового DSL: снимает экранирование фигурных скобок."""
+    tmpl = get_template(name)
+    if not tmpl:
+        return ""
+    return tmpl.format()
 
 
 def _enclosing_scopes(dsl_text: str, index: int) -> list[str]:
@@ -359,7 +353,7 @@ def generate_ssdt(name: str, profile: HardwareProfile, out_dir: Path,
     if name == "SSDT-USB-Reset":
         dsl = build_usb_reset(dsdt_text)
         return compile_dsl(dsl, out_dir, name) if dsl else None
-    tmpl = get_template(name)
+    tmpl = render_template(name)
     if not tmpl:
         return None  # нет шаблона — фолбэк на встроенный .aml/SSDTTime
     aml = compile_dsl(tmpl, out_dir, name)
@@ -421,19 +415,19 @@ class SSDTFactory:
     def generate_all(self, out_dir: Path) -> list[dict]:
         """Генерирует все SSDT для профиля.
 
-        Для каждой таблицы пробуются уровни по порядку, и первый удачный
-        определяет статус: скомпилированный iasl ``compiled``, готовый
-        встроенный бинарник ``bundled`` или только исходник ``template-only``.
+        Сначала берётся готовый встроенный .aml: он проверен на реальных
+        платах, а DSL-шаблон даёт упрощённую таблицу. Шаблон компилируется
+        только когда готового .aml нет, иначе статус ``template-only``.
         """
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         results: list[dict] = []
         for name in self._effective_names():
-            target = self._compiled(name, out_dir)
-            status = "compiled"
+            target = self._bundled(name, out_dir)
+            status = "bundled"
             if target is None:
-                target = self._bundled(name, out_dir)
-                status = "bundled"
+                target = self._compiled(name, out_dir)
+                status = "compiled"
             if target is None:
                 status = "template-only"
             results.append({

@@ -160,7 +160,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="Ventura 13 – Sonoma 14",
         status=STATUS_PATCHED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"),
-        ssdts=("SSDT-EC-USBX", "SSDT-PLUG-AMD"),
+        ssdts=("SSDT-EC-USBX",),
         quirks=("Kernel: AMD Vanilla patches", "Booter: RebuildAppleMemoryMap"),
         note="Обязательны патчи AMD Vanilla под конкретное число ядер. SMBIOS — "
              "MacPro7,1. USB-порты нужно картировать, иначе часть портов не работает.",
@@ -179,7 +179,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="Monterey 12.1 – Sonoma 14",
         status=STATUS_PATCHED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"),
-        ssdts=("SSDT-EC-USBX", "SSDT-PLUG-AMD"),
+        ssdts=("SSDT-EC-USBX",),
         quirks=("Kernel: AMD Vanilla (Zen 3)", "Booter: ResizeAppleGpuBars=0"),
         note="Navi 21 требует macOS 12.1+; на 12.0 ускорения не будет. Патчи Zen 3 "
              "отличаются от Zen 2 — не смешивайте наборы.",
@@ -198,7 +198,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="Catalina 10.15 – Ventura 13",
         status=STATUS_PATCHED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"),
-        ssdts=("SSDT-EC-USBX", "SSDT-PLUG-AMD"),
+        ssdts=("SSDT-EC-USBX",),
         quirks=("Kernel: AMD Vanilla (Zen+)",),
         note="Дешёвая рабочая связка. Осторожно с китайскими RX 580 2048SP: у них "
              "другой device-id и ускорение не включается без прошивки VBIOS.",
@@ -279,7 +279,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="не рекомендуется",
         status=STATUS_LIMITED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleMCEReporterDisabler"),
-        ssdts=("SSDT-EC-USBX", "SSDT-PLUG-AMD"),
+        ssdts=("SSDT-EC-USBX",),
         quirks=("Kernel: AMD Vanilla",),
         note="Мобильные AMD APU поддерживаются крайне ограниченно: нет ускорения "
              "графики, часто не работают сон и тачпад. Как учебный кейс — да, как "
@@ -361,7 +361,7 @@ CONFIGS: tuple[HwConfig, ...] = (
         macos="Catalina 10.15 – Big Sur 11",
         status=STATUS_LIMITED,
         kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"),
-        ssdts=("SSDT-EC-USBX", "SSDT-PLUG-AMD"),
+        ssdts=("SSDT-EC-USBX",),
         quirks=("Kernel: AMD Vanilla (Zen, 16 ядер)", "Booter: ResizeAppleGpuBars=0"),
         note="Многопоточность ограничена: патчи ядра рассчитаны на 8–16 потоков, "
              "на 32 потоках возможны зависания. Для работы нужен тщательный тюнинг.",
@@ -487,3 +487,4 @@ def similar_configs(profile, limit: int = 3) -> list[HwConfig]:
             scored.append((score, cfg))
     scored.sort(key=lambda pair: (-pair[0], pair[1].key))
     return [cfg for _, cfg in scored[:limit]]
+

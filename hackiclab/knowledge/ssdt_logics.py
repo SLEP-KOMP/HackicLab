@@ -26,9 +26,6 @@ class SSDTSpec:
 SSDT_DB: list[SSDTSpec] = [
     SSDTSpec("SSDT-PLUG", "Power management (plugin-type)",
              "Включает CPU power management — нужен почти всем Intel."),
-    SSDTSpec("SSDT-PLUG-AMD", "Power management (AMD)",
-             "Plugin-type для Ryzen: собирается из DSL-шаблона, готового .aml нет.",
-             template=True, bundled=False),
     SSDTSpec("SSDT-GPRW", "Sleep fix (GPRW)",
              "Патч GPRW/PRW — сон и пробуждение ноутбуков.", template=False),
     SSDTSpec("SSDT-IMEI", "IMEI device",
@@ -66,12 +63,13 @@ def required_ssdts(profile: HardwareProfile) -> list[SSDTSpec]:
 
     Ноутбукам нужен EC-USBX вместо EC и добавляются PNLF, HPET, XOSI, GPI0;
     десктопам — EC и USBX, у Intel ещё AWAC, а на 300-серии и PMCR.
-    AMD получает PLUG-AMD без AWAC: часов AWAC на этих платах нет.
+    AMD не получает PLUG: X86PlatformPlugin на нём не работает, питанием
+    процессора занимаются kernel-патчи AMD, а лишняя таблица только путает.
     """
     amd = (profile.cpu.vendor or "").lower() == "amd"
     laptop = profile.platform == "laptop"
 
-    names = ["SSDT-PLUG-AMD"] if amd else ["SSDT-PLUG"]
+    names = [] if amd else ["SSDT-PLUG"]
     if laptop:
         names.extend(("SSDT-EC-USBX", "SSDT-PNLF", "SSDT-HPET", "SSDT-XOSI", "SSDT-GPI0"))
     else:

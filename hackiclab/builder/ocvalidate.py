@@ -110,6 +110,9 @@ def ensure_ocvalidate() -> Optional[Path]:
 
 
 _VERSION_RE = re.compile(r"ocvalidate\s+([0-9]+\.[0-9]+\.[0-9]+)")
+# ocvalidate не печатает свою версию явно: строку берём из NOTE о совместимости.
+_NOTE_VERSION_RE = re.compile(
+    r"compatible with OpenCore(?:\s+version)?\s+([0-9]+\.[0-9]+\.[0-9]+)", re.IGNORECASE)
 
 
 def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVResult:
@@ -138,6 +141,9 @@ def run_ocvalidate(config_path: Path, ocvalidate: Optional[Path] = None) -> OCVR
     version_note = ""
     mver = _VERSION_RE.search(out)
     tool_version = mver.group(1) if mver else ""
+    if not tool_version:
+        mnote = _NOTE_VERSION_RE.search(out)
+        tool_version = mnote.group(1) if mnote else ""
 
     for ln in lines:
         s = ln.strip()

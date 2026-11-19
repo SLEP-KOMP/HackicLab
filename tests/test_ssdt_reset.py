@@ -80,6 +80,46 @@ class PipelineTests(unittest.TestCase):
         names = [s.name for s in required_ssdts(self._profile())]
         self.assertIn("SSDT-USB-Reset", names)
 
+    def test_amd_gets_no_plug_table(self):
+        from hackiclab.knowledge.ssdt_logics import required_ssdts
+
+        names = [s.name for s in required_ssdts(self._profile())]
+        self.assertNotIn("SSDT-PLUG", names)
+        self.assertNotIn("SSDT-PLUG-AMD", names)
+
+    def test_intel_gets_plug_table(self):
+        from hackiclab.knowledge.ssdt_logics import required_ssdts
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="Intel Core i5-9400", vendor="intel", generation=9)
+        names = [s.name for s in required_ssdts(profile)]
+        self.assertIn("SSDT-PLUG", names)
+
+    def test_bundled_aml_wins_over_template(self):
+        import tempfile
+        from pathlib import Path
+
+        from hackiclab.builder.ssdt_factory import SSDTFactory
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results = SSDTFactory(self._profile()).generate_all(Path(tmp))
+            ec = next(r for r in results if r["name"] == "SSDT-EC")
+            self.assertEqual(ec["status"], "bundled")
+            self.assertTrue(Path(ec["path"]).is_file())
+            # Готовый .aml весит больше заглушки из шаблона.
+            self.assertGreater(Path(ec["path"]).stat().st_size, 54)
+
+    def test_templates_render_without_double_braces(self):
+        from hackiclab.builder import ssdt_factory
+
+        for name in ssdt_factory._TEMPLATES:
+            dsl = ssdt_factory.render_template(name)
+            if not dsl:
+                continue
+            self.assertNotIn("{{", dsl, name)
+            self.assertNotIn("}}", dsl, name)
+
     def test_factory_without_dsdt_leaves_table_unbuilt(self):
         import tempfile
         from pathlib import Path
@@ -100,7 +140,7 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             factory = ssdt_factory.SSDTFactory(self._profile(), dsdt_text=DSDT)
             self.assertIn("RHUB", ssdt_factory.build_usb_reset(factory.dsdt_text))
-            self.assertEqual(len(factory.generate_all(Path(tmp))), 4)
+            self.assertEqual(len(factory.generate_all(Path(tmp))), 3)
 
 
 if __name__ == "__main__":

@@ -2076,6 +2076,7 @@ class MainWindow(QMainWindow):
         self.val_config_path: Path | None = None
         self.val_path_label = QLabel(tr.t("validate.none")); self.val_path_label.setObjectName("muted")
         self.val_path_label.setWordWrap(True)
+        self.val_path_label.setVisible(False)
         pick_row.addWidget(self.val_path_label, 1)
         pick_btn = QPushButton(tr.t("validate.browse")); pick_btn.setObjectName("ghost")
         pick_btn.clicked.connect(self._pick_config)
@@ -2211,6 +2212,7 @@ class MainWindow(QMainWindow):
         if d:
             self.val_config_path = Path(d)
             self.val_path_label.setText(d)
+            self.val_path_label.setVisible(True)
             self._load_quick()
 
     def _load_quick(self):
@@ -4471,6 +4473,7 @@ class MainWindow(QMainWindow):
         if st["val_config_path"]:
             try:
                 self.val_path_label.setText(str(st["val_config_path"]))
+                self.val_path_label.setVisible(True)
                 self._load_quick()
             except Exception:
                 pass

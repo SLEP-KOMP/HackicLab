@@ -277,12 +277,25 @@ class EFIBuilder:
             acpi_dir = layout.oc / "ACPI"
             acpi_dir.mkdir(parents=True, exist_ok=True)
             placed = []
+            missing = []
             for r in ssdt_results:
                 if r["path"] and Path(r["path"]).exists():
-                    shutil.copy2(r["path"], str(acpi_dir / Path(r["path"]).name))
+                    shutil.copy2(str(r["path"]), str(acpi_dir / Path(r["path"]).name))
                     placed.append(r["name"])
+                else:
+                    missing.append(r["name"])
             self._step(80, f"SSDT в ACPI: {placed if placed else 'нет готовых .aml'}")
+            if missing:
+                self._log("SSDT: не собрались — " + ", ".join(missing))
+                if "SSDT-USB-Reset" in missing:
+                    self._log("SSDT: USB-Reset строится по DSDT и нужен только "
+                              "при наличии RHUB — его отсутствие нормально")
+                others = [n for n in missing if n != "SSDT-USB-Reset"]
+                if others:
+                    self._log("SSDT: этим таблицам нужен готовый .aml "
+                              "(соберите в SSDTTime и положите в assets/acpi)")
             res.stats["ssdt_placed"] = placed
+            res.stats["ssdt_missing"] = missing
         except Exception as e:
             self._log(f"SSDT: ошибка генерации ({e})")
             res.stats["ssdt_placed"] = []
