@@ -1700,27 +1700,6 @@ class MainWindow(QMainWindow):
         self.manual_macos.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.macos", self.manual_macos)
 
-        actions = QHBoxLayout()
-        self.manual_build_btn = QPushButton(tr.t("manual.build"))
-        self.manual_build_btn.clicked.connect(self._manual_build)
-        actions.addWidget(self.manual_build_btn)
-        self.manual_open_btn = QPushButton(tr.t("manual.open"))
-        self.manual_open_btn.setObjectName("ghost")
-        self.manual_open_btn.setVisible(False)
-        self.manual_open_btn.clicked.connect(self._manual_open)
-        actions.addWidget(self.manual_open_btn)
-        actions.addStretch()
-        form.addLayout(actions)
-
-        self.manual_progress = QProgressBar()
-        self.manual_progress.setRange(0, 100)
-        self.manual_progress.setVisible(False)
-        form.addWidget(self.manual_progress)
-        self.manual_log = QPlainTextEdit()
-        self.manual_log.setReadOnly(True)
-        self.manual_log.setPlaceholderText(tr.t("manual.log_ph"))
-        self.manual_log.setMaximumHeight(180)
-        form.addWidget(self.manual_log)
         self.manual_result = _val(page, "")
         self.manual_result.setWordWrap(True)
         form.addWidget(self.manual_result)
@@ -1832,68 +1811,11 @@ class MainWindow(QMainWindow):
             label.setObjectName(issue["level"] if issue["level"] in ("ok", "warn", "err") else "muted")
             self.manual_review_box.addWidget(label)
 
-    def _manual_build(self):
-        worker = getattr(self, "_worker_manual", None)
-        if worker is not None and worker.isRunning():
-            return
-        profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
-            self._manual_selection())
-        folder = QFileDialog.getExistingDirectory(self, tr.t("manual.pick"))
-        if not folder:
-            return
-        target = _efi_root_for(folder)
-        opts = BuildOptions(target_macos=str(self.manual_macos.currentData() or ""),
-                            wifi_kext_mode="itlwm", usb_toolbox=True)
-        plan = BuildPlan(profile=profile, options=opts)
-        self._manual_last_target = target
-        self.manual_log.clear()
-        self.manual_progress.setVisible(True)
-        self.manual_progress.setValue(0)
-        self.manual_result.setText("")
-        self.manual_open_btn.setVisible(False)
-        self.manual_build_btn.setEnabled(False)
-        self._worker_manual = BuildWorker(plan, target)
-        self._worker_manual.progress.connect(self._manual_progress)
-        self._worker_manual.done.connect(self._manual_done)
-        self._worker_manual.failed.connect(self._manual_failed)
-        self._worker_manual.start()
-
-    def _manual_progress(self, percent: int, message: str):
-        self.manual_log.appendPlainText(f"[{percent:3d}%] {message}")
-        self.manual_log.verticalScrollBar().setValue(
-            self.manual_log.verticalScrollBar().maximum())
-        self.manual_progress.setValue(percent)
-
-    def _manual_done(self, res):
-        self.manual_build_btn.setEnabled(True)
-        self.manual_progress.setValue(100)
-        ok = bool(getattr(res, "ok", False))
-        root = getattr(res, "root", None) or getattr(self, "_manual_last_target", None)
-        self.manual_result.setText(
-            tr.t("manual.build.ok") if ok else tr.t("manual.build.fail"))
-        self.manual_result.setProperty("tone", "ok" if ok else "err")
-        self.manual_result.style().unpolish(self.manual_result)
-        self.manual_result.style().polish(self.manual_result)
-        self.manual_open_btn.setVisible(bool(root))
-        if ok and root:
-            self.last_build_dir = Path(root)
-            label = getattr(self, "val_last_label", None)
-            if label is not None:
-                label.setText(str(root))
-        for error in list(getattr(res, "errors", []) or [])[:10]:
-            self.manual_log.appendPlainText(f"[err] {error}")
-        for line in (getattr(res, "log", []) or [])[-30:]:
-            self.manual_log.appendPlainText(line)
-
-    def _manual_failed(self, err):
-        self.manual_build_btn.setEnabled(True)
-        self.manual_progress.setVisible(False)
-        self.manual_result.setText(str(err))
-
     def _manual_open(self):
         target = getattr(self, "_manual_last_target", None)
         if target:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+
     def _build_build(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
@@ -2000,9 +1922,21 @@ class MainWindow(QMainWindow):
         dv.addWidget(note)
         main.addWidget(dest_card)
 
+        build_row = QHBoxLayout()
         build_btn = QPushButton(tr.t("build.button"))
         build_btn.clicked.connect(self._do_build)
-        main.addWidget(build_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        build_row.addWidget(build_btn)
+        self.manual_open_btn = QPushButton(tr.t("manual.open"))
+        self.manual_open_btn.setObjectName("ghost")
+        self.manual_open_btn.setVisible(False)
+        self.manual_open_btn.clicked.connect(self._manual_open)
+        build_row.addWidget(self.manual_open_btn)
+        build_row.addStretch()
+        main.addLayout(build_row)
+
+        self.manual_result = _val(page, "")
+        self.manual_result.setWordWrap(True)
+        main.addWidget(self.manual_result)
 
         self.build_progress = QProgressBar(); self.build_progress.setMaximum(0); self.build_progress.setVisible(False)
         main.addWidget(self.build_progress)
@@ -4592,20 +4526,27 @@ class MainWindow(QMainWindow):
     def _do_build(self):
         if getattr(self, "_worker_build", None) and self._worker_build.isRunning():
             return
-        if not self.profile:
-            QMessageBox.information(self, "HackicLab", tr.t("scan.button"))
-            return
-        if self.build_dest.text() == "—":
-            QMessageBox.warning(self, "HackicLab", tr.t("build.pick"))
-            return
+        dest = (self.build_dest.text() or "").strip()
+        if dest in ("", "—"):
+            self._pick_build_dir()
+            dest = (self.build_dest.text() or "").strip()
+            if dest in ("", "—"):
+                QMessageBox.warning(self, "HackicLab", tr.t("build.pick"))
+                return
+        profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
+            self._manual_selection())
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
             disable_sip=self.opt_sip.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
         )
-        plan = BuildPlan(profile=self.profile, options=opts)
-        target = Path(self.build_dest.text())
+        plan = BuildPlan(profile=profile, options=opts)
+        target = _efi_root_for(dest)
+        self._manual_last_target = target
+        self._last_build_profile = profile
+        self.manual_result.setText("")
+        self.manual_open_btn.setVisible(False)
         self._last_build_options = opts
         self._last_build_smbios = plan.smbios
         self._rationale_text = ""
@@ -4639,7 +4580,17 @@ class MainWindow(QMainWindow):
         self.last_build_dir = Path(res.root) if res and res.root else None
         if self.last_build_dir:
             self.val_last_label.setText(str(self.last_build_dir))
-        log = f"target: {res.root}\n" + "\n".join(res.log)
+        ok = bool(getattr(res, "ok", False))
+        result = getattr(self, "manual_result", None)
+        if result is not None:
+            result.setText(tr.t("manual.build.ok") if ok else tr.t("manual.build.fail"))
+            result.setProperty("tone", "ok" if ok else "err")
+            result.style().unpolish(result)
+            result.style().polish(result)
+        open_btn = getattr(self, "manual_open_btn", None)
+        if open_btn is not None:
+            open_btn.setVisible(bool(self.last_build_dir))
+        log = f"target: {res.root}\n" + "\n".join(getattr(res, "log", []) or [])
         if res.stats:
             log += f"\n\n--- {tr.t('build.log_summary')} ---"
             log += f"\nOpenCore: {res.stats.get('opencore', '—')}"
@@ -4683,11 +4634,12 @@ class MainWindow(QMainWindow):
     def _render_rationale(self):
         """Блок «Почему так собрано» по реально сгенерированному config.plist."""
         text = ""
-        if self.profile:
+        profile = getattr(self, "_last_build_profile", None) or self.profile
+        if profile:
             try:
                 from ..knowledge.rationale import explain, render
                 decisions = explain(
-                    self.profile,
+                    profile,
                     getattr(self, "_last_build_options", None),
                     smbios=getattr(self, "_last_build_smbios", None),
                     lang=tr.current,
@@ -4732,6 +4684,9 @@ class MainWindow(QMainWindow):
         self.build_progress.setVisible(False)
         self._set_apple_progress(0)
         self.build_log.setPlainText(str(err))
+        result = getattr(self, "manual_result", None)
+        if result is not None:
+            result.setText(str(err))
         QMessageBox.critical(self, tr.t("build.title"), str(err))
 
     # ---- analyze ----

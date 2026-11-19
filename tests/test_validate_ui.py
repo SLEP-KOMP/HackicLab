@@ -55,9 +55,10 @@ class ValidateTilesTests(unittest.TestCase):
                 cfg.parent.mkdir(parents=True)
                 cfg.write_text("<plist/>", encoding="utf-8")
                 window.profile = None
-                window._manual_done(SimpleNamespace(ok=True, root=root, errors=[], log=[]))
+                window._build_done(SimpleNamespace(ok=True, root=root, errors=[], log=[], stats={}))
                 self.assertEqual(window.last_build_dir, root)
                 self.assertEqual(window._resolve_config(), cfg)
         finally:
             window.close()
             window.deleteLater()
+
