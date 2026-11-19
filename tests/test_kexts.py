@@ -314,3 +314,16 @@ class AmdAndLegacyWifiTests(unittest.TestCase):
                                side_effect=AssertionError("тег не нужен")), \
                 mock.patch.object(dl_mod, "download_bytes", return_value=b"<html>"):
             self.assertIsNone(Downloader().download_kext(entry, Path(tmp.name)))
+
+    def test_i211_uses_legacy_kext_before_monterey(self):
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="Intel Core i7-8700", vendor="intel", generation=8)
+        profile.net = NetInfo(eth_chipset="i211")
+
+        old = [e.name for e in select_kexts(profile, target_macos="Big Sur")]
+        self.assertIn("AppleIntelI210Ethernet", old)
+        self.assertNotIn("AppleIGB", old)
+
+        new = [e.name for e in select_kexts(profile, target_macos="Sonoma")]
+        self.assertIn("AppleIGB", new)
+        self.assertNotIn("AppleIntelI210Ethernet", new)

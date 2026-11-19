@@ -188,9 +188,18 @@ def _find_asset(release: dict) -> tuple[str, int, str]:
     return "", 0, ""
 
 
+def _is_windows() -> bool:
+    """Обновление подменой файла возможно только на Windows."""
+    return sys.platform == "win32"
+
+
 def current_binary_digest() -> str:
-    """sha256 запущенного EXE. Для запуска из исходников — пустая строка."""
-    if not getattr(sys, "frozen", False):
+    """sha256 запущенного EXE. На macOS и при запуске из исходников — пустая строка.
+
+    Хеш бинарника из .app сравнивать с хешем вложения HackicLab.exe нельзя:
+    это разные файлы, и проверка всегда показывала бы «доступна пересборка».
+    """
+    if not _is_windows() or not getattr(sys, "frozen", False):
         return ""
     try:
         digest = hashlib.sha256()
@@ -425,8 +434,8 @@ def check_for_update(timeout: int = 25, force: bool = False) -> Optional[UpdateI
 
 
 def can_self_update() -> bool:
-    """Подменять исполняемый файл можно только у собранного EXE."""
-    return bool(getattr(sys, "frozen", False))
+    """Подменять исполняемый файл можно только у собранного EXE на Windows."""
+    return _is_windows() and bool(getattr(sys, "frozen", False))
 
 
 def update_dir() -> Path:

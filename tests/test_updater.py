@@ -367,3 +367,16 @@ class ApplyUpdateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PlatformUpdateGuardTests(unittest.TestCase):
+    """На macOS самообновление недоступно: EXE не подменить."""
+
+    def test_self_update_disabled_outside_windows(self):
+        with mock.patch.object(updater, "_is_windows", return_value=False), \
+                mock.patch.object(updater.sys, "frozen", True, create=True):
+            self.assertFalse(updater.can_self_update())
+
+    def test_digest_empty_outside_windows(self):
+        with mock.patch.object(updater, "_is_windows", return_value=False), \
+                mock.patch.object(updater.sys, "frozen", True, create=True):
+            self.assertEqual(updater.current_binary_digest(), "")

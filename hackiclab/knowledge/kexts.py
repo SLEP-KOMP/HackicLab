@@ -344,16 +344,26 @@ def _audio_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
 #: Подстроки в имени Ethernet-устройства -> кекст. Проверяются по порядку.
 _ETHERNET_RULES = (
     (("i219", "i218", "i217"), "IntelMausiEthernet"),
-    (("i211", "i210"), "AppleIGB"),
     (("i225", "i226"), "AppleIGC"),
     (("rtl8125",), "RealtekRTL8125"),
     (("rtl",), "RealtekRTL8111"),
 )
 
+#: I210/I211: до Monterey работает старый AppleIntelI210Ethernet, с Monterey —
+#: AppleIGB. Выбор зависит от целевой macOS, поэтому вынесен из таблицы.
+_LEGACY_ETHERNET_MARKERS = ("i211", "i210")
 
-def _ethernet_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
+
+def _ethernet_kexts(chosen: _KextList, profile: HardwareProfile,
+                    target_macos: str = "") -> None:
     # Чипсет приходит общим («intel»), модель уточняется по имени устройства
     text = f"{profile.net.eth_chipset or ''} {profile.net.eth_name or ''}".lower()
+    if any(marker in text for marker in _LEGACY_ETHERNET_MARKERS):
+        if macos_in_range(KEXT_DB["AppleIGB"], target_macos):
+            chosen.add("AppleIGB")
+        else:
+            chosen.add("AppleIntelI210Ethernet")
+        return
     for markers, name in _ETHERNET_RULES:
         if any(marker in text for marker in markers):
             chosen.add(name)
@@ -424,7 +434,7 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     _storage_kexts(chosen, profile, target_macos)
     _gpu_kexts(chosen, profile)
     _audio_kexts(chosen, profile)
-    _ethernet_kexts(chosen, profile)
+    _ethernet_kexts(chosen, profile, target_macos)
 
     wifi_quiet = wifi_kext_mode == "none"
     if not wifi_quiet:

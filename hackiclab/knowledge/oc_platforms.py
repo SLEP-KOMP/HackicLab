@@ -51,11 +51,11 @@ MAX_MACOS_BY_GEN: dict[int, str] = {
     8: "Sequoia",       # Coffee Lake: MacBook Pro 2018 / mini 2018
     9: "Sequoia",       # Coffee Lake Refresh: iMac 2019
     10: "Sequoia",      # Comet Lake: iMac 2020
-    11: "Sonoma",       # Tiger Lake: iGPU без драйвера, нужен dGPU
-    12: "Sonoma",       # Alder Lake: только с dGPU и патчами ядра
-    13: "Sonoma",       # Raptor Lake
-    14: "Sonoma",       # Raptor Lake Refresh
-    15: "Sequoia",      # Arrow Lake: Tahoe 26 уже только Apple Silicon
+    11: "Sequoia",  # Tiger Lake: iGPU без драйвера, нужен dGPU (как и у 12–15)
+    12: "Sequoia",  # Alder Lake: только с dGPU и патчами ядра
+    13: "Sequoia",  # Raptor Lake
+    14: "Sequoia",  # Raptor Lake Refresh
+    15: "Sequoia",  # Arrow Lake: Tahoe 26 уже только Apple Silicon
 }
 
 # AMD не имеет Apple-платформы: потолок задаётся патчами AMD Vanilla и GPU.

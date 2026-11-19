@@ -597,3 +597,26 @@ class LanguageSwitchKeepsPageTests(unittest.TestCase):
             tr.set_lang(previous)
             window.close()
             window.deleteLater()
+
+class WizardStepKeepsTests(unittest.TestCase):
+    """Пересборка страниц не сбрасывает мастер на первый шаг."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_step_survives_rebuild(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            window._wiz_state()["step"] = 3
+            window._rebuild_pages()
+            self.assertEqual(window.wiz_stack.currentIndex(), 3)
+        finally:
+            window.close()
+            window.deleteLater()

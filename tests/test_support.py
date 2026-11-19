@@ -73,3 +73,16 @@ class SupportReportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ModernIntelCeilingTests(unittest.TestCase):
+    """11–15 поколения Intel доживают до Sequoia: Tahoe уже без Intel."""
+
+    def test_modern_intel_reaches_sequoia(self):
+        from hackiclab.knowledge.oc_platforms import max_macos_for
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        for generation in (11, 12, 13, 14, 15):
+            profile = HardwareProfile(platform="desktop")
+            profile.cpu = CPUInfo(name=f"Intel Core {generation}000", vendor="intel",
+                                  generation=generation)
+            self.assertEqual(max_macos_for(profile), "Sequoia", generation)

@@ -749,7 +749,7 @@ class MainWindow(QMainWindow):
         foot.addWidget(self.wiz_next)
         v.addLayout(foot)
 
-        self._wiz_show(0)
+        self._wiz_show(int(self._wiz_state().get("step", 0)))
         return page
 
     def _wiz_option(self, parent, layout, key: str, value: str,
