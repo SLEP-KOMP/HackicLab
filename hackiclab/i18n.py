@@ -161,6 +161,8 @@ T = {
         "scan.saved": "Профиль сохранён",
         # wizard
         "wizard.title": "Автоматическая сборка",
+        "manual.from_scan": "Взять из сканирования",
+        "manual.need_scan": "Сначала просканируйте железо на вкладке «Автоматическая сборка».",
         "manual.title": "Сборка вручную",
         "manual.subtitle": "Выберите железо вручную — с проверкой по базам: потолок macOS, кексты, SSDT и предупреждения.",
         "manual.cpu": "Процессор",
@@ -520,6 +522,12 @@ T = {
         "oclog.hint.nvme_power": "NVMeFix не применил управление питанием к NVMe. Обычно безвредно.",
         "oclog.hint.smc_key": "VirtualSMC не смог эмулировать ключ SMC. Проверьте VirtualSMC.kext и плагины.",
         # validate
+        "validate.tile_state": "Итог проверки",
+        "validate.tile_errors": "Ошибки",
+        "validate.tile_warnings": "Предупреждения",
+        "validate.tile_ok": "Чисто",
+        "validate.tile_warn": "Замечания",
+        "validate.tile_err": "Есть ошибки",
         "validate.title": "Валидация config.plist",
         "validate.subtitle": "Проверка собранного config.plist на соответствие схеме OpenCore (ocvalidate).",
         "validate.no_profile": "Сначала просканируйте железо и соберите EFI.",
@@ -784,6 +792,8 @@ T = {
         "scan.saved": "Profile saved",
         # wizard
         "wizard.title": "Automatic build",
+        "manual.from_scan": "Fill from scan",
+        "manual.need_scan": "Scan the hardware on the Automatic build tab first.",
         "manual.title": "Manual build",
         "manual.subtitle": "Pick the hardware manually, with checks against our bases: macOS ceiling, kexts, SSDTs and warnings.",
         "manual.cpu": "CPU",
@@ -1141,6 +1151,12 @@ T = {
         "oclog.hint.nvme_power": "NVMeFix could not apply power management to the NVMe drive. Usually harmless.",
         "oclog.hint.smc_key": "VirtualSMC could not emulate a required SMC key. Check VirtualSMC.kext and its plugins.",
         # validate
+        "validate.tile_state": "Check result",
+        "validate.tile_errors": "Errors",
+        "validate.tile_warnings": "Warnings",
+        "validate.tile_ok": "Clean",
+        "validate.tile_warn": "Notes",
+        "validate.tile_err": "Errors found",
         "validate.title": "config.plist validation",
         "validate.subtitle": "Check the built config.plist against the OpenCore schema (ocvalidate).",
         "validate.no_profile": "First scan your hardware and build the EFI.",

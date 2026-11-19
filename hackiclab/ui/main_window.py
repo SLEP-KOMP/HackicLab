@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QFileDialog,
     QFrame,
     QGroupBox,
@@ -625,6 +626,22 @@ class MainWindow(QMainWindow):
             tv.addWidget(cap)
             row.addWidget(tile, 1)
         layout.addLayout(row)
+
+    def _metric_tile(self, page, row, caption: str) -> QLabel:
+        """Плитка с крупным значением, которое можно обновлять после проверки."""
+        tile = self._card(page)
+        tv = QVBoxLayout(tile)
+        tv.setContentsMargins(16, 14, 16, 14)
+        tv.setSpacing(2)
+        value = QLabel("—", tile)
+        value.setObjectName("tileValue")
+        cap = QLabel(caption, tile)
+        cap.setObjectName("muted")
+        cap.setWordWrap(True)
+        tv.addWidget(value)
+        tv.addWidget(cap)
+        row.addWidget(tile, 1)
+        return value
 
     def _scroll_page(self, page: QWidget) -> QScrollArea:
         """Прокрутка и центральная колонка: поля слева и справа одинаковые.
@@ -1498,12 +1515,103 @@ class MainWindow(QMainWindow):
         self._go_page(self.page_usb)
 
     # ---- manual hardware setup ----
+    def _make_searchable(self, combo) -> None:
+        """Включает поиск по списку: набрал «Ryzen 5 3600» — выбрал строку.
+
+        Обычный QComboBox прокручивается к текущему элементу, и мышью легко
+        попасть в соседнее поколение. С completer выбор становится точным.
+        """
+        combo.setEditable(True)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        completer = combo.completer()
+        if completer is None:
+            return
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+
+    def _select_data(self, combo, value: str) -> bool:
+        index = combo.findData(value)
+        if index < 0:
+            return False
+        combo.setCurrentIndex(index)
+        return True
+
+    def _manual_from_scan(self) -> None:
+        """Заполняет ручную форму железом из последнего сканирования."""
+        profile = getattr(self, "profile", None)
+        if profile is None:
+            self.statusBar().showMessage(tr.t("manual.need_scan"), 6000)
+            return
+        cpu = getattr(profile, "cpu", None)
+        vendor = (getattr(cpu, "vendor", "") or "").lower()
+        generation = int(getattr(cpu, "generation", 0) or 0)
+        laptop = profile.platform == "laptop"
+        self.manual_laptop.setChecked(laptop)
+        self.manual_cores.setValue(max(2, min(64, int(getattr(cpu, "core_count", 0) or getattr(cpu, "cores", 4) or 4))))
+        if vendor == "amd":
+            key = f"amd-zen{generation - 8 if generation > 8 else 1}d"
+            if generation == 10:
+                key = "amd-zen2d"
+            elif generation == 11:
+                key = "amd-zen3d"
+            elif generation == 12:
+                key = "amd-zen4d"
+            key = key.replace("d", "m") if laptop else key
+            if not self._select_data(self.manual_cpu, key):
+                self._select_data(self.manual_cpu, "amd-zen2d")
+        elif vendor == "intel":
+            key = f"intel-{min(generation, 10)}{'m' if laptop else 'd'}"
+            if generation >= 10 and not laptop:
+                key = "intel-10d"
+            if not self._select_data(self.manual_cpu, key):
+                self._select_data(self.manual_cpu, "intel-8d")
+
+        gpu = getattr(profile, "dgpu", None) or getattr(profile, "igpu", None)
+        gpu_key = ""
+        if gpu is not None:
+            vendor_gpu = (getattr(gpu, "vendor", "") or "").lower()
+            device = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "")
+            if vendor_gpu in ("amd", "nvidia"):
+                gpu_key = vendor_gpu
+            elif device and self.manual_gpu.findData(device) >= 0:
+                gpu_key = device
+        if gpu_key:
+            self._select_data(self.manual_gpu, gpu_key)
+
+        audio = getattr(profile, "audio", None)
+        if audio is not None and getattr(audio, "codec", ""):
+            self.manual_audio.setText(str(audio.codec))
+
+        eth = (getattr(getattr(profile, "net", None), "eth_chipset", "") or "").lower()
+        if self.manual_eth.findData(eth) < 0:
+            eth = ""
+        self._select_data(self.manual_eth, eth)
+
+        wifi = (getattr(getattr(profile, "net", None), "wifi_chipset", "") or "").lower()
+        if self.manual_wifi.findData(wifi) < 0:
+            wifi = ""
+        self._select_data(self.manual_wifi, wifi)
+
+        touch = str(getattr(profile, "touchpad_type", "") or "none")
+        if self.manual_touchpad.findData(touch) < 0:
+            touch = "ps2" if laptop else "none"
+        self._select_data(self.manual_touchpad, touch)
+
+        storage = getattr(profile, "storage", None)
+        if storage is not None:
+            self.manual_nvme.setChecked(bool(getattr(storage, "nvme_present", False)))
+        self._manual_refresh()
+
     def _build_manual(self):
         page = QWidget()
         v = QVBoxLayout(page)
         v.setContentsMargins(28, 24, 28, 24)
         v.setSpacing(10)
         v.addWidget(_h2(page, tr.t("manual.title")))
+        from_scan = QPushButton(tr.t("manual.from_scan"))
+        from_scan.clicked.connect(self._manual_from_scan)
+        v.addWidget(from_scan, alignment=Qt.AlignmentFlag.AlignLeft)
 
         cols = QHBoxLayout()
         cols.setSpacing(18)
@@ -1517,6 +1625,7 @@ class MainWindow(QMainWindow):
         default_index = self.manual_cpu.findData("intel-8d")
         if default_index >= 0:
             self.manual_cpu.setCurrentIndex(default_index)
+        self._make_searchable(self.manual_cpu)
         self.manual_cpu.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.cpu", self.manual_cpu)
 
@@ -1537,6 +1646,7 @@ class MainWindow(QMainWindow):
         self.manual_gpu = QComboBox()
         for option in manual_hw.GPU_OPTIONS:
             self.manual_gpu.addItem(option.title, option.key)
+        self._make_searchable(self.manual_gpu)
         self.manual_gpu.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.gpu", self.manual_gpu)
 
@@ -1548,18 +1658,21 @@ class MainWindow(QMainWindow):
         self.manual_eth = QComboBox()
         for value, title in manual_hw.ETHERNET_OPTIONS:
             self.manual_eth.addItem(title, value)
+        self._make_searchable(self.manual_eth)
         self.manual_eth.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.eth", self.manual_eth)
 
         self.manual_wifi = QComboBox()
         for value, title in manual_hw.WIFI_OPTIONS:
             self.manual_wifi.addItem(title, value)
+        self._make_searchable(self.manual_wifi)
         self.manual_wifi.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.wifi", self.manual_wifi)
 
         self.manual_touchpad = QComboBox()
         for value, title in manual_hw.TOUCHPAD_OPTIONS:
             self.manual_touchpad.addItem(title, value)
+        self._make_searchable(self.manual_touchpad)
         self.manual_touchpad.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.touchpad", self.manual_touchpad)
 
@@ -1575,6 +1688,7 @@ class MainWindow(QMainWindow):
         form.addLayout(other)
 
         self.manual_macos = QComboBox()
+        self._make_searchable(self.manual_macos)
         self.manual_macos.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.macos", self.manual_macos)
 
@@ -1928,6 +2042,13 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "validate.title", "validate.subtitle")
 
+        tiles = QHBoxLayout()
+        tiles.setSpacing(12)
+        self.val_tile_state = self._metric_tile(page, tiles, tr.t("validate.tile_state"))
+        self.val_tile_err = self._metric_tile(page, tiles, tr.t("validate.tile_errors"))
+        self.val_tile_warn = self._metric_tile(page, tiles, tr.t("validate.tile_warnings"))
+        v.addLayout(tiles)
+
         # --- источник для валидации ---
         src = self._card(page)
         sv = QVBoxLayout(src)
@@ -2160,13 +2281,32 @@ class MainWindow(QMainWindow):
         if res.get("ok"):
             self.val_status.setText("✔ " + tr.t("validate.valid"))
             self.val_status.setObjectName("ok")
+            self._set_val_tiles("ok", len(schema), len(warns))
         elif not schema and missing:
             self.val_status.setText("⚠ " + tr.t("validate.badge_missing_only"))
             self.val_status.setObjectName("warn")
         else:
             self.val_status.setText("✖ " + tr.t("validate.invalid"))
             self.val_status.setObjectName("err")
+            self._set_val_tiles("err", len(schema), len(warns))
         self.statusBar().showMessage(f"ocvalidate: {len(schema)} err / {len(warns)} warn", 6000)
+
+    def _set_val_tiles(self, tone: str, errors: int, warnings: int) -> None:
+        """Крупная сводка валидации: статус, ошибки, предупреждения."""
+        state_labels = {
+            "ok": tr.t("validate.tile_ok"),
+            "warn": tr.t("validate.tile_warn"),
+            "err": tr.t("validate.tile_err"),
+        }
+        for tile, label in (
+            (getattr(self, "val_tile_state", None), state_labels.get(tone, "—")),
+            (getattr(self, "val_tile_err", None), str(errors)),
+            (getattr(self, "val_tile_warn", None), str(warnings)),
+        ):
+            if tile is None:
+                continue
+            tile.setText(label)
+            tile.setProperty("tone", tone)
 
     def _validate_failed(self, err):
         self.val_progress.setVisible(False)

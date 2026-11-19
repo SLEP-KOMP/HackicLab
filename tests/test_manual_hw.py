@@ -105,3 +105,51 @@ class PageTests(unittest.TestCase):
         self.assertEqual(profile.platform, "laptop")
         self.assertEqual(profile.cpu.codename, "Whiskey Lake")
         self.assertGreater(self.win.manual_macos.count(), 0)
+
+class FillFromScanTests(unittest.TestCase):
+    """Кнопка «Взять из сканирования» переносит железо в ручную форму."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_fill_sets_hardware_and_is_searchable(self):
+        from hackiclab.scanner.models import (
+            AudioInfo,
+            CPUInfo,
+            GPUInfo,
+            HardwareProfile,
+            NetInfo,
+            StorageInfo,
+        )
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            profile = HardwareProfile(platform="desktop")
+            profile.cpu = CPUInfo(name="AMD Ryzen 5 3600", vendor="amd",
+                                  generation=10, core_count=6)
+            profile.dgpu = GPUInfo(name="Radeon RX 580", vendor="amd", device_id="6FDF")
+            profile.audio = AudioInfo(codec="ALC1220")
+            profile.net = NetInfo(eth_chipset="i211", wifi_chipset="broadcom",
+                                  bt_native_apple=True)
+            profile.storage = StorageInfo(nvme_present=True)
+            window.profile = profile
+
+            window._manual_from_scan()
+
+            self.assertEqual(window.manual_cpu.currentData(), "amd-zen2d")
+            self.assertEqual(window.manual_cores.value(), 6)
+            self.assertEqual(window.manual_gpu.currentData(), "amd")
+            self.assertEqual(window.manual_audio.text(), "ALC1220")
+            self.assertEqual(window.manual_eth.currentData(), "i211")
+            self.assertEqual(window.manual_wifi.currentData(), "broadcom")
+            self.assertTrue(window.manual_nvme.isChecked())
+            self.assertTrue(window.manual_cpu.isEditable())
+        finally:
+            window.close()
+            window.deleteLater()
