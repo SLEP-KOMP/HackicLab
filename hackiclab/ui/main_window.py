@@ -3742,23 +3742,16 @@ class MainWindow(QMainWindow):
         v.addWidget(gb_theme)
         self._sync_theme_tiles()
 
-        # Лицензия / Premium (переводится через i18n)
-        gb_lic = QGroupBox(tr.t("settings.premium"))
-        lv = QVBoxLayout(gb_lic)
-        from ..license import license_manager as lm
-        st = lm.status()
-        edition_txt = tr.t("settings.premium_edition_premium") if st["is_premium"] else tr.t("settings.premium_edition_free")
-        self.lic_status = _val(page, f"{tr.t('settings.premium_edition')}: {edition_txt}")
-        lv.addWidget(self.lic_status)
-        lv.addWidget(_muted(page, tr.t("settings.premium_features")))
-        key_row = QHBoxLayout()
-        self.lic_key = QLineEdit(); self.lic_key.setPlaceholderText("HILC-XXXX-XXXX-XXXX")
-        key_row.addWidget(self.lic_key, 1)
-        act_btn = QPushButton(tr.t("settings.premium_activate")); act_btn.setObjectName("ghost")
-        act_btn.clicked.connect(self._activate_license)
-        key_row.addWidget(act_btn)
-        lv.addLayout(key_row)
-        v.addWidget(gb_lic)
+        # Всё бесплатно: вместо фейковой активации — честное объяснение модели.
+        gb_free = QGroupBox(tr.t("settings.free_title"))
+        fv = QVBoxLayout(gb_free)
+        free_text = _muted(page, tr.t("settings.free_text"))
+        free_text.setWordWrap(True)
+        fv.addWidget(free_text)
+        free_plan = _muted(page, tr.t("settings.free_plan"))
+        free_plan.setWordWrap(True)
+        fv.addWidget(free_plan)
+        v.addWidget(gb_free)
 
         # Обновления
         gb_upd = QGroupBox(tr.t("settings.updates"))
@@ -3982,17 +3975,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         if hasattr(self, "bg_label"):
             self.bg_label.setText(tr.t("settings.theme_bg_none"))
-
-    def _activate_license(self):
-        from ..license import LicenseManager
-        mgr = LicenseManager()
-        ok, _ = mgr.activate_premium(self.lic_key.text())
-        if ok:
-            self.statusBar().showMessage(tr.t("settings.premium_activated"), 4000)
-            self.lic_status.setText(f"{tr.t('settings.premium_edition')}: {tr.t('settings.premium_edition_premium')}")
-            QMessageBox.information(self, tr.t("settings.premium"), tr.t("settings.premium_activated"))
-        else:
-            QMessageBox.warning(self, tr.t("settings.premium"), tr.t("settings.premium_invalid"))
 
     def _build_about(self):
         page = QWidget()

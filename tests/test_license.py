@@ -32,10 +32,10 @@ class DeviceIdTests(unittest.TestCase):
 
 
 class FeatureGateTests(unittest.TestCase):
-    def test_free_edition_blocks_premium_candidates(self):
+    def test_free_edition_allows_everything_for_now(self):
         free = lic.License()
-        self.assertFalse(free.can("autodownload"))
-        self.assertFalse(free.can("autobuild_full"))
+        self.assertTrue(free.can("autodownload"))
+        self.assertTrue(free.can("autobuild_full"))
         self.assertTrue(free.can("scan"))
 
     def test_premium_edition_allows_everything(self):

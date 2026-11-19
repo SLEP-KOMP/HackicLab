@@ -46,10 +46,8 @@ class License:
         Free-выпуск по умолчанию пробует все функции (первый этап бесплатен),
         но 'autodownload' и 'autobuild_full' помечены как premium-кандидаты.
         """
-        if self.is_premium:
-            return True
-        # задел под будущую монетизацию
-        return feature not in ("autodownload", "autobuild_full", "cloud")
+        # На этом этапе всё бесплатно: ограничений по функциям нет.
+        return True
 
 
 PREMIUM_FEATURES = {

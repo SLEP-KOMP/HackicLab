@@ -259,6 +259,9 @@ def build_qss(theme: str, background: str = "") -> str:
     soft = _rgba(p.accent, 0.14)
     soft_hover = _rgba(p.accent, 0.22)
     window = p.window or p.bg
+    # При своём фоне страница получает почти непрозрачную подложку: иначе
+    # текст карточек читается поверх картинки и интерфейс «плывёт».
+    shell = _rgba(window, 0.94) if background else "transparent"
 
     bg_image = ""
     if background:
@@ -277,6 +280,7 @@ QWidget {{
 }}
 QMainWindow, QDialog {{ background: {bg}; {bg_image} }}
 #pageRoot {{ background: {window}; }}
+#pageShell {{ background: {shell}; }}
 QScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 #sidebar {{ background-color: {panel}; border-right: 1px solid {border}; }}
