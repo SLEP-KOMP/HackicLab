@@ -276,3 +276,15 @@ class MergedPagesTests(unittest.TestCase):
         self.win._wiz_state()["profile"] = profile
         self.win._wiz_fill_summary()
         self.assertGreater(self.win.wiz_badges.count(), 1)
+
+    def test_wizard_button_opens_usb_page(self):
+        self.win._wiz_to_usb()
+        self.assertEqual(self.win.stack.currentIndex(),
+                         self.win._page_index(self.win.page_usb))
+
+    def test_build_log_survives_language_rebuild(self):
+        self.win.wiz_log.setPlainText("[100%] ready")
+        self.win._wiz_record = "C:/tmp/record.json"
+        self.win._rebuild_pages()
+        self.assertIn("ready", self.win.wiz_log.toPlainText())
+        self.assertFalse(self.win.wiz_share_btn.isHidden())

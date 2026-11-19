@@ -1437,7 +1437,7 @@ class MainWindow(QMainWindow):
         index = self.usb_combo.findData(device) if device else -1
         if index >= 0:
             self.usb_combo.setCurrentIndex(index)
-        self._go_page(5)
+        self._go_page(self.page_usb)
 
     # ---- manual hardware setup ----
     def _build_manual(self):
@@ -4118,7 +4118,30 @@ class MainWindow(QMainWindow):
         """Подписи пунктов меню без групп — для самопроверки локализации."""
         return [tr.t(key) for key in getattr(self, "_nav_keys", [])]
 
-    def _go_page(self, index: int):
+    def _page_index(self, page) -> int:
+        """Номер страницы в стеке по самому виджету.
+
+        В стеке лежат обёртки QScrollArea, поэтому stack.indexOf(page) не
+        находит исходный виджет — сравниваем содержимое обёрток.
+        """
+        widget = page
+        while widget is not None:
+            idx = self.stack.indexOf(widget)
+            if idx >= 0:
+                return idx
+            widget = widget.parentWidget()
+        return -1
+
+    def _go_page(self, index):
+        """Переходит на страницу по номеру или по самому виджету страницы.
+
+        Номер страницы зависит от состава меню, поэтому вызовы по виджету
+        надёжнее: порядок вкладок уже менялся.
+        """
+        if not isinstance(index, int):
+            index = self._page_index(index)
+        if index < 0:
+            return
         row = getattr(self, "_page_rows", {}).get(index, 0)
         self.nav.setCurrentRow(row)
 
@@ -4201,6 +4224,12 @@ class MainWindow(QMainWindow):
             "opt_usb": self.opt_usb.isChecked(),
             "opt_sip": self.opt_sip.isChecked(),
             "macos": self.macos_combo.currentData(),
+            # Автоматическая сборка: без этого смена языка теряла журнал,
+            # готовый отчёт и кнопки «Открыть папку»/«Отправить в базу».
+            "wiz_log": self.wiz_log.toPlainText() if hasattr(self, "wiz_log") else "",
+            "wiz_result": self.wiz_result.text() if hasattr(self, "wiz_result") else "",
+            "wiz_record": getattr(self, "_wiz_record", ""),
+            "wiz_target": getattr(self, "_wiz_last_target", None),
         }
         while self.stack.count():
             w = self.stack.widget(0)
@@ -4254,6 +4283,15 @@ class MainWindow(QMainWindow):
             self._on_macos_change()
         except Exception:
             pass
+
+        if st["wiz_log"]:
+            self.wiz_log.setPlainText(st["wiz_log"])
+        if st["wiz_result"]:
+            self.wiz_result.setText(st["wiz_result"])
+        self._wiz_record = st["wiz_record"]
+        self._wiz_last_target = st["wiz_target"]
+        self.wiz_share_btn.setVisible(bool(st["wiz_record"]))
+        self.wiz_open_btn.setVisible(bool(st["wiz_target"]))
 
         self.stack.setCurrentIndex(max(0, min(idx, self.stack.count() - 1)))
         self._select_nav(self.stack.currentIndex())
