@@ -422,6 +422,14 @@ def _issue_title(issue) -> str:
     return title
 
 
+def _efi_root_for(folder) -> Path:
+    """Корень сборки: выбранная папка, а если выбрана сама папка EFI — её родитель."""
+    root = Path(str(folder))
+    if root.name.upper() == "EFI":
+        root = root.parent
+    return root
+
+
 def _macos_newer(a: str, b: str) -> bool:
     """Версия a новее b? (по имени macOS). Для подсказки о несовместимости."""
     order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
@@ -1341,7 +1349,7 @@ class MainWindow(QMainWindow):
     def _wiz_target_dir(self) -> Path:
         state = self._wiz_state()
         if state.get("kind") == "folder" and state.get("folder"):
-            return Path(str(state["folder"])) / "EFI"
+            return _efi_root_for(state["folder"])
         import time
         stamp = time.strftime("%Y%m%d-%H%M")
         return Path.home() / "Documents" / f"HackicLab-EFI-{stamp}"
@@ -1833,7 +1841,7 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, tr.t("manual.pick"))
         if not folder:
             return
-        target = Path(folder) / "EFI"
+        target = _efi_root_for(folder)
         opts = BuildOptions(target_macos=str(self.manual_macos.currentData() or ""),
                             wifi_kext_mode="itlwm", usb_toolbox=True)
         plan = BuildPlan(profile=profile, options=opts)
@@ -1867,6 +1875,11 @@ class MainWindow(QMainWindow):
         self.manual_result.style().unpolish(self.manual_result)
         self.manual_result.style().polish(self.manual_result)
         self.manual_open_btn.setVisible(bool(root))
+        if ok and root:
+            self.last_build_dir = Path(root)
+            label = getattr(self, "val_last_label", None)
+            if label is not None:
+                label.setText(str(root))
         for error in list(getattr(res, "errors", []) or [])[:10]:
             self.manual_log.appendPlainText(f"[err] {error}")
         for line in (getattr(res, "log", []) or [])[-30:]:
@@ -2320,7 +2333,7 @@ class MainWindow(QMainWindow):
             if cfg.is_file():
                 return cfg
         build_dir = getattr(self, "last_build_dir", None)
-        if self.profile and build_dir:
+        if build_dir:
             cand = Path(build_dir) / "EFI" / "OC" / "config.plist"
             if cand.is_file():
                 return cand
@@ -4033,6 +4046,8 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _auto_check_updates(self):
+        if os.environ.get("HACKICLAB_NO_UPDATES"):
+            return
         if bool(uistate.get("check_updates", True)):
             self._check_updates(silent=True)
 

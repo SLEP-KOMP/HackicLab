@@ -29,3 +29,35 @@ class ValidateTilesTests(unittest.TestCase):
         finally:
             window.close()
             window.deleteLater()
+
+    def test_efi_root_for_folder(self):
+        from pathlib import Path
+
+        from hackiclab.ui.main_window import _efi_root_for
+
+        self.assertEqual(_efi_root_for(r"C:\build\oc-lab"), Path(r"C:\build\oc-lab"))
+        self.assertEqual(_efi_root_for(r"C:\build\oc-lab\EFI"), Path(r"C:\build\oc-lab"))
+        self.assertEqual(_efi_root_for(r"C:\build\oc-lab\efi"), Path(r"C:\build\oc-lab"))
+
+    def test_manual_build_makes_validation_see_config(self):
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            import tempfile
+
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                cfg = root / "EFI" / "OC" / "config.plist"
+                cfg.parent.mkdir(parents=True)
+                cfg.write_text("<plist/>", encoding="utf-8")
+                window.profile = None
+                window._manual_done(SimpleNamespace(ok=True, root=root, errors=[], log=[]))
+                self.assertEqual(window.last_build_dir, root)
+                self.assertEqual(window._resolve_config(), cfg)
+        finally:
+            window.close()
+            window.deleteLater()
