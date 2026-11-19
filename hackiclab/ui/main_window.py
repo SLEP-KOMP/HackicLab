@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -664,8 +665,12 @@ class MainWindow(QMainWindow):
         area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         area.viewport().setAutoFillBackground(False)
         page.setMaximumWidth(COLUMN_MAX_WIDTH)
+        # Высота страницы — по содержимому: иначе последний блок (например,
+        # «Анализ ваших файлов EFI») уезжает за пределы области прокрутки.
+        page.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         shell = QWidget()
         shell.setObjectName("pageShell")
+        shell.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         row = QHBoxLayout(shell)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
@@ -2114,8 +2119,8 @@ class MainWindow(QMainWindow):
         self.val_tabs.addTab(self.val_audit, tr.t("validate.audit_title"))
         dv.addWidget(self.val_tabs)
         v.addWidget(details)
-        v.addStretch(1)
         v.addWidget(self._build_analyze())
+        v.addStretch(1)
         return page
 
     def _refresh_val_tabs(self):
