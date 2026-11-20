@@ -33,6 +33,25 @@
     "**/build": true,
     "**/dist": true,
     "**/__pycache__": true,
-    "**/.git": true
-  }
+    "**/.git": true,
+    "**/out": true,
+    "**/.ruff_cache": true
+  },
+  "files.watcherExclude": {
+    "**/out/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/.ruff_cache/**": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.ruff_cache": true
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "editor.rulers": [100],
+  "python.terminal.activateEnvironment": false,
+  "git.autofetch": true,
+  "git.confirmSync": false
 }
+

@@ -327,3 +327,47 @@ class AmdAndLegacyWifiTests(unittest.TestCase):
         new = [e.name for e in select_kexts(profile, target_macos="Sonoma")]
         self.assertIn("AppleIGB", new)
         self.assertNotIn("AppleIntelI210Ethernet", new)
+
+class OclpPayloadEntriesTests(unittest.TestCase):
+    """Кексты без GitHub-релизов берутся прямой ссылкой из payloads OCLP.
+
+    У этих проектов нет страницы releases/latest: тег не резолвится, и до
+    правки кекст молча выпадал из сборки (Warn «не скачались» появился позже).
+    """
+
+    NAMES = ("AMFIPass", "IOSkywalkFamily", "AppleMCEReporterDisabler",
+             "AppleIntelI210Ethernet")
+
+    def test_entries_have_direct_payload_url(self):
+        for name in self.NAMES:
+            entry = KEXT_DB[name]
+            with self.subTest(name=name):
+                self.assertTrue(
+                    entry.url.startswith(
+                        "https://github.com/dortania/OpenCore-Legacy-Patcher/raw/"),
+                    f"{name}: {entry.url}")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+class AmdApuKextTests(unittest.TestCase):
+    """NootedRed нужен AMD APU без дискретки, но не при наличии dGPU."""
+
+    def test_apu_laptop_gets_nootedred(self):
+        profile = HardwareProfile(platform="laptop")
+        profile.cpu = CPUInfo(name="AMD Ryzen 5 4500U", vendor="amd",
+                              generation=2, codename="Renoir")
+        profile.igpu = GPUInfo(name="Radeon Vega 6", vendor="amd",
+                               device_id="1636", is_integrated=True)
+        names = [e.name for e in select_kexts(profile, target_macos="Ventura")]
+        self.assertIn("NootedRed", names)
+        self.assertIn("ECEnabler", names)
+
+    def test_desktop_with_dgpu_skips_nootedred(self):
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="AMD Ryzen 7 2700", vendor="amd", generation=2)
+        profile.igpu = GPUInfo(name="Radeon Vega", vendor="amd", is_integrated=True)
+        profile.dgpu = GPUInfo(name="Radeon RX 580", vendor="amd", device_id="67DF")
+        names = [e.name for e in select_kexts(profile, target_macos="Sonoma")]
+        self.assertNotIn("NootedRed", names)

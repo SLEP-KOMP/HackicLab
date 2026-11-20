@@ -31,7 +31,7 @@ class Analyzer:
         self._check_required_kexts_present(folder)
         self._check_open_core_present(folder)
         self._check_amd_patches(folder)
-        self._check_hardware_warnings()
+        self._check_hardware_warnings(self._discover_kexts(folder))
         return self.issues
 
     @staticmethod
@@ -92,9 +92,14 @@ class Analyzer:
                     e.note, kext=e.name,
                     suggestion=f"Добавьте {e.name}.kext ({e.repo})"))
 
-        # Лишние/неожиданные кексты (информация)
+        # Лишние/неожиданные кексты (информация). Внутренние кексты пакетов
+        # (SMCSuperIO, UTBMap и прочие из чужих архивов) не «лишние»: они
+        # приезжают вместе с родительским кекстом.
         known = {e.bundle_name or e.name for e in required}
         for nm in present:
+            entry = KEXT_DB.get(nm)
+            if entry is not None and entry.internal:
+                continue
             known_bundle = {e.bundle_name or e.name for e in KEXT_DB.values()}
             if nm in known_bundle and nm not in known:
                 self.issues.append(AnalysisIssue(
@@ -151,10 +156,10 @@ class Analyzer:
             "Рабочий путь — прошивка VBIOS от RX 570.",
             suggestion="Прошейте VBIOS от RX 570 или возьмите карту из GPU Buyers Guide."))
 
-    def _check_network_notes(self):
+    def _check_network_notes(self, present: set[str] | None = None):
         net = self.profile.net
         eth = (net.eth_name or "").lower()
-        if "i211" in eth:
+        if "i211" in eth and not (present and "AppleIGB" in present):
             self.issues.append(AnalysisIssue(
                 Severity.INFO, "eth_i211_appleigb",
                 "Intel I211 требует AppleIGB",
@@ -176,11 +181,11 @@ class Analyzer:
                 "Драйвера под macOS нет ни для Wi-Fi, ни для Bluetooth этого модуля.",
                 suggestion="Используйте USB-Bluetooth-донгл с поддержкой macOS."))
 
-    def _check_hardware_warnings(self):
+    def _check_hardware_warnings(self, present: set[str] | None = None):
         """Добавляет architectural предупреждения, не зависящие от папки."""
         p = self.profile
         self._check_gpu()
-        self._check_network_notes()
+        self._check_network_notes(present)
         if p.cpu.vendor == "amd" and p.platform == "laptop":
             self.issues.append(AnalysisIssue(
                 Severity.ERROR, "amd_laptop",
@@ -237,3 +242,4 @@ def analyze_profile(profile: HardwareProfile) -> list[AnalysisIssue]:
 def audit_efi(folder: Path) -> list[AnalysisIssue]:
     """Аудит EFI/OC без привязки к железу."""
     return audit_efi_root(folder)
+

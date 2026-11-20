@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import ssl
 import urllib.request
@@ -87,6 +88,23 @@ def _tag_from_redirect(url: str, timeout: int = 30) -> str:
     return ""
 
 
+def _tag_from_listing(owner_repo: str, timeout: int = 30) -> str:
+    """Берёт первый тег со страницы релизов.
+
+    Нужен для проектов, у которых нет отметки «latest» (ChefKissInc и др.):
+    редирект /releases/latest отдаёт 404, хотя релизы есть. Без фолбэка
+    такой кекст молча не попадал в EFI.
+    """
+    try:
+        html = download_bytes(f"{GitHubFetcher.BASE}/{owner_repo}/releases",
+                              headers={"User-Agent": USER_AGENT}, timeout=timeout)
+    except Exception:
+        return ""
+    text = html.decode("utf-8", "replace")
+    match = re.search(r'/releases/tag/([^"\'?#<>]+)', text)
+    return match.group(1) if match else ""
+
+
 class GitHubFetcher:
     """Доступ к релизам GitHub без токена и без API-лимита.
 
@@ -98,7 +116,10 @@ class GitHubFetcher:
 
     @staticmethod
     def latest_tag(owner_repo: str) -> str:
-        return _tag_from_redirect(f"{GitHubFetcher.BASE}/{owner_repo}/releases/latest")
+        tag = _tag_from_redirect(f"{GitHubFetcher.BASE}/{owner_repo}/releases/latest")
+        if tag and tag.lower() != "releases":
+            return tag
+        return _tag_from_listing(owner_repo)
 
     @staticmethod
     def release_download_url(owner_repo: str, tag: str) -> str:

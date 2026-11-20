@@ -4602,6 +4602,10 @@ class MainWindow(QMainWindow):
             kexts_done = res.stats.get("kexts_downloaded", []) or []
             log += "\n" + tr.t("build.log_kexts").format(
                 count=len(kexts_done), list=", ".join(kexts_done))
+            kexts_missing = res.stats.get("kexts_missing", []) or []
+            if kexts_missing:
+                log += "\n" + tr.t("build.log_kexts_missing").format(
+                    list=", ".join(kexts_missing))
             log += f"\nSSDT: {', '.join(res.stats.get('ssdt_placed', []) or [])}"
             log += f"\nSMBIOS: {res.stats.get('smbios', '')}"
             # ocvalidate
@@ -4629,7 +4633,11 @@ class MainWindow(QMainWindow):
         self._sync_recovery_version(
             getattr(getattr(self, "_last_build_options", None), "target_macos", "") or "")
         # статус
-        if res.stats and res.stats.get("ocvalidate_ok") is False:
+        missing = (res.stats or {}).get("kexts_missing", []) or []
+        if missing:
+            self.statusBar().showMessage(
+                tr.t("build.done_missing").format(list=", ".join(missing)), 8000)
+        elif res.stats and res.stats.get("ocvalidate_ok") is False:
             self.statusBar().showMessage(
                 tr.t("build.ocv_status_errors").format(
                     count=len(res.stats.get("ocvalidate_errors", []))), 6000)

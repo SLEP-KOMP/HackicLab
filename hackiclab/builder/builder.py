@@ -194,17 +194,31 @@ class EFIBuilder:
         kexts_dir = layout.oc / "Kexts"
         kexts_dir.mkdir(parents=True, exist_ok=True)
         downloaded = []
+        missing = []
         total_kexts = max(1, len(selected))
         for index, e in enumerate(selected, 1):
             if e.internal:
                 continue  # входят в состав родительского архива
             self._step(30 + int(34 * index / total_kexts), f"Скачиваю {e.name}…")
+            seen = len(dl.log)
             try:
-                dl.download_kext(e, kexts_dir, self.plan.options.target_macos)
-                downloaded.append(e.name)
+                path = dl.download_kext(e, kexts_dir, self.plan.options.target_macos)
             except Exception as ex:
+                path = None
                 self._log(f"  {e.name}: ошибка ({ex})")
+            for line in dl.log[seen:]:
+                self._log(f"  {line}")
+            if path:
+                downloaded.append(e.name)
+            else:
+                missing.append(e.name)
         res.stats["kexts_downloaded"] = downloaded
+        if missing:
+            # Молча потерянный кекст — это неполный EFI, о котором пользователь
+            # узнает только при загрузке. Говорим сразу и в журнале, и в итоге.
+            res.warnings.append("kexts_missing: " + ", ".join(missing))
+            self._log("Kexts: не скачались — " + ", ".join(missing))
+        res.stats["kexts_missing"] = missing
 
         # оставляем только выбранные кексты и нужные им внутренние модули
         from .downloader import canonical_kext_name
@@ -383,6 +397,7 @@ class EFIBuilder:
         res.stats = {
             "kexts": self.plan.kext_names,
             "kexts_downloaded": downloaded,
+            "kexts_missing": res.stats.get("kexts_missing", []),
             "kexts_placed": kexts_placed,
             "ssdts": self.plan.ssdt_names or [s.name for s in required_ssdts(self.plan.profile)],
             "ssdt_placed": res.stats.get("ssdt_placed", []),

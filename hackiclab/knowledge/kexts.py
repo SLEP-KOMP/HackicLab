@@ -48,7 +48,12 @@ _reg({
     "NVMeFix": KextEntry("NVMeFix", "acidanthera/NVMeFix", "NVMeFix-", "Power management NVMe + APST"),
     "DebugEnhancer": KextEntry("DebugEnhancer", "acidanthera/DebugEnhancer", "DebugEnhancer-", "Отладочное логирование"),
     "CryptexFixup": KextEntry("CryptexFixup", "acidanthera/CryptexFixup", "CryptexFixup-", "Криптекс Ventura+ на старом/AMD железе"),
-    "AppleMCEReporterDisabler": KextEntry("AppleMCEReporterDisabler", "acidanthera/AppleMCEReporterDisabler", "AppleMCEReporterDisabler", "Отключает AppleMCEReporter — обязателен на AMD"),
+    "AppleMCEReporterDisabler": KextEntry(
+        "AppleMCEReporterDisabler", "dortania/OpenCore-Legacy-Patcher",
+        "AppleMCEReporterDisabler", "Отключает AppleMCEReporter — обязателен на AMD",
+        url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/"
+            "Kexts/Misc/AppleMCEReporterDisabler-v1.0.0.zip",
+    ),
 
     "SMCBatteryManager": KextEntry("SMCBatteryManager", "acidanthera/VirtualSMC", "VirtualSMC-", "Батарея", internal=True),
     "SMCProcessor": KextEntry("SMCProcessor", "acidanthera/VirtualSMC", "VirtualSMC-", "Температуры CPU", internal=True),
@@ -70,7 +75,13 @@ _reg({
     "IntelMausiEthernet": KextEntry("IntelMausiEthernet", "acidanthera/IntelMausi", "IntelMausi-", "Intel I219/I218/I217", bundle_name="IntelMausi"),
     "AppleIGC": KextEntry("AppleIGC", "SongXiaoXi/AppleIGC", "AppleIGC", "Intel I225-V / I226-V 2.5GbE"),
     "AppleIntelE1000e": KextEntry("AppleIntelE1000e", "chris1111/AppleIntelE1000e", "AppleIntelE1000e-", "Intel 82578/82577/82574/82567"),
-    "AppleIntelI210Ethernet": KextEntry("AppleIntelI210Ethernet", "donatengit/AppleIntelI210Ethernet", "AppleIntelI210-", "Intel I211/I210 (легаси, до Monterey)"),
+    "AppleIntelI210Ethernet": KextEntry(
+        "AppleIntelI210Ethernet", "dortania/OpenCore-Legacy-Patcher",
+        "AppleIntelI210-", "Intel I211/I210 (легаси, до Monterey)",
+        url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/"
+            "Kexts/Ethernet/CatalinaIntelI210Ethernet-v1.0.0.zip",
+        bundle_name="CatalinaIntelI210Ethernet",
+    ),
     "AppleIGB": KextEntry("AppleIGB", "ayushere/AppleIGB", "AppleIGB-", "Intel I210/I211/I350 на Monterey+", bundle_name="AppleIGB", os_min="monterey"),
     "RealtekRTL8111": KextEntry("RealtekRTL8111", "Mieze/RTL8111_driver_for_OS_X", "RealtekRTL8111-", "Realtek RTL8111/RTL8168"),
     "RealtekRTL8125": KextEntry("LucyRTL8125Ethernet", "Mieze/LucyRTL8125Ethernet", "LucyRTL8125Ethernet-", "Realtek RTL8125 2.5GbE"),
@@ -93,8 +104,18 @@ _reg({
     "AirportBrcmFixup": KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup", "AirportBrcmFixup-", "Broadcom WiFi патчи"),
     # С macOS 13.3 Apple вырезала драйверы Broadcom: нативный модуль работает
     # только с этим набором — блокировкой штатного IOSkywalkFamily и AMFIPass.
-    "AMFIPass": KextEntry("AMFIPass", "acidanthera/AMFIPass", "AMFIPass-", "Замена amfi=0x80 для патчей OCLP", os_min="big sur"),
-    "IOSkywalkFamily": KextEntry("IOSkywalkFamily", "acidanthera/IOSkywalkFamily", "IOSkywalkFamily-", "Legacy Wi-Fi: каркас IOSkywalk для Broadcom", os_min="ventura"),
+    "AMFIPass": KextEntry(
+        "AMFIPass", "dortania/OpenCore-Legacy-Patcher", "AMFIPass-",
+        "Замена amfi=0x80 для патчей OCLP", os_min="big sur",
+        url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/"
+            "Kexts/Acidanthera/AMFIPass-v1.4.1-RELEASE.zip",
+    ),
+    "IOSkywalkFamily": KextEntry(
+        "IOSkywalkFamily", "dortania/OpenCore-Legacy-Patcher", "IOSkywalkFamily-",
+        "Legacy Wi-Fi: каркас IOSkywalk для Broadcom", os_min="ventura",
+        url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/"
+            "Kexts/Wifi/IOSkywalkFamily-v1.2.0.zip",
+    ),
     "IO80211FamilyLegacy": KextEntry(
         "IO80211FamilyLegacy", "dortania/OpenCore-Legacy-Patcher", "IO80211FamilyLegacy",
         "Legacy Wi-Fi: AirPort для Broadcom на Ventura+", os_min="ventura",
@@ -110,6 +131,12 @@ _reg({
     "BrcmFirmwareData": KextEntry("BrcmFirmwareData", "acidanthera/BrcmPatchRAM", "BrcmPatchRAM-", "Broadcom BT firmware", internal=True),
 
     "NootRX": KextEntry("NootRX", "ChefKissInc/NootRX", "NootRX-", "RX 6600/6700/6800/6900 (Navi 2x) на Ventura+"),
+    "NootedRed": KextEntry(
+        "NootedRed", "ChefKissInc/NootedRed", "NootedRed",
+        "AMD APU iGPU (Raven/Vega на Ryzen) — вместо WhateverGreen", os_min="big sur"),
+    "RealtekCardReader": KextEntry(
+        "RealtekCardReader", "0xFireWolf/RealtekCardReader", "RealtekCardReader",
+        "Кардридер Realtek RTS5227/5229/5249 и др."),
     "RadeonSensor": KextEntry("RadeonSensor", "aluveitie/RadeonSensor", "RadeonSensor-", "Температура AMD GPU"),
     "SMCRadeonGPU": KextEntry("SMCRadeonGPU", "aluveitie/RadeonSensor", "RadeonSensor-", "Темп GPU в HWMonitor", internal=True),
 
@@ -330,6 +357,10 @@ def _gpu_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
         chosen.add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
         if profile.cpu.vendor == "amd" and _is_navi2x(gpu):
             chosen.add("NootRX")
+    # AMD APU (Raven/Vega в Ryzen) без дискретки: iGPU тянет только NootedRed
+    igpu = profile.igpu
+    if igpu and igpu.vendor == "amd" and not profile.dgpu:
+        chosen.add("NootedRed")
 
 
 def _audio_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
