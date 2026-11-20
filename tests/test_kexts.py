@@ -348,9 +348,6 @@ class OclpPayloadEntriesTests(unittest.TestCase):
                     f"{name}: {entry.url}")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 class AmdApuKextTests(unittest.TestCase):
     """NootedRed нужен AMD APU без дискретки, но не при наличии dGPU."""
 
@@ -371,3 +368,42 @@ class AmdApuKextTests(unittest.TestCase):
         profile.dgpu = GPUInfo(name="Radeon RX 580", vendor="amd", device_id="67DF")
         names = [e.name for e in select_kexts(profile, target_macos="Sonoma")]
         self.assertNotIn("NootedRed", names)
+
+
+class AmdNaviKextTests(unittest.TestCase):
+    """Navi 2x: NootRX вместо WhateverGreen — вместе они конфликтуют."""
+
+    def _profile(self, name: str, device_id: str) -> HardwareProfile:
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="AMD Ryzen 5 5600X", vendor="amd", generation=10)
+        profile.dgpu = GPUInfo(name=name, vendor="amd", device_id=device_id)
+        return profile
+
+    def test_navi21_takes_nootrx_instead_of_whatevergreen(self):
+        names = [e.name for e in select_kexts(
+            self._profile("AMD Radeon RX 6800 XT", "73BF"), target_macos="Sonoma")]
+        self.assertIn("NootRX", names)
+        self.assertNotIn("WhateverGreen", names)
+
+    def test_navi23_takes_nootrx_on_tahoe(self):
+        names = [e.name for e in select_kexts(
+            self._profile("AMD Radeon RX 6600", "73FF"), target_macos="Tahoe")]
+        self.assertIn("NootRX", names)
+        self.assertNotIn("WhateverGreen", names)
+
+    def test_polaris_still_takes_whatevergreen(self):
+        names = [e.name for e in select_kexts(
+            self._profile("AMD Radeon RX 580", "67DF"), target_macos="Sonoma")]
+        self.assertIn("WhateverGreen", names)
+        self.assertNotIn("NootRX", names)
+
+    def test_navi_2x_never_pairs_both_plugins(self):
+        for target in ("Ventura", "Sonoma", "Sequoia", "Tahoe"):
+            with self.subTest(target=target):
+                names = [e.name for e in select_kexts(
+                    self._profile("AMD Radeon RX 6750 XT", "73DF"), target_macos=target)]
+                self.assertFalse({"NootRX", "WhateverGreen"} <= set(names), target)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -130,7 +130,9 @@ _reg({
     "BrcmPatchRAM3": KextEntry("BrcmPatchRAM3", "acidanthera/BrcmPatchRAM", "BrcmPatchRAM-", "Broadcom BT (12+)", internal=True),
     "BrcmFirmwareData": KextEntry("BrcmFirmwareData", "acidanthera/BrcmPatchRAM", "BrcmPatchRAM-", "Broadcom BT firmware", internal=True),
 
-    "NootRX": KextEntry("NootRX", "ChefKissInc/NootRX", "NootRX-", "RX 6600/6700/6800/6900 (Navi 2x) на Ventura+"),
+    "NootRX": KextEntry("NootRX", "ChefKissInc/NootRX", "NootRX-",
+                        "RX 6600–6950 (Navi 2x) вместо WhateverGreen; "
+                        "вместе с WhateverGreen не ставится"),
     "NootedRed": KextEntry(
         "NootedRed", "ChefKissInc/NootedRed", "NootedRed",
         "AMD APU iGPU (Raven/Vega на Ryzen) — вместо WhateverGreen", os_min="big sur"),
@@ -354,9 +356,12 @@ def _gpu_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
     if gpu.vendor == "intel" or (profile.igpu and profile.igpu.vendor == "intel"):
         chosen.add("WhateverGreen")
     if gpu.vendor == "amd":
-        chosen.add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
-        if profile.cpu.vendor == "amd" and _is_navi2x(gpu):
-            chosen.add("NootRX")
+        # NootRX сам инициализирует Navi 2x и конфликтует с WhateverGreen:
+        # в документации проекта прямо сказано не держать их вместе.
+        if _is_navi2x(gpu):
+            chosen.add("NootRX", "RadeonSensor", "SMCRadeonGPU")
+        else:
+            chosen.add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
     # AMD APU (Raven/Vega в Ryzen) без дискретки: iGPU тянет только NootedRed
     igpu = profile.igpu
     if igpu and igpu.vendor == "amd" and not profile.dgpu:
