@@ -60,8 +60,12 @@ class BuildOptions:
     disable_dgpu: bool = False
     # Мультизагрузка: "" / windows / linux / both — для linux ставим OpenLinuxBoot
     dual_boot: str = ""
+    # Графическое меню OpenCore (OpenCanopy + Resources) вместо текстового
+    gui_picker: bool = False
     # Патчи, которые клиент хочет искусственно пропустить (набор имён kext)
     skip_kexts: set = field(default_factory=set)
+    # ACPI-патчи, посчитанные по DSDT (переименования под SSDT-HPET)
+    extra_acpi_patches: list = field(default_factory=list)
 
 
 def _int(name: str) -> bytes:
@@ -138,6 +142,8 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             "TableLength": 0,
             "TableSignature": b"DSDT",
         })
+    # Патчи по DSDT (переименование _CRS под SSDT-HPET) идут следом
+    cfg["ACPI"]["Patch"].extend(getattr(options, "extra_acpi_patches", []) or [])
 
     # --- DeviceProperties ---
     dp = cfg["DeviceProperties"]
@@ -207,6 +213,12 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
 
     # --- Misc → Boot ---
     cfg["Misc"]["Boot"] = cfg["Misc"]["Boot"]
+    if getattr(options, "gui_picker", False):
+        # Графическое меню: OpenCanopy читает иконки из EFI/OC/Resources
+        boot = cfg["Misc"]["Boot"]
+        boot["PickerMode"] = "External"
+        boot["PickerVariant"] = "Acidanthera\\GoldenGate"
+        boot["PickerAttributes"] = 17
 
     # --- macOS-версия влияет на SecureBootModel и boot-args ---
     _apply_macos_model(cfg, options.target_macos, profile)
@@ -548,3 +560,4 @@ def _base_config() -> dict:
             "Unload": [],
         },
     }
+

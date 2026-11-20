@@ -18,8 +18,23 @@ from .config_gen import BuildOptions, generate_config_plist
 from .efi_layout import EFIBuildResult, EFILayout
 from .fetcher import GitHubFetcher, download_asset
 from .smbios_gen import SMBIOSData, generate_smbios
-from .ssdt_factory import SSDTFactory, find_iasl, irq_conflict_devices
+from .ssdt_factory import SSDTFactory, compile_dsl, find_iasl, irq_conflict_devices
 
+
+def want_drivers(options) -> list:
+    """UEFI-драйверы, которые кладём в EFI/OC/Drivers.
+
+    ResetNvram/ToggleSip — штатные точки меню OpenCore: сброс NVRAM и
+    переключение SIP без правки config.plist вручную. OpenCanopy (графическое
+    меню) подключается отдельно, потому что требует EFI/OC/Resources.
+    """
+    names = ["OpenRuntime.efi", "OpenHfsPlus.efi",
+             "ResetNvramEntry.efi", "ToggleSipEntry.efi"]
+    if getattr(options, "dual_boot", "") in ("linux", "both"):
+        names.append("OpenLinuxBoot.efi")
+    if getattr(options, "gui_picker", False):
+        names.append("OpenCanopy.efi")
+    return names
 
 @dataclass
 class BuildPlan:
@@ -148,9 +163,8 @@ class EFIBuilder:
                 # для Linux в мультизагрузке добавляем OpenLinuxBoot
                 placed_drivers = []
                 drivers_dir = (x64_efi / "OC" / "Drivers") if x64_efi else (extract / "Drivers")
-                wanted = ["OpenRuntime.efi", "OpenHfsPlus.efi"]
-                if getattr(self.plan.options, "dual_boot", "") in ("linux", "both"):
-                    wanted.append("OpenLinuxBoot.efi")
+                gui_picker = bool(getattr(self.plan.options, "gui_picker", False))
+                wanted = want_drivers(self.plan.options)
                 for drv in wanted:
                     src = drivers_dir / drv
                     if not src.exists():
@@ -167,6 +181,18 @@ class EFIBuilder:
                         placed_drivers.append(drv)
                         self._log(f"  {drv} → Drivers")
                 res.stats["drivers_placed"] = placed_drivers
+                if gui_picker:
+                    # OpenCanopy без Resources показывает пустое меню: иконки,
+                    # шрифты и тема лежат в архиве OpenCore и копируются как есть.
+                    res_src = (x64_efi / "OC" / "Resources") if x64_efi else None
+                    if res_src and res_src.exists():
+                        dst_res = layout.oc / "Resources"
+                        shutil.rmtree(str(dst_res), ignore_errors=True)
+                        shutil.copytree(str(res_src), str(dst_res))
+                        self._log("  Resources → EFI/OC/Resources (OpenCanopy)")
+                    else:
+                        layout.warnings.append(
+                            "OpenCanopy: Resources не найдены в архиве OpenCore")
                 if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
                            for d in placed_drivers):
                     layout.warnings.append(
@@ -274,12 +300,28 @@ class EFIBuilder:
             conflicts = irq_conflict_devices(dsdt_text)
             if conflicts:
                 self._log("SSDT-HPET: занятые IRQ у " + ", ".join(conflicts)
-                          + " — нужен готовый .aml из SSDTTime (универсального нет)")
+                          + " — без их снятия macOS не стартует")
         try:
             ssdt_out = target / ".ssdt"
             ssdt_out.mkdir(parents=True, exist_ok=True)
             factory = SSDTFactory(self.plan.profile, dsdt_text=dsdt_text)
             ssdt_results = factory.generate_all(ssdt_out)
+            # SSDT-HPET строится по DSDT: снимаем IRQNoFlags у HPET/RTC/TIMR
+            if dsdt_text and irq_conflict_devices(dsdt_text):
+                from .ssdt_factory import build_hpet_fix
+                dsl, irq_patches = build_hpet_fix(dsdt_text)
+                aml = compile_dsl(dsl, ssdt_out, "SSDT-HPET") if dsl else None
+                if aml:
+                    ssdt_results.append({"name": "SSDT-HPET", "path": str(aml),
+                                         "status": "compiled"})
+                    if self.plan.options is not None:
+                        self.plan.options.extra_acpi_patches = list(irq_patches)
+                    self._log("SSDT-HPET: собран по DSDT, IRQ сняты у "
+                              + ", ".join(p["Comment"].split("(")[-1].rstrip(")")
+                                          for p in irq_patches))
+                else:
+                    self._log("SSDT-HPET: собрать не удалось — нужен готовый .aml "
+                              "из SSDTTime")
             # попытка подтянуть iasl и перекомпилировать, если не собралось
             if not find_iasl(ensure=True):
                 self._log("SSDT: iasl не найден/не скачан — .dsl остаются шаблонами")
@@ -422,4 +464,7 @@ class EFIBuilder:
             pass
         self._step(100, "Сборка завершена")
         return res
+
+
+
 

@@ -303,6 +303,118 @@ def irq_conflict_devices(dsdt_text: str) -> list[str]:
     return found
 
 
+def _device_block(dsdt_text: str, name: str) -> tuple[str, str]:
+    """Полный ACPI-путь устройства и текст его тела (пусто, если не нашли)."""
+    text = dsdt_text or ""
+    match = re.search(rf"Device\s*\(\s*{re.escape(name)}\s*\)", text, re.IGNORECASE)
+    if not match:
+        return "", ""
+    start = text.find("{", match.end())
+    if start < 0:
+        return "", ""
+    depth = 0
+    for pos in range(start, len(text)):
+        if text[pos] == "{":
+            depth += 1
+        elif text[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                parts = [part.strip().lstrip("\\")
+                         for scope in _enclosing_scopes(text, match.start())
+                         for part in scope.split(".") if part.strip("\\")]
+                parts.append(name)
+                return "\\" + ".".join(parts), text[start + 1:pos]
+    return "", ""
+
+
+def _resources_without_irq(body: str) -> Optional[str]:
+    """Тело ResourceTemplate без IRQNoFlags — ровно то, что нужно SSDT-HPET.
+
+    None — ресурсов в устройстве нет совсем; "" — ресурсы были только из IRQ,
+    такой _CRS тоже допустим (устройство остаётся без ресурсов).
+    """
+    match = re.search(r"ResourceTemplate\s*\(\s*\)", body or "", re.IGNORECASE)
+    if not match:
+        return None
+    start = body.find("{", match.end())
+    if start < 0:
+        return None
+    depth = 0
+    for pos in range(start, len(body)):
+        if body[pos] == "{":
+            depth += 1
+        elif body[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                inner = body[start + 1:pos]
+                inner = re.sub(r"IRQNoFlags\s*\(\s*\)\s*\{[^}]*\}", "", inner,
+                               flags=re.IGNORECASE)
+                return inner.strip()
+    return None
+
+
+def build_hpet_fix(dsdt_text: str) -> tuple[str, list]:
+    """DSL для SSDT-HPET и ACPI-патчи переименования _CRS (пусто без конфликтов).
+
+    Как в SSDTTime: у HPET/RTC/TIMR в DSDT убираются занятые IRQ. Оригинальный
+    _CRS переименовывается в XCRS патчем ACPI, а SSDT даёт новый _CRS с теми же
+    адресами, но без IRQNoFlags.
+    """
+    scopes: list[tuple[str, str]] = []
+    patches: list = []
+    for name in irq_conflict_devices(dsdt_text):
+        path, body = _device_block(dsdt_text, name)
+        if not path:
+            continue
+        resources = _resources_without_irq(body)
+        if resources is None:
+            continue
+        scopes.append((path, resources))
+        patches.append({
+            "Base": path,
+            "BaseSkip": 0,
+            "Comment": f"Rename _CRS to XCRS ({name})",
+            "Count": 0,
+            "Enabled": True,
+            "Find": b"_CRS",
+            "Limit": 0,
+            "Mask": b"",
+            "OemTableId": b"",
+            "Replace": b"XCRS",
+            "ReplaceMask": b"",
+            "Skip": 0,
+            "TableLength": 0,
+            "TableSignature": b"DSDT",
+        })
+    if not scopes:
+        return "", []
+    lines = ["", 'DefinitionBlock ("", "SSDT", 2, "HACK", "SsdtHpet", 0x00000000)', "{"]
+    for path, _ in scopes:
+        lines.append(f"    External ({path}, DeviceObj)")
+    for path, resources in scopes:
+        lines.extend([
+            "",
+            f"    Scope ({path})",
+            "    {",
+            "        Method (_CRS, 0, NotSerialized)",
+            "        {",
+            "            Name (RBUF, ResourceTemplate ()",
+            "            {",
+        ])
+        for line in resources.splitlines():
+            stripped = line.strip()
+            if stripped:
+                lines.append("                " + stripped)
+        lines.extend([
+            "            })",
+            "            Return (RBUF)",
+            "        }",
+            "    }",
+        ])
+    lines.extend(["}", ""])
+    return "\n".join(lines), patches
+
+
 def build_usb_reset(dsl_text: str) -> str:
     """DSL для SSDT-USB-Reset по декомпилированному DSDT (пусто без RHUB)."""
     path = rhub_path(dsl_text)
