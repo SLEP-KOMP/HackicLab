@@ -68,7 +68,45 @@ class AnalyzerKextTests(unittest.TestCase):
         self.assertFalse([i for i in extra if i.title.endswith("SMCSuperIO")])
 
 
+class AnalyzerKextConflictTests(unittest.TestCase):
+    """Кексты, которые нельзя держать в одном EFI (ловим и чужие сборки)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def _codes(self, kexts: list[str]) -> list[str]:
+        _make_efi(self.root, kexts)
+        return [i.code for i in Analyzer(_profile()).analyze_folder(self.root)]
+
+    def test_nootrx_and_whatevergreen_conflict(self):
+        codes = self._codes(["Lilu.kext", "NootRX.kext", "WhateverGreen.kext"])
+        self.assertIn("kext_conflict_nootrx_whatevergreen", codes)
+
+    def test_intel_wifi_drivers_conflict(self):
+        codes = self._codes(["Lilu.kext", "AirportItlwm.kext", "itlwm.kext"])
+        self.assertIn("kext_conflict_airportitlwm_itlwm", codes)
+
+    def test_smc_providers_conflict(self):
+        codes = self._codes(["Lilu.kext", "VirtualSMC.kext", "FakeSMC.kext"])
+        self.assertIn("kext_conflict_virtualsmc_fakesmc", codes)
+
+    def test_single_kext_is_not_conflict(self):
+        codes = self._codes(["Lilu.kext", "NootRX.kext", "AirportItlwm.kext",
+                             "VirtualSMC.kext"])
+        self.assertFalse([c for c in codes if c.startswith("kext_conflict_")])
+
+    def test_conflict_is_error_severity(self):
+        _make_efi(self.root, ["Lilu.kext", "NootRX.kext", "WhateverGreen.kext"])
+        issues = [i for i in Analyzer(_profile()).analyze_folder(self.root)
+                  if i.code == "kext_conflict_nootrx_whatevergreen"]
+        self.assertEqual(issues[0].severity, Severity.ERROR)
+        self.assertEqual(issues[0].kext, "WhateverGreen")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

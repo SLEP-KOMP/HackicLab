@@ -17,6 +17,19 @@ from ..scanner.models import HardwareProfile
 from .efi_health import audit as audit_efi_root
 from .models import AnalysisIssue, Severity
 
+#: Кексты, которые нельзя держать вместе: (первый, второй, пояснение).
+#: Проверяем по имени бандла и по stem — EFI от других сборщиков тоже ловим.
+_KEXT_CONFLICTS = (
+    ("NootRX", "WhateverGreen",
+     "NootRX сам заводит Navi 2x и конфликтует с WhateverGreen: в документации "
+     "проекта прямо запрещено держать их вместе."),
+    ("AirportItlwm", "itlwm",
+     "AirportItlwm и itlwm — две реализации одного драйвера Intel Wi-Fi, "
+     "одновременно они не работают."),
+    ("VirtualSMC", "FakeSMC",
+     "VirtualSMC и FakeSMC — два провайдера SMC, вместе ломают загрузку."),
+)
+
 
 class Analyzer:
     """Проверяет папку с файлами клиента против профиля железа."""
@@ -31,8 +44,28 @@ class Analyzer:
         self._check_required_kexts_present(folder)
         self._check_open_core_present(folder)
         self._check_amd_patches(folder)
-        self._check_hardware_warnings(self._discover_kexts(folder))
+        present = self._discover_kexts(folder)
+        self._check_kext_conflicts(present)
+        self._check_hardware_warnings(present)
         return self.issues
+
+    def _check_kext_conflicts(self, present: set[str]):
+        """Пары кекстов, которые не уживаются в одном EFI.
+
+        Ловит в том числе чужие сборки: имена берём из Kernel/Add и файлов
+        на диске, поэтому конфликт виден ещё до загрузки.
+        """
+        for first, second, note in _KEXT_CONFLICTS:
+            if first in present and second in present:
+                self.issues.append(AnalysisIssue(
+                    Severity.ERROR,
+                    f"kext_conflict_{first.lower()}_{second.lower()}",
+                    f"Конфликт кекстов: {first} и {second}",
+                    note,
+                    kext=second,
+                    suggestion=f"Уберите {second}.kext из EFI/OC/Kexts и запись "
+                               f"из Kernel/Add — иначе один из двух не загрузится."))
+
 
     @staticmethod
     def _oc_dir(folder: Path) -> Path:
