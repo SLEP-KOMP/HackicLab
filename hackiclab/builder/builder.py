@@ -18,7 +18,7 @@ from .config_gen import BuildOptions, generate_config_plist
 from .efi_layout import EFIBuildResult, EFILayout
 from .fetcher import GitHubFetcher, download_asset
 from .smbios_gen import SMBIOSData, generate_smbios
-from .ssdt_factory import SSDTFactory, find_iasl
+from .ssdt_factory import SSDTFactory, find_iasl, irq_conflict_devices
 
 
 @dataclass
@@ -270,6 +270,11 @@ class EFIBuilder:
                 self._log("DSDT: дамп недоступен — SSDT по DSDT пропущены")
         except Exception as exc:
             self._log(f"DSDT: ошибка ({exc})")
+        if dsdt_text:
+            conflicts = irq_conflict_devices(dsdt_text)
+            if conflicts:
+                self._log("SSDT-HPET: занятые IRQ у " + ", ".join(conflicts)
+                          + " — нужен готовый .aml из SSDTTime (универсального нет)")
         try:
             ssdt_out = target / ".ssdt"
             ssdt_out.mkdir(parents=True, exist_ok=True)
@@ -417,3 +422,4 @@ class EFIBuilder:
             pass
         self._step(100, "Сборка завершена")
         return res
+

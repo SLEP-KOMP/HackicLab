@@ -275,6 +275,34 @@ def rhub_path(dsl_text: str) -> str:
     return "\\" + ".".join(parts)
 
 
+_IRQ_DEVICE_RE = re.compile(r"Device\s*\(\s*([A-Za-z0-9_]+)\s*\)", re.IGNORECASE)
+_IRQ_NOFLAGS_RE = re.compile(r"IRQNoFlags\s*\(\s*\)", re.IGNORECASE)
+_IRQ_DEVICES = ("HPET", "RTC", "TIMR")
+
+
+def irq_conflict_devices(dsdt_text: str) -> list[str]:
+    """Устройства HPET/RTC/TIMR с IRQNoFlags — источник IRQ-конфликтов.
+
+    Пока у этих устройств заняты прерывания, macOS не стартует; убирают их
+    правкой DSDT через SSDTTime, универсального готового .aml нет. Функция
+    нужна, чтобы честно сказать пользователю, что SSDT-HPET обязателен,
+    вместо тихого пропуска таблицы.
+    """
+    text = dsdt_text or ""
+    found: list[str] = []
+    for match in _IRQ_DEVICE_RE.finditer(text):
+        name = match.group(1).upper()
+        if name not in _IRQ_DEVICES or name in found:
+            continue
+        tail = text[match.end():match.end() + 1200]
+        next_device = _IRQ_DEVICE_RE.search(tail)
+        if next_device:
+            tail = tail[:next_device.start()]
+        if _IRQ_NOFLAGS_RE.search(tail):
+            found.append(name)
+    return found
+
+
 def build_usb_reset(dsl_text: str) -> str:
     """DSL для SSDT-USB-Reset по декомпилированному DSDT (пусто без RHUB)."""
     path = rhub_path(dsl_text)
