@@ -27,7 +27,9 @@ SSDT_DB: list[SSDTSpec] = [
     SSDTSpec("SSDT-PLUG", "Power management (plugin-type)",
              "Включает CPU power management — нужен почти всем Intel."),
     SSDTSpec("SSDT-GPRW", "Sleep fix (GPRW)",
-             "Патч GPRW/PRW — сон и пробуждение ноутбуков.", template=False),
+             "Патч GPRW/PRW — сон и пробуждение ноутбуков.",
+             template=True, bundled=False,
+             conditions="Ноутбук: без него macOS просыпается сразу после сна."),
     SSDTSpec("SSDT-IMEI", "IMEI device",
              "Добавляет IMEI на платах без него (Sandy/Ivy Bridge).", template=False),
     SSDTSpec("SSDT-EC", "Fake EC (desktop)",
@@ -71,7 +73,8 @@ def required_ssdts(profile: HardwareProfile) -> list[SSDTSpec]:
 
     names = [] if amd else ["SSDT-PLUG"]
     if laptop:
-        names.extend(("SSDT-EC-USBX", "SSDT-PNLF", "SSDT-HPET", "SSDT-XOSI", "SSDT-GPI0"))
+        names.extend(("SSDT-EC-USBX", "SSDT-PNLF", "SSDT-GPRW", "SSDT-HPET",
+                      "SSDT-XOSI", "SSDT-GPI0"))
     else:
         names.extend(("SSDT-EC", "SSDT-USBX"))
         if not amd:

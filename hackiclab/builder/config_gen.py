@@ -119,6 +119,25 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         cfg["ACPI"]["Add"].append(
             {"Enabled": True, "Path": "SSDT-USBX.aml", "Comment": "USB power"})
     cfg["ACPI"]["Patch"] = []
+    if profile.platform == "laptop":
+        # SSDT-GPRW работает только вместе с переименованием _PRW в DSDT:
+        # без этого macOS читает исходный _PRW и просыпается сразу после сна.
+        cfg["ACPI"]["Patch"].append({
+            "Base": "",
+            "BaseSkip": 0,
+            "Comment": "Rename _PRW to XPRW (sleep fix)",
+            "Count": 0,
+            "Enabled": True,
+            "Find": b"_PRW",
+            "Limit": 0,
+            "Mask": b"",
+            "OemTableId": b"",
+            "Replace": b"XPRW",
+            "ReplaceMask": b"",
+            "Skip": 0,
+            "TableLength": 0,
+            "TableSignature": b"DSDT",
+        })
 
     # --- DeviceProperties ---
     dp = cfg["DeviceProperties"]

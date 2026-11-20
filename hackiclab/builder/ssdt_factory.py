@@ -201,6 +201,27 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtGpi0", 0x00001000)
 }}
 '''
 
+_TEMPLATES["SSDT-GPRW"] = '''
+DefinitionBlock ("", "SSDT", 2, "HACK", "SsdtGPRW", 0x00000000)
+{{
+    // Сон/пробуждение: macOS не просыпается по _PRW со значением 0x6D.
+    // Работает вместе с ACPI > Patch, который переименовывает _PRW в XPRW.
+    // Пакет собирается через Local0: iasl 2025 не принимает ссылки на Arg
+    // прямо в инициализаторе Package.
+    Method (GPRW, 2, NotSerialized)
+    {{
+        Local0 = Package (0x02) {{ 0x6D, Zero }}
+        Local0 [0] = Arg0
+        Local0 [1] = Arg1
+        If ((0x6D == Arg0))
+        {{
+            Local0 [1] = Zero
+        }}
+        Return (Local0)
+    }}
+}}
+'''
+
 _TEMPLATES["SSDT-HPET"] = ''
 _TEMPLATES["SSDT-XOSI"] = ''
 
