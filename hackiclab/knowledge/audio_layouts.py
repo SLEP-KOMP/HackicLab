@@ -112,9 +112,23 @@ def layouts_for(codec: str) -> tuple[int, ...]:
     return LAYOUTS.get((codec or "").strip().upper(), ())
 
 
-def recommended(codec: str) -> int:
+def merged_layouts(codec: str, pci_id: str = "") -> tuple[int, ...]:
+    """layout-id по имени кодека и по PCI-ID, объединённые и по возрастанию.
+
+    Имя кодека угадывается по таблице PCI-ID железа и иногда определяется
+    неточно; PCI-ID кодека (например «10EC-0892») уточняет набор layout,
+    которые для этого устройства реально заведены в AppleALC.
+    """
+    from .audio_layouts_pci import layouts_for_pci
+
+    ids = set(layouts_for(codec))
+    ids.update(layouts_for_pci(pci_id))
+    return tuple(sorted(ids))
+
+
+def recommended(codec: str, pci_id: str = "") -> int:
     """Рабочий layout по умолчанию: 1, если он есть, иначе наименьший."""
-    ids = layouts_for(codec)
+    ids = merged_layouts(codec, pci_id)
     if not ids:
         return 0
     return 1 if 1 in ids else ids[0]
