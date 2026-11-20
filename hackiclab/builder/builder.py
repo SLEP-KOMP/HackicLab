@@ -182,17 +182,24 @@ class EFIBuilder:
                         self._log(f"  {drv} → Drivers")
                 res.stats["drivers_placed"] = placed_drivers
                 if gui_picker:
-                    # OpenCanopy без Resources показывает пустое меню: иконки,
-                    # шрифты и тема лежат в архиве OpenCore и копируются как есть.
+                    # OpenCanopy без Resources показывает пустое меню, а архив
+                    # OpenCore приходит с пустыми папками — иконки и шрифты
+                    # докачиваются из официального OcBinaryData.
+                    from .canopy import ensure_resources, has_real_files
+                    dst_res = layout.oc / "Resources"
                     res_src = (x64_efi / "OC" / "Resources") if x64_efi else None
-                    if res_src and res_src.exists():
-                        dst_res = layout.oc / "Resources"
+                    if has_real_files(res_src):
                         shutil.rmtree(str(dst_res), ignore_errors=True)
                         shutil.copytree(str(res_src), str(dst_res))
-                        self._log("  Resources → EFI/OC/Resources (OpenCanopy)")
+                        self._log("  Resources → EFI/OC/Resources (из архива OpenCore)")
                     else:
-                        layout.warnings.append(
-                            "OpenCanopy: Resources не найдены в архиве OpenCore")
+                        written = ensure_resources(dst_res, log=self._log)
+                        if written:
+                            self._log("  Resources → EFI/OC/Resources (OcBinaryData)")
+                        else:
+                            layout.warnings.append(
+                                "OpenCanopy: иконки не скачаны — меню будет без "
+                                "графики, положите Resources в EFI/OC вручную")
                 if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
                            for d in placed_drivers):
                     layout.warnings.append(

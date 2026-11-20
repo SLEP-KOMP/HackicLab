@@ -377,7 +377,7 @@ T = {
         # build
         "build.usb_toolbox_desc": "USBToolBox — инструмент маппинга (привязки) USB-портов. Включается, если после установки вы планируете привязывать USB-порты под ваше железо. Для большинства современных ПК рекомендуется.",
         "build.sip_desc": "SIP (System Integrity Protection) — защита целостности macOS. Отключение позволяет модифицировать системный раздел (нужно для OCLP и некоторых патчей). Не рекомендуется для повседневного использования.",
-        "build.gui_picker_desc": "OpenCanopy — графическое меню загрузчика OpenCore с иконками вместо текстового списка. Требует драйвер OpenCanopy и папку Resources (добавляются автоматически). Полезно для мультизагрузки: видно, что запускаете.",
+        "build.gui_picker_desc": "OpenCanopy — графическое меню загрузчика OpenCore с иконками вместо текстового списка. Драйвер ставится сам, а иконки и шрифты (Resources) скачиваются из официального репозитория OcBinaryData — в архиве OpenCore их нет. Полезно для мультизагрузки: видно, что запускаете.",
         "build.wifi_mode_desc": "Режим драйвера Intel WiFi:\n• itlwm + HeliPort — стабильный интернет, нет нативной иконки Wi-Fi в меню-баре.\n• AirportItlwm — выглядит как нативный Wi-Fi Apple, но привязан к конкретной версии macOS.",
         "build.dest_desc": "Актуально: выберите, куда сохранить собранную папку EFI. Например, пустую папку на флешке или на диске. Лучше указать пустую папку.",
         "build.note_online": "При наличии интернета HackicLab автоматически скачает кексты и OpenCore под ваше железо.",
@@ -1011,7 +1011,7 @@ T = {
         # build
         "build.usb_toolbox_desc": "USBToolBox is a USB port mapping tool. Enable it if you plan to map USB ports to your hardware after install. Recommended for most modern PCs.",
         "build.sip_desc": "SIP (System Integrity Protection) is macOS integrity protection. Disabling allows modifying the system volume (needed for OCLP and some patches). Not recommended for daily use.",
-        "build.gui_picker_desc": "OpenCanopy is OpenCore's graphical boot menu with icons instead of a text list. Requires the OpenCanopy driver and the Resources folder (both added automatically). Handy for dual boot: you can see what you are starting.",
+        "build.gui_picker_desc": "OpenCanopy is OpenCore's graphical boot menu with icons instead of a text list. The driver is added automatically, and icons plus fonts (Resources) are downloaded from the official OcBinaryData repository — the OpenCore archive does not contain them. Handy for dual boot: you can see what you are starting.",
         "build.wifi_mode_desc": "Intel WiFi driver mode:\n• itlwm + HeliPort — stable internet, no native Wi-Fi menu-bar icon.\n• AirportItlwm — looks like native Apple Wi-Fi, but tied to a specific macOS version.",
         "build.dest_desc": "Choose where to save the built EFI folder, e.g. an empty folder on a USB stick or disk. Prefer an empty folder.",
         "build.note_online": "With internet, HackicLab will automatically download kexts and OpenCore for your hardware.",
