@@ -49,5 +49,33 @@ class PickerConfigTests(unittest.TestCase):
         self.assertIn("Acidanthera", boot["PickerVariant"])
 
 
+class DriverEntriesTests(unittest.TestCase):
+    """UEFI/Drivers: OpenCanopy попадает в config только с внешним меню."""
+
+    def _entries(self, gui: bool) -> list:
+        import tempfile
+        from pathlib import Path
+
+        from hackiclab.builder.efi_layout import EFILayout
+
+        root = Path(tempfile.mkdtemp())
+        (root / "EFI" / "OC").mkdir(parents=True, exist_ok=True)
+        layout = EFILayout(root)
+        data = generate_config_plist(_desktop(), BuildOptions(gui_picker=gui))
+        names = want_drivers(BuildOptions(gui_picker=gui))
+        path = layout.write_plist_with_kexts(data, [], driver_names=names,
+                                             gui_picker=gui)
+        cfg = plistlib.loads(path.read_bytes())
+        return [d["Path"] for d in cfg["UEFI"]["Drivers"]]
+
+    def test_canopy_requires_external_picker(self):
+        without = self._entries(gui=False)
+        with_gui = self._entries(gui=True)
+        self.assertNotIn("OpenCanopy.efi", without)
+        self.assertIn("OpenCanopy.efi", with_gui)
+        self.assertIn("OpenRuntime.efi", with_gui)
+        self.assertIn("ResetNvramEntry.efi", with_gui)
+
+
 if __name__ == "__main__":
     unittest.main()

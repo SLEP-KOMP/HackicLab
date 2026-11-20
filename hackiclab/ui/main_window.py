@@ -688,6 +688,7 @@ class MainWindow(QMainWindow):
                 "step": 0, "profile": None, "macos": "", "kind": "usb",
                 "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
                 "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
+                "gui_picker": False,
                 "share_log": False,
             }
             self._wiz = state
@@ -952,6 +953,14 @@ class MainWindow(QMainWindow):
         dgpu_note = _muted(page, tr.t("wizard.options.dgpu_desc"))
         dgpu_note.setWordWrap(True)
         lay.addWidget(dgpu_note)
+
+        self.wiz_gui_chk = QCheckBox(tr.t("build.gui_picker"))
+        self.wiz_gui_chk.toggled.connect(
+            lambda on: self._wiz_state().__setitem__("gui_picker", bool(on)))
+        lay.addWidget(self.wiz_gui_chk)
+        gui_note = _muted(page, tr.t("build.gui_picker_desc"))
+        gui_note.setWordWrap(True)
+        lay.addWidget(gui_note)
 
         self.wiz_share_chk = QCheckBox(tr.t("wizard.options.share"))
         self.wiz_share_chk.toggled.connect(
@@ -1374,6 +1383,7 @@ class MainWindow(QMainWindow):
             target_macos=str(state.get("macos") or ""),
             disable_dgpu=bool(state.get("disable_dgpu")),
             dual_boot=str(state.get("dual_boot") or ""),
+            gui_picker=bool(state.get("gui_picker")),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target
@@ -1875,6 +1885,11 @@ class MainWindow(QMainWindow):
         sip_desc = _muted(page, tr.t("build.sip_desc")); sip_desc.setWordWrap(True)
         opts.addWidget(self.opt_sip)
         opts.addWidget(sip_desc)
+        opts.addSpacing(8)
+        self.opt_gui = QCheckBox(tr.t("build.gui_picker"))
+        gui_desc = _muted(page, tr.t("build.gui_picker_desc")); gui_desc.setWordWrap(True)
+        opts.addWidget(self.opt_gui)
+        opts.addWidget(gui_desc)
         opts.addSpacing(8)
         wmode_row = QHBoxLayout()
         wmode_row.addWidget(_h2(page, tr.t("build.wifi_mode")))
@@ -4362,6 +4377,7 @@ class MainWindow(QMainWindow):
             "val_status": self.val_status.text(),
             "opt_usb": self.opt_usb.isChecked(),
             "opt_sip": self.opt_sip.isChecked(),
+            "opt_gui": self.opt_gui.isChecked(),
             "macos": self.macos_combo.currentData(),
             # Автоматическая сборка: без этого смена языка теряла журнал,
             # готовый отчёт и кнопки «Открыть папку»/«Отправить в базу».
@@ -4393,6 +4409,7 @@ class MainWindow(QMainWindow):
                 self.usb_recovery_ver.setCurrentIndex(i)
         self.opt_usb.setChecked(st["opt_usb"])
         self.opt_sip.setChecked(st["opt_sip"])
+        self.opt_gui.setChecked(bool(st.get("opt_gui")))
         if st["macos"]:
             i = self.macos_combo.findData(st["macos"])
             if i >= 0:
@@ -4543,6 +4560,7 @@ class MainWindow(QMainWindow):
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
             disable_sip=self.opt_sip.isChecked(),
+            gui_picker=self.opt_gui.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
         )

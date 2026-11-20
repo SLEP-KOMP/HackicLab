@@ -120,7 +120,10 @@ class EFILayout:
             })
         return entries
 
-    def _driver_entries(self, driver_names: list | None) -> list[dict]:
+    def _driver_entries(self, driver_names: list | None,
+                        allow_canopy: bool = False) -> list[dict]:
+        # OpenCanopy подключается только вместе с PickerMode=External
+        skip = _DRIVERS_SKIP - {"OpenCanopy.efi"} if allow_canopy else _DRIVERS_SKIP
         return [
             {
                 "Path": name,
@@ -131,7 +134,7 @@ class EFILayout:
                 "LoadEarly": False,   # OpenVariableRuntimeDxe не используется
             }
             for name in (driver_names or [])
-            if name and name not in _DRIVERS_SKIP
+            if name and name not in skip
         ]
 
     def _acpi_entries(self, acpi_names: list) -> list[dict]:
@@ -150,11 +153,13 @@ class EFILayout:
     def write_plist_with_kexts(self, data: bytes, kext_names: list, name: str = "config.plist",
                                driver_names: list | None = None,
                                kernel_patches: list | None = None,
-                               acpi_names: list | None = None) -> Path:
+                               acpi_names: list | None = None,
+                               gui_picker: bool = False) -> Path:
         """Пишет config.plist, подставляя реальные Kernel/Add, UEFI/Drivers и ACPI/Add."""
         cfg = plistlib.loads(data)
         cfg["Kernel"]["Add"] = self._kext_entries(kext_names)
-        cfg["UEFI"]["Drivers"] = self._driver_entries(driver_names)
+        cfg["UEFI"]["Drivers"] = self._driver_entries(driver_names,
+                                                      allow_canopy=gui_picker)
         if acpi_names:
             cfg["ACPI"]["Add"] = self._acpi_entries(acpi_names)
         if kernel_patches:

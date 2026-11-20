@@ -377,10 +377,11 @@ class EFIBuilder:
                 res.errors.append(
                     "AMD kernel patches недоступны: EFI не загрузится на Ryzen")
                 res.ok = False
-        layout.write_plist_with_kexts(data, kexts_placed,
-                                      driver_names=res.stats.get("drivers_placed", []),
-                                      kernel_patches=amd_patches,
-                                      acpi_names=res.stats.get("ssdt_placed", []))
+            layout.write_plist_with_kexts(data, kexts_placed,
+                                          driver_names=res.stats.get("drivers_placed", []),
+                                          kernel_patches=amd_patches,
+                                          acpi_names=res.stats.get("ssdt_placed", []),
+                                          gui_picker=gui_picker)
 
         # Запись в локальную базу отчётов: и удачные, и неудачные сборки.
         # Из неё же строится страница новой задачи GitHub для общей базы.
