@@ -147,6 +147,16 @@ class AnalyzerNotesTests(_Store):
         path = community.save_record(rec)
         self.assertEqual(community.load(path)["notes"], rec["notes"])
 
+    def test_kext_conflict_lands_in_notes(self):
+        rec = community.make_record(profile(), None, self.Result(),
+                                    kexts=["Lilu.kext", "NootRX.kext",
+                                           "WhateverGreen.kext"])
+        codes = [n["code"] for n in rec["notes"]]
+        self.assertIn("kext_conflict_nootrx_whatevergreen", codes)
+        self.assertIn("Конфликт кекстов: NootRX и WhateverGreen",
+                      self._body(rec))
+        self.assertIn("но железо не заработает", self._body(rec))
+
 
 class IssueParsingTests(unittest.TestCase):
     BODY = "Отчёт\n\n```json\n{\"hardware\": {\"cpu\": \"Ryzen\"}, \"ok\": true}\n```\n"

@@ -312,6 +312,28 @@ def _is_navi2x(gpu) -> bool:
                ("6600", "6650", "6700", "6750", "6800", "6900", "6950"))
 
 
+#: Device-id Navi 10/14/21/22/23 — Dortania: agdpmod=pikera нужен всем Navi.
+NAVI_DEVICE_IDS = frozenset({
+    "731f", "7340", "7341", "734f",            # Navi 10/14 (RX 5700/5500)
+    "73bf", "73a3", "73af", "73a5",            # Navi 21 (RX 6800/6900)
+    "73df", "73ef",                            # Navi 22 (RX 6700/6750)
+    "73ff", "73e3",                            # Navi 23 (RX 6600)
+})
+
+
+def is_navi_gpu(gpu) -> bool:
+    """Navi любой серии: на них без agdpmod=pikera бывает чёрный экран."""
+    if gpu is None or getattr(gpu, "vendor", "") != "amd":
+        return False
+    dev = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "")
+    if dev in NAVI_DEVICE_IDS:
+        return True
+    name = (getattr(gpu, "name", "") or "").lower()
+    # только номера Navi-моделей: «rx 5» поймал бы Polaris RX 580
+    return any(x in name for x in ("5500", "5600", "5700", "6600", "6650",
+                                    "6700", "6750", "6800", "6900", "6950"))
+
+
 class _KextList:
     """Накопитель подбора: держит порядок и не даёт дубликатов."""
 
@@ -355,16 +377,18 @@ def _gpu_kexts(chosen: _KextList, profile: HardwareProfile) -> None:
         return
     if gpu.vendor == "intel" or (profile.igpu and profile.igpu.vendor == "intel"):
         chosen.add("WhateverGreen")
+    # AMD APU (Raven/Vega в Ryzen) без дискретки: iGPU тянет только NootedRed
+    apu = (profile.igpu is not None and profile.igpu.vendor == "amd"
+           and not profile.dgpu)
     if gpu.vendor == "amd":
-        # NootRX сам инициализирует Navi 2x и конфликтует с WhateverGreen:
-        # в документации проекта прямо сказано не держать их вместе.
         if _is_navi2x(gpu):
             chosen.add("NootRX", "RadeonSensor", "SMCRadeonGPU")
+        elif apu:
+            # NootedRed заменяет WhateverGreen на APU: они конфликтуют
+            chosen.add("NootedRed", "RadeonSensor", "SMCRadeonGPU")
         else:
             chosen.add("WhateverGreen", "RadeonSensor", "SMCRadeonGPU")
-    # AMD APU (Raven/Vega в Ryzen) без дискретки: iGPU тянет только NootedRed
-    igpu = profile.igpu
-    if igpu and igpu.vendor == "amd" and not profile.dgpu:
+    if apu:
         chosen.add("NootedRed")
 
 

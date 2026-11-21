@@ -1369,6 +1369,24 @@ ISSUE_EN = {
                       "Consider using 0x67 instead of 0xFF."),
     "smc_conflict": ("Conflicting SMC kexts",
                      "Use VirtualSMC or FakeSMC, not both."),
+    "kext_conflict_nootrx_whatevergreen": (
+        "Conflicting kexts: NootRX and WhateverGreen",
+        "Remove WhateverGreen.kext — NootRX replaces it."),
+    "kext_conflict_airportitlwm_itlwm": (
+        "Conflicting kexts: AirportItlwm and itlwm",
+        "Keep one Intel Wi-Fi driver only."),
+    "kext_conflict_virtualsmc_fakesmc": (
+        "Conflicting kexts: VirtualSMC and FakeSMC",
+        "Keep VirtualSMC only."),
+    "kext_conflict_nootedred_whatevergreen": (
+        "Conflicting kexts: NootedRed and WhateverGreen",
+        "Remove WhateverGreen.kext — NootedRed replaces it on Vega APUs."),
+    "kext_conflict_nootedred_nootrx": (
+        "Conflicting kexts: NootedRed and NootRX",
+        "Keep only one of them: NootedRed is for the iGPU, NootRX for the dGPU."),
+    "ioskywalk_not_blocked": (
+        "Broadcom Wi-Fi: IOSkywalkFamily is not blocked",
+        "Block com.apple.iokit.IOSkywalkFamily and apply the OCLP root patch."),
     "usbmap_empty": ("USB map is empty",
                      "Rebuild the USB map."),
     "usbmap_generic": ("Generic USB map",

@@ -12,7 +12,7 @@ import plistlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from ..knowledge.kexts import smbios_model_for
+from ..knowledge.kexts import is_navi_gpu, smbios_model_for
 from ..scanner.models import HardwareProfile
 
 if TYPE_CHECKING:
@@ -234,11 +234,17 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot_args = str(nv.get("boot-args") or "")
         if "alcid=" not in boot_args:
             nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
+    # Navi: без agdpmod=pikera чёрный экран (Dortania: нужен всем Navi)
+    if is_navi_gpu(profile.dgpu):
+        boot_args = str(nv.get("boot-args") or "")
+        if "agdpmod=pikera" not in boot_args:
+            nv["boot-args"] = f"{boot_args} agdpmod=pikera".strip()
     if options.disable_dgpu and profile.dgpu:
         # WhateverGreen: не поднимать внешнюю видеокарту вовсе
         boot_args = str(nv.get("boot-args") or "")
         if "-wegnoegpu" not in boot_args:
             nv["boot-args"] = f"{boot_args} -wegnoegpu".strip()
+
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
     if options.custom_smbios:

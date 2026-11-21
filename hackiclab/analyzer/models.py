@@ -40,6 +40,12 @@ KEXT_CONFLICTS = (
     ("AirportItlwm", "itlwm",
      "AirportItlwm и itlwm — две реализации одного драйвера Intel Wi-Fi, "
      "одновременно они не работают."),
+    ("NootedRed", "WhateverGreen",
+     "NootedRed сам заводит Vega APU и в требованиях проекта сказано удалить "
+     "WhateverGreen — вместе они конфликтуют."),
+    ("NootedRed", "NootRX",
+     "NootedRed (iGPU) и NootRX (dGPU) не работают одновременно: в требованиях "
+     "обоих проектов сказано удалить второй кекс."),
     ("VirtualSMC", "FakeSMC",
      "VirtualSMC и FakeSMC — два провайдера SMC, вместе ломают загрузку."),
 )

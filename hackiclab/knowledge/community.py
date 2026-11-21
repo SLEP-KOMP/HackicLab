@@ -99,6 +99,22 @@ def _notes(profile: "HardwareProfile") -> list[dict]:
             for i in issues][:10]
 
 
+def _kext_notes(kexts: Optional[list]) -> list[dict]:
+    """Конфликтующие кексты в самой сборке — по общему списку из analyzer.models."""
+    from ..analyzer.models import KEXT_CONFLICTS
+
+    names = {Path(str(k)).stem for k in (kexts or [])}
+    notes = []
+    for first, second, _ in KEXT_CONFLICTS:
+        if first in names and second in names:
+            notes.append({
+                "severity": "error",
+                "code": f"kext_conflict_{first.lower()}_{second.lower()}",
+                "title": f"Конфликт кекстов: {first} и {second}",
+            })
+    return notes
+
+
 def make_record(profile: "HardwareProfile", options=None, result=None,
                 kexts: Optional[list] = None, config: bytes = b"",
                 feature: str = "full", created: Optional[str] = None) -> dict:
@@ -112,7 +128,7 @@ def make_record(profile: "HardwareProfile", options=None, result=None,
         "ok": bool(getattr(result, "ok", False)),
         "errors": errors[:20],
         "warnings": [str(w) for w in (getattr(result, "warnings", []) or [])][:20],
-        "notes": _notes(profile),
+        "notes": (_notes(profile) + _kext_notes(kexts))[:10],
         "kexts": sorted(str(k) for k in (kexts or [])),
         "config_sha256": hashlib.sha256(config).hexdigest() if config else "",
         "hardware": _hardware(profile),

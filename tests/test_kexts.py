@@ -369,6 +369,17 @@ class AmdApuKextTests(unittest.TestCase):
         names = [e.name for e in select_kexts(profile, target_macos="Sonoma")]
         self.assertNotIn("NootedRed", names)
 
+    def test_apu_skips_whatevergreen(self):
+        """NootedRed конфликтует с WhateverGreen — на APU остаётся только он."""
+        profile = HardwareProfile(platform="laptop")
+        profile.cpu = CPUInfo(name="AMD Ryzen 5 4500U", vendor="amd",
+                              generation=2, codename="Renoir")
+        profile.igpu = GPUInfo(name="Radeon Vega 6", vendor="amd",
+                               device_id="1636", is_integrated=True)
+        names = [e.name for e in select_kexts(profile, target_macos="Ventura")]
+        self.assertIn("NootedRed", names)
+        self.assertNotIn("WhateverGreen", names)
+
 
 class AmdNaviKextTests(unittest.TestCase):
     """Navi 2x: NootRX вместо WhateverGreen — вместе они конфликтуют."""

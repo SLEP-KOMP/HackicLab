@@ -84,6 +84,24 @@ class GpuAndDualBootTests(unittest.TestCase):
         boot_args = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
         self.assertNotIn("-wegnoegpu", boot_args)
 
+    def _boot_args(self, gpu: GPUInfo) -> str:
+        p = desktop_profile()
+        p.dgpu = gpu
+        cfg = plistlib.loads(generate_config_plist(p, BuildOptions()))
+        return cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
+
+    def test_navi_dgpu_gets_pikera(self):
+        """Dortania: agdpmod=pikera обязателен всем Navi, иначе чёрный экран."""
+        args = self._boot_args(GPUInfo(name="AMD Radeon RX 5700 XT", vendor="amd",
+                                       device_id="731F"))
+        self.assertIn("agdpmod=pikera", args)
+
+    def test_polaris_dgpu_skips_pikera(self):
+        args = self._boot_args(GPUInfo(name="AMD Radeon RX 580", vendor="amd",
+                                       device_id="67DF"))
+        self.assertNotIn("agdpmod=pikera", args)
+
+
     def test_linux_dual_boot_keeps_driver_entry(self):
         import tempfile
         from pathlib import Path

@@ -143,6 +143,13 @@ def _kext_entries(cfg: dict) -> list[dict]:
             if isinstance(e, dict) and _enabled(e)]
 
 
+def _blocked_bundles(cfg: dict) -> set[str]:
+    """Kernel/Block: идентификаторы, которые сборка реально блокирует."""
+    return {str(e.get("Identifier") or "")
+            for e in (cfg.get("Kernel", {}).get("Block", []) or [])
+            if isinstance(e, dict) and _enabled(e)}
+
+
 # --- Отдельные проверки ----------------------------------------------------
 
 def _check_structure(oc: Path, issues: list[AnalysisIssue]) -> None:
@@ -296,6 +303,18 @@ def _check_kexts(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
                 kext=second,
                 suggestion=f"Уберите {second}.kext из OC/Kexts и запись "
                            f"из Kernel/Add — иначе один из двух не загрузится."))
+
+    if ("IO80211FamilyLegacy" in names
+            and "com.apple.iokit.IOSkywalkFamily" not in _blocked_bundles(cfg)):
+        issues.append(AnalysisIssue(
+            Severity.WARNING, "ioskywalk_not_blocked",
+            "Broadcom Wi-Fi: IOSkywalkFamily не заблокирован",
+            "IO80211FamilyLegacy не поднимется, пока штатный "
+            "com.apple.iokit.IOSkywalkFamily грузится из системы: в Kernel/Block "
+            "нужна запись Strategy=Exclude, MinKernel=23.0.0. Сами кексты "
+            "Wi-Fi не возвращают — ещё нужен root patch OCLP.",
+            kext="IOSkywalkFamily",
+            suggestion="Добавьте блок IOSkywalkFamily и примените root patch OCLP."))
 
 
 def _check_usb_map(oc: Path, issues: list[AnalysisIssue]) -> None:
