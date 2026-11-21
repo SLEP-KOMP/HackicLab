@@ -448,12 +448,17 @@ def _macos_newer(a: str, b: str) -> bool:
 
 
 class MainWindow(QMainWindow):
+    #: Профиль, отложенный перед перезапуском с правами администратора: память
+    #: прежнего процесса повышенному экземпляру недоступна.
+    _PENDING_PROFILE = "profile-pending.json"
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("HackicLab")
         self.setMinimumSize(880, 560)
         self._fit_to_screen()
         self.profile: HardwareProfile | None = None
+        self._restore_pending_profile()
         state = uistate.load()
         self._theme = str(state.get("theme") or "system")
         self._theme_bg = str(state.get("background") or "")
@@ -469,6 +474,35 @@ class MainWindow(QMainWindow):
         self._sys_timer.setInterval(5000)
         self._sys_timer.timeout.connect(self._poll_system_theme)
         self._sys_timer.start()
+
+    def _stash_profile_for_admin(self) -> None:
+        """Кладёт профиль на диск перед перезапуском с UAC."""
+        if not self.profile:
+            return
+        try:
+            import json
+
+            from ..builder.cache_manager import profiles_dir
+            path = profiles_dir() / self._PENDING_PROFILE
+            path.write_text(json.dumps(self.profile.to_dict(), ensure_ascii=False),
+                            encoding="utf-8")
+        except Exception:
+            pass
+
+    def _restore_pending_profile(self) -> None:
+        """Подхватывает профиль, отложенный перед перезапуском с UAC."""
+        try:
+            import json
+
+            from ..builder.cache_manager import profiles_dir
+            path = profiles_dir() / self._PENDING_PROFILE
+            if not path.exists():
+                return
+            data = json.loads(path.read_text(encoding="utf-8"))
+            path.unlink(missing_ok=True)
+            self.profile = HardwareProfile.from_dict(data)
+        except Exception:
+            return
 
     def apply_theme(self, theme: str | None = None):
         """Применяет тему оформления и сохраняет выбор пользователя."""
@@ -2936,6 +2970,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr.t("usb.admin_title"),
                                 tr.t("usb.admin_manual"))
             return False
+        # профиль из памяти не переживёт перезапуск — кладём на диск
+        self._stash_profile_for_admin()
         if not relaunch_as_admin():
             QMessageBox.warning(self, tr.t("usb.admin_title"),
                                 tr.t("usb.admin_manual"))
