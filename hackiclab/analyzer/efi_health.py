@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from .models import AnalysisIssue, Severity
+from .models import KEXT_CONFLICTS, AnalysisIssue, Severity
 
 # --- Справочники -----------------------------------------------------------
 
@@ -284,6 +284,18 @@ def _check_kexts(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
             "Конфликт SMC: FakeSMC и VirtualSMC одновременно",
             "Два эмулятора SMC несовместимы.",
             suggestion="Оставьте только VirtualSMC (или только FakeSMC)."))
+
+    for first, second, note in KEXT_CONFLICTS:
+        if (first, second) == ("VirtualSMC", "FakeSMC"):
+            continue  # про SMC уже сказано выше, не дублируем
+        if first in names and second in names:
+            issues.append(AnalysisIssue(
+                Severity.ERROR, f"kext_conflict_{first.lower()}_{second.lower()}",
+                f"Конфликт кекстов: {first} и {second}",
+                note,
+                kext=second,
+                suggestion=f"Уберите {second}.kext из OC/Kexts и запись "
+                           f"из Kernel/Add — иначе один из двух не загрузится."))
 
 
 def _check_usb_map(oc: Path, issues: list[AnalysisIssue]) -> None:

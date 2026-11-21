@@ -29,3 +29,17 @@ class AnalysisIssue:
     def sev_label(self) -> str:
         return {Severity.INFO: "info", Severity.WARNING: "warning",
                 Severity.ERROR: "error"}[self.severity]
+
+
+#: Кексты, которые нельзя держать вместе: (первый, второй, пояснение).
+#: Лежит здесь, чтобы им пользовались и анализ по профилю, и аудит готовой EFI.
+KEXT_CONFLICTS = (
+    ("NootRX", "WhateverGreen",
+     "NootRX сам заводит Navi 2x и конфликтует с WhateverGreen: в документации "
+     "проекта прямо запрещено держать их вместе."),
+    ("AirportItlwm", "itlwm",
+     "AirportItlwm и itlwm — две реализации одного драйвера Intel Wi-Fi, "
+     "одновременно они не работают."),
+    ("VirtualSMC", "FakeSMC",
+     "VirtualSMC и FakeSMC — два провайдера SMC, вместе ломают загрузку."),
+)

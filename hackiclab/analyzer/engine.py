@@ -15,20 +15,7 @@ from ..knowledge.kexts import (
 )
 from ..scanner.models import HardwareProfile
 from .efi_health import audit as audit_efi_root
-from .models import AnalysisIssue, Severity
-
-#: Кексты, которые нельзя держать вместе: (первый, второй, пояснение).
-#: Проверяем по имени бандла и по stem — EFI от других сборщиков тоже ловим.
-_KEXT_CONFLICTS = (
-    ("NootRX", "WhateverGreen",
-     "NootRX сам заводит Navi 2x и конфликтует с WhateverGreen: в документации "
-     "проекта прямо запрещено держать их вместе."),
-    ("AirportItlwm", "itlwm",
-     "AirportItlwm и itlwm — две реализации одного драйвера Intel Wi-Fi, "
-     "одновременно они не работают."),
-    ("VirtualSMC", "FakeSMC",
-     "VirtualSMC и FakeSMC — два провайдера SMC, вместе ломают загрузку."),
-)
+from .models import KEXT_CONFLICTS, AnalysisIssue, Severity
 
 
 class Analyzer:
@@ -55,7 +42,7 @@ class Analyzer:
         Ловит в том числе чужие сборки: имена берём из Kernel/Add и файлов
         на диске, поэтому конфликт виден ещё до загрузки.
         """
-        for first, second, note in _KEXT_CONFLICTS:
+        for first, second, note in KEXT_CONFLICTS:
             if first in present and second in present:
                 self.issues.append(AnalysisIssue(
                     Severity.ERROR,
