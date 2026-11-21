@@ -75,8 +75,9 @@ class FormatUsbScriptTests(unittest.TestCase):
         self.assertTrue(any("format fs=fat32" in s for s in scripts))
 
 
-    def test_removable_stick_uses_mbr_primary(self):
-        """На съёмной флешке Windows не создаёт EFI-раздел — только MBR."""
+    def test_removable_stick_uses_gpt_primary(self):
+        """На съёмной флешке Windows не создаёт ESP — GPT с обычным разделом."""
+
         scripts = []
 
         def fake_diskpart(text):
@@ -101,13 +102,12 @@ class FormatUsbScriptTests(unittest.TestCase):
             uw.format_usb("F:")
 
         create = next(s for s in scripts if "clean" in s)
-        self.assertNotIn("convert gpt", create)
+        self.assertIn("convert gpt", create)
         self.assertNotIn("create partition efi", create)
-        # Флешка после clean может остаться GPT: без convert mbr diskpart
-        # отказывает в ACTIVE и сборка падает.
-        self.assertIn("convert mbr", create)
+        # ESP на removable-носителе diskpart не создаёт, а UEFI грузит
+        # \EFI\BOOT с любого FAT-раздела — поэтому обычный primary без active.
         self.assertIn("create partition primary", create)
-        self.assertIn("active", create)
+        self.assertNotIn("active", create)
 
     def test_fixed_disk_keeps_gpt_efi(self):
         scripts = []

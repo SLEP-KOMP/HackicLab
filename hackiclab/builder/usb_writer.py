@@ -370,8 +370,11 @@ def _diskpart_reason(detail: str) -> str:
 
 
 def format_usb(device: str, drive_letter: str = "") -> str:
-    """Форматирует USB как FAT32 + GPT + ESP, возвращает букву диска.
+    """Форматирует носитель как GPT + FAT32, возвращает букву диска.
 
+    Флешка: GPT с обычным FAT32-разделом — ESP на съёмных носителях diskpart
+    не создаёт, а UEFI грузит \\EFI\\BOOT\\BOOTX64.EFI с любого FAT-раздела.
+    SSD/жёсткий диск: GPT + ESP.
     Опция drive_letter — занять конкретную букву (если задана); иначе найдёт свободную.
     """
     if not is_admin():
@@ -423,19 +426,16 @@ def format_usb(device: str, drive_letter: str = "") -> str:
         "exit\n"
     )
 
-    # Съёмная флешка: diskpart не умеет EFI-раздел на removable-носителях,
-    # поэтому размечаем её как MBR с активным основным разделом FAT32 —
-    # UEFI грузит такой раздел так же, как ESP.
+    # Съёмная флешка: diskpart не умеет ESP на removable-носителях, поэтому
+    # размечаем её как GPT с обычным FAT32-разделом — UEFI грузит \EFI\BOOT
+    # с любого FAT-раздела, тип ESP для загрузки не требуется.
     if _is_removable(disk_num):
-        # После clean диск может остаться GPT: ACTIVE на GPT невозможен,
-        # поэтому явно переводим в MBR перед разметкой.
         create_script = (
             f"select disk {disk_num}\n"
             "clean\n"
-            "convert mbr\n"
+            "convert gpt\n"
             "create partition primary\n"
             "select partition 1\n"
-            "active\n"
             "exit\n"
         )
         format_script = (
@@ -743,7 +743,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
             target_letter = f"{letter}:"
         else:
             if log:
-                log("Форматирую флешку (GPT + FAT32 + ESP)…")
+                log("Форматирую флешку (GPT + FAT32)…")
             keep = drive_letter
             if not keep:
                 dev = device.rstrip(":\\").upper()
