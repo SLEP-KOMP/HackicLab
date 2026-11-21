@@ -2955,28 +2955,20 @@ class MainWindow(QMainWindow):
             self._usb_run(device, mode, planned, self.usb_make_map.isChecked())
 
     def _ensure_admin(self) -> bool:
-        """Проверяет права администратора и при необходимости перезапускает с UAC."""
+        """Проверяет права: EXE запускается от администратора через манифест.
+
+        Перезапуска с UAC здесь больше нет — он терял профиль и требовал
+        подтверждения посреди работы. Если прав всё-таки нет (запуск из
+        исходников), просто предупреждаем.
+        """
         try:
-            from ..builder.usb_backend import is_admin, relaunch_as_admin
+            from ..builder.usb_backend import is_admin
         except Exception as e:
             QMessageBox.warning(self, tr.t("usb.admin_title"), str(e))
             return False
         if is_admin():
             return True
-        if not self._confirm(
-            tr.t("usb.admin_title"), tr.t("usb.admin_ask"),
-            tr.t("common.yes"), tr.t("common.no"),
-        ):
-            QMessageBox.warning(self, tr.t("usb.admin_title"),
-                                tr.t("usb.admin_manual"))
-            return False
-        # профиль из памяти не переживёт перезапуск — кладём на диск
-        self._stash_profile_for_admin()
-        if not relaunch_as_admin():
-            QMessageBox.warning(self, tr.t("usb.admin_title"),
-                                tr.t("usb.admin_manual"))
-            return False
-        QApplication.quit()
+        QMessageBox.warning(self, tr.t("usb.admin_title"), tr.t("usb.admin_manual"))
         return False
 
     def _usb_run(self, device: str, mode: str, planned_letter: str = "",
