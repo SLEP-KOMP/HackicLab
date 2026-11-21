@@ -471,20 +471,36 @@ def _profile_words(profile) -> set[str]:
 
 
 def similar_configs(profile, limit: int = 3) -> list[HwConfig]:
-    """Ближайшие записи каталога под профиль: по совпадению слов в описании."""
-    words = _profile_words(profile)
-    if not words:
+    """Ближайшие записи каталога: поколение и платформа важнее совпадения слов.
+
+    Раньше подбор шёл только по словам, поэтому «amd», «ryzen», «radeon» и
+    «580» одинаково подходили и Zen 2, и Zen+, и вперёд выходила чужая сборка.
+    """
+    if profile is None:
         return []
+    cpu = getattr(profile, "cpu", None)
+    vendor = str(getattr(cpu, "vendor", "") or "").lower()
+    generation = int(getattr(cpu, "generation", 0) or 0)
+    platform = str(getattr(profile, "platform", "") or "").lower()
+    dgpu = getattr(profile, "dgpu", None)
+    dgpu_dev = str(getattr(dgpu, "device_id", "") or "").lower().replace("0x", "")
+
+    words = _profile_words(profile)
     scored: list[tuple[int, HwConfig]] = []
     for cfg in CONFIGS:
         hay = _haystack(cfg)
         score = sum(1 for w in words if w in hay)
-        if cfg.category in ("laptop",) and "laptop" in words:
+        if vendor and cfg.vendor == vendor:
+            score += 3
+        if generation and cfg.generation == generation:
+            score += 5
+        if platform and cfg.platform == platform:
             score += 2
-        if cfg.category in ("desktop_intel", "desktop_amd") and "desktop" in words:
-            score += 1
+        if dgpu_dev and str(cfg.dgpu or "").lower().replace("0x", "") == dgpu_dev:
+            score += 3
         if score:
             scored.append((score, cfg))
     scored.sort(key=lambda pair: (-pair[0], pair[1].key))
     return [cfg for _, cfg in scored[:limit]]
+
 

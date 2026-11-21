@@ -88,6 +88,20 @@ class SimilarConfigTests(unittest.TestCase):
     def test_none_profile_returns_empty(self):
         self.assertEqual(cfg.similar_configs(None), [])
 
+    def test_generation_beats_shared_words(self):
+        """Ryzen 5 3600 (Zen 2) не должен получать Zen+ сборку только из-за слов."""
+        from hackiclab.scanner.models import CPUInfo, GPUInfo, HardwareProfile
+
+        p = HardwareProfile(platform="desktop")
+        p.cpu = CPUInfo(name="AMD Ryzen 5 3600", vendor="amd", generation=10,
+                        codename="Zen 2")
+        p.dgpu = GPUInfo(name="AMD Radeon RX 580 2048SP", vendor="amd",
+                         device_id="6FDF")
+        found = cfg.similar_configs(p, limit=3)
+        self.assertTrue(found)
+        self.assertEqual(found[0].vendor, "amd")
+        self.assertEqual(found[0].generation, 10)
+
 
 if __name__ == "__main__":
     unittest.main()
