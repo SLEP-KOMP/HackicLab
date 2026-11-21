@@ -66,7 +66,6 @@ from ..knowledge.configs import (
     search_configs,
     similar_configs,
 )
-from ..knowledge.preflight import bios_requirements
 from ..knowledge.sources import (
     GROUP_COMMUNITY,
     GROUP_EFI,
@@ -641,14 +640,15 @@ class MainWindow(QMainWindow):
     def _card(self, parent):
         w = QFrame(parent); w.setObjectName("card"); return w
 
-    def _page_header(self, page, layout, title_key: str, subtitle_key: str):
-        """Заголовок страницы: крупный заголовок и короткое пояснение в одну фразу."""
+    def _page_header(self, page, layout, title_key: str, subtitle_key: str | None = None):
+        """Заголовок страницы: крупный заголовок и, если нужен, короткое пояснение."""
         head = QVBoxLayout()
         head.setSpacing(4)
         head.addWidget(_h1(page, tr.t(title_key)))
-        sub = _muted(page, tr.t(subtitle_key))
-        sub.setWordWrap(True)
-        head.addWidget(sub)
+        if subtitle_key:
+            sub = _muted(page, tr.t(subtitle_key))
+            sub.setWordWrap(True)
+            head.addWidget(sub)
         layout.addLayout(head)
 
     def _stat_tiles(self, page, layout, items):
@@ -1868,7 +1868,7 @@ class MainWindow(QMainWindow):
     def _build_build(self):
         page = QWidget()
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "build.title", "build.subtitle")
+        self._page_header(page, v, "build.title")
         self._stat_tiles(page, v, [
             (tr.t("tile.build_kexts_v"), tr.t("tile.build_kexts")),
             (tr.t("tile.build_oc_v"), tr.t("tile.build_oc")),
@@ -1881,22 +1881,6 @@ class MainWindow(QMainWindow):
 
         # Шаг 2: параметры сборки и журнал.
         v.addWidget(_h2(page, tr.t("manual.step_build")))
-        bios = self._card(page)
-        bv = QVBoxLayout(bios)
-        bv.addWidget(_h2(page, tr.t("bios.title")))
-        bios_hint = _muted(page, tr.t("bios.subtitle"))
-        bios_hint.setWordWrap(True)
-        bv.addWidget(bios_hint)
-        profile = getattr(self, "profile", None)
-        from ..scanner.models import HardwareProfile as _HP
-        report = bios_requirements(profile or _HP())
-        for key in report.requirements:
-            item = QLabel("✓  " + tr.t(key), bios)
-            item.setObjectName("muted")
-            item.setWordWrap(True)
-            bv.addWidget(item)
-        self.bios_box = bv
-        v.addWidget(bios)
 
         # Слева настройки и журнал, справа карточка с яблоком и прогрессом —
         # как фото автора в «Поддержке».

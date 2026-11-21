@@ -364,8 +364,14 @@ class BuildProgressTests(unittest.TestCase):
     def test_apple_card_present(self):
         from PySide6.QtWidgets import QFrame, QLabel, QProgressBar
 
+        from hackiclab.i18n import tr
         from hackiclab.ui.main_window import MainWindow
 
+        # Тест проверяет русские подписи: язык задаётся явно, иначе на
+        # англоязычной машине окно соберётся на EN и тест упадёт.
+        previous_lang = tr.current
+        tr.set_lang("ru")
+        self.addCleanup(tr.set_lang, previous_lang)
         window = MainWindow()
         try:
             card = window.page_build.findChild(QFrame, "appleCard")
