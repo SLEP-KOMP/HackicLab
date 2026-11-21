@@ -107,6 +107,47 @@ class IssueUrlTests(_Store):
         self.assertLess(len(url), 16000)
 
 
+class AnalyzerNotesTests(_Store):
+    """«ok» не должен читаться как «всё работает»."""
+
+    class Result:
+        ok = True
+        errors: list = []
+        warnings: list = []
+
+    def _record(self, device_id: str) -> dict:
+        p = profile()
+        p.dgpu = GPUInfo(name="Radeon RX 580 2048SP", vendor="amd",
+                         device_id=device_id)
+        return community.make_record(p, None, self.Result())
+
+    @staticmethod
+    def _body(record: dict) -> str:
+        url = community.issue_url(record)
+        return urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["body"][0]
+
+    def test_unsupported_card_lands_in_notes(self):
+        error_notes = [n for n in self._record("6fdf")["notes"]
+                       if n["code"] == "gpu_rx580_2048sp"]
+        self.assertTrue(error_notes)
+        self.assertEqual(error_notes[0]["severity"], "error")
+
+    def test_body_warns_that_hardware_will_not_work(self):
+        body = self._body(self._record("6fdf"))
+        self.assertIn("но железо не заработает", body)
+        self.assertIn("RX 580 2048SP не поддерживается macOS", body)
+
+    def test_supported_card_keeps_plain_verdict(self):
+        body = self._body(self._record("67df"))
+        self.assertIn("Итог: сборка прошла", body)
+        self.assertNotIn("но железо не заработает", body)
+
+    def test_notes_survive_roundtrip(self):
+        rec = self._record("6fdf")
+        path = community.save_record(rec)
+        self.assertEqual(community.load(path)["notes"], rec["notes"])
+
+
 class IssueParsingTests(unittest.TestCase):
     BODY = "Отчёт\n\n```json\n{\"hardware\": {\"cpu\": \"Ryzen\"}, \"ok\": true}\n```\n"
 

@@ -83,6 +83,22 @@ def _hardware(profile: "HardwareProfile") -> dict:
     }
 
 
+def _notes(profile: "HardwareProfile") -> list[dict]:
+    """Замечания анализатора по железу.
+
+    ``ok`` означает «файлы собрались», а не «система поедет», поэтому в отчёт
+    попадают и проблемы совместимости — иначе отчёт читается как успех.
+    """
+    from ..analyzer.engine import analyze_profile
+
+    try:
+        issues = analyze_profile(profile)
+    except Exception:
+        return []
+    return [{"severity": i.sev_label, "code": i.code, "title": i.title}
+            for i in issues][:10]
+
+
 def make_record(profile: "HardwareProfile", options=None, result=None,
                 kexts: Optional[list] = None, config: bytes = b"",
                 feature: str = "full", created: Optional[str] = None) -> dict:
@@ -96,6 +112,7 @@ def make_record(profile: "HardwareProfile", options=None, result=None,
         "ok": bool(getattr(result, "ok", False)),
         "errors": errors[:20],
         "warnings": [str(w) for w in (getattr(result, "warnings", []) or [])][:20],
+        "notes": _notes(profile),
         "kexts": sorted(str(k) for k in (kexts or [])),
         "config_sha256": hashlib.sha256(config).hexdigest() if config else "",
         "hardware": _hardware(profile),
@@ -152,10 +169,21 @@ def issue_url(record: dict, repo: str = REPO) -> str:
         title += f" · {record['macos']}"
     title = title[:TITLE_LIMIT]
 
+    notes = record.get("notes") or []
+    blockers = [n for n in notes if n.get("severity") == "error"]
+    verdict_line = "сборка прошла" if record.get("ok") else "сборка не удалась"
+    if record.get("ok") and blockers:
+        verdict_line += (f", но железо не заработает: "
+                         f"{len(blockers)} блокирующих замечания")
+    marks = {"error": "✖", "warning": "⚠", "info": "·"}
+    note_lines = [f"- {marks.get(n.get('severity'), '·')} {n.get('title', '')}"
+                  for n in notes]
+
     body = "\n".join((
         "Отчёт HackicLab (сформирован автоматически).",
         "",
-        f"- Итог: {'сборка прошла' if record.get('ok') else 'сборка не удалась'}",
+        f"- Итог: {verdict_line}",
+        *note_lines,
         f"- macOS: {record.get('macos') or '—'}",
         f"- Платформа: {hw.get('platform') or '—'}",
         f"- Плата: {hw.get('board') or '—'}",
