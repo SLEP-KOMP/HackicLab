@@ -332,4 +332,4 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
     except Exception:
         pass
 
-    return True, f"Скачано {len(files)} файлов в {dest}"
+    return True, f"Скачано файлов: {len(files)} → {dest}"

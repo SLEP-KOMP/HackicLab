@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -549,7 +550,7 @@ def copy_efi(source_efi: Path, target_letter: str, log=None,
     else:
         raise RuntimeError(
             "В указанной папке не найдена структура EFI (EFI/OC). Выберите папку "
-            "со собранной EFI (обычно содержит подпапку OC)."
+            "с собранной EFI (обычно содержит подпапку OC)."
         )
 
     # удаляем старый EFI на флешке
@@ -778,7 +779,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                     log(f"Recovery пропущен: {e}")
 
         if log:
-            log("Готово. Флешка записана и отключена безопасно.")
+            log("Готово. Флешка записана — отключите её через «Безопасное извлечение».")
         res.ok = True
         res.target_letter = target_letter
         res.log = log if log else []
@@ -808,9 +809,20 @@ def install_recovery_to(dst_root: Path, macos_name: str, log=None) -> str:
     Не зависит от платформы: принимает корень смонтированного тома, поэтому
     подходит и для Windows-буквы, и для /Volumes/…
     """
+    # macrecovery печатает строку на каждый мегабайт: в журнал отдаём только
+    # каждые 10 %, иначе сотни строк забивают окно и тормозят интерфейс.
+    last_pct = [-10.0]
+
     def _log(msg):
-        if log:
-            log(msg)
+        if not log:
+            return
+        m = re.search(r"([\d.]+)% downloaded", msg)
+        if m:
+            pct = float(m.group(1))
+            if pct < last_pct[0] + 10 and pct < 100:
+                return
+            last_pct[0] = pct
+        log(msg)
 
     from .recovery import download_recovery, macos_version_by_name
 
@@ -847,8 +859,8 @@ def install_recovery_to(dst_root: Path, macos_name: str, log=None) -> str:
                 shutil.copy2(str(f), str(boot_dir / f.name))
                 copied += 1
                 _log(f"  {f.name} → com.apple.recovery.boot/")
-        _log(f"Recovery установлена на флешку ({copied} файл(ов)).")
-        return f"recovery: {version.name} ({copied} файлов)"
+        _log(f"Recovery установлена на флешку: файлов {copied}.")
+        return f"recovery: {version.name}, файлов {copied}"
     finally:
         shutil.rmtree(str(tmp), ignore_errors=True)
 

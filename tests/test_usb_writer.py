@@ -202,3 +202,25 @@ class RecoveryBestEffortTests(unittest.TestCase):
         self.assertEqual(res.target_letter.split(" | ")[0], "Q:")
         self.assertIn("recovery не установлен", res.target_letter)
         self.assertIn("нет сети", res.target_letter)
+
+class RecoveryLogThrottleTests(unittest.TestCase):
+    def test_progress_lines_are_throttled(self):
+        import tempfile
+
+        from hackiclab.builder import recovery as rec
+
+        log: list[str] = []
+
+        def fake_download(version, dest, progress_cb=None):
+            for i in range(1, 101):
+                progress_cb(f"{i}.0/916.0 MB |  | {i:.1f}% downloaded")
+            (Path(dest) / "BaseSystem.dmg").write_bytes(b"x")
+            return True, "ok"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(rec, "download_recovery", side_effect=fake_download):
+                uw.install_recovery_to(Path(tmp), "macOS Sonoma", log=log.append)
+
+        progress = [m for m in log if "% downloaded" in m]
+        self.assertLessEqual(len(progress), 12)
+        self.assertIn("100.0% downloaded", progress[-1])

@@ -22,6 +22,10 @@ DEFAULTS: dict[str, Any] = {
     "check_updates": True,
     "postponed_update": "",
     "skipped_version": "",
+    "usb_source": "",
+    "usb_mode": "full",
+    "usb_recovery": True,
+    "usb_map": True,
     "ui_schema": 2,
 }
 

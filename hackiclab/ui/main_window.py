@@ -2444,10 +2444,14 @@ class MainWindow(QMainWindow):
         self.usb_mode.addItem(tr.t("usb.full"), "full")
         self.usb_mode.addItem(tr.t("usb.formatted"), "formatted")
         self.usb_mode.addItem(tr.t("usb.repair"), "repair")
+        saved_mode = self.usb_mode.findData(str(uistate.get("usb_mode", "full")))
+        if saved_mode > 0:
+            self.usb_mode.setCurrentIndex(saved_mode)
         mv.addWidget(self.usb_mode)
         self.usb_mode_desc = _muted(page, tr.t("usb.mode_full")); self.usb_mode_desc.setWordWrap(True)
         mv.addWidget(self.usb_mode_desc)
         self.usb_mode.currentIndexChanged.connect(self._usb_mode_change)
+        self._usb_mode_change()
         v.addWidget(mode_card)
 
         # --- 3. Источник EFI ---
@@ -2457,6 +2461,10 @@ class MainWindow(QMainWindow):
         srow.addWidget(_h2(page, tr.t("usb.source")))
         self.usb_source = QLabel("—"); self.usb_source.setObjectName("muted")
         self.usb_source.setWordWrap(True)
+        # прошлый выбор источника переживает перезапуск, если папка на месте
+        _src = str(uistate.get("usb_source", "") or "")
+        if _src and ((Path(_src) / "EFI").is_dir() or (Path(_src) / "OC").is_dir()):
+            self.usb_source.setText(_src)
         srow.addWidget(self.usb_source, 1)
         src_btn = QPushButton(tr.t("usb.browse_source"))
         src_btn.clicked.connect(self._pick_efi_source)
@@ -2471,7 +2479,7 @@ class MainWindow(QMainWindow):
         rcv = QVBoxLayout(rec_card)
         rec_row = QHBoxLayout()
         self.usb_recovery_chk = QCheckBox(tr.t("usb.include_recovery"))
-        self.usb_recovery_chk.setChecked(True)
+        self.usb_recovery_chk.setChecked(bool(uistate.get("usb_recovery", True)))
         rec_row.addWidget(self.usb_recovery_chk)
         rec_row.addStretch()
         rcv.addLayout(rec_row)
@@ -2493,11 +2501,13 @@ class MainWindow(QMainWindow):
         ver_row.addWidget(self.usb_recovery_ver, 1)
         rcv.addLayout(ver_row)
         self.usb_recovery_chk.toggled.connect(self._usb_recovery_toggle)
+        self.usb_recovery_ver.setEnabled(self.usb_recovery_chk.isChecked())
         v.addWidget(rec_card)
 
         # --- 3.5. Карта USB-портов ---
         self.usb_make_map = QCheckBox(tr.t("usb.make_map"))
-        self.usb_make_map.setChecked(True)
+        self.usb_make_map.setChecked(bool(uistate.get("usb_map", True)))
+        self.usb_make_map.toggled.connect(lambda on: uistate.save(usb_map=bool(on)))
         v.addWidget(self.usb_make_map)
         map_desc = _muted(page, tr.t("usb.make_map_desc")); map_desc.setWordWrap(True)
         v.addWidget(map_desc)
@@ -2841,26 +2851,28 @@ class MainWindow(QMainWindow):
             "repair": "usb.mode_repair",
         }.get(mode, "usb.mode_full")
         self.usb_mode_desc.setText(tr.t(key))
+        uistate.save(usb_mode=mode)
 
     def _usb_recovery_toggle(self, on: bool):
         self.usb_recovery_ver.setEnabled(bool(on))
+        uistate.save(usb_recovery=bool(on))
 
     def _pick_efi_source(self):
         d = QFileDialog.getExistingDirectory(self, tr.t("usb.source"))
         if d:
             self.usb_source.setText(d)
+            uistate.save(usb_source=d)
 
     def _usb_start(self):
         """Проверка входных данных и запуск подтверждения."""
-        if not self.profile:
-            QMessageBox.information(self, tr.t("usb.title"), tr.t("usb.need_scan"))
-            return
-        if self.usb_source.text() == "—":
+        # Сканирование для записи готовой EFI не нужно: источник — папка с EFI.
+        src = self.usb_source.text().strip()
+        if not src or src == "—" or not Path(src).is_dir():
             QMessageBox.warning(self, tr.t("usb.title"), tr.t("usb.need_source"))
             return
         idx = self.usb_combo.currentIndex()
         if idx < 0 or not getattr(self, "usb_devices", None):
-            QMessageBox.warning(self, tr.t("usb.title"), tr.t("usb.need_source"))
+            QMessageBox.warning(self, tr.t("usb.title"), tr.t("usb.no_devices"))
             return
         device = self.usb_combo.itemData(idx)
         self._usb_confirm(device)
