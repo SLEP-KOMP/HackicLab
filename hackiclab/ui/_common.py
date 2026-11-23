@@ -126,7 +126,7 @@ def _efi_root_for(folder) -> Path:
 def _macos_newer(a: str, b: str) -> bool:
     """Версия a новее b? (по имени macOS). Для подсказки о несовместимости."""
     order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
-             "Ventura", "Sonoma", "Sequoia", "Tahoe"]
+             "Ventura", "Sonoma", "Sequoia", "Tahoe", "Golden Gate"]
 
     def idx(x):
         for i, n in enumerate(order):

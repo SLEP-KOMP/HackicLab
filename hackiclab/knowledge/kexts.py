@@ -173,11 +173,11 @@ SMBIOS_MAP: dict[tuple, str] = {
 # Порядок версий macOS (от старых к новым) для сравнения совместимости SMBIOS.
 _MACOS_ORDER = [
     "High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
-    "Ventura", "Sonoma", "Sequoia", "Tahoe",
+    "Ventura", "Sonoma", "Sequoia", "Tahoe", "Golden Gate",
 ]
 
 # Числовые версии macOS в том же порядке: индекс строки — это индекс версии.
-_MACOS_NUMBERS = ("10.13", "10.14", "10.15", "11", "12", "13", "14", "15", "26")
+_MACOS_NUMBERS = ("10.13", "10.14", "10.15", "11", "12", "13", "14", "15", "26", "27")
 
 
 def _macos_idx(target: str) -> int:

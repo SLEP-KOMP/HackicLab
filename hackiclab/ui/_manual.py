@@ -233,7 +233,7 @@ class ManualBuildMixin:
         from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
         ceiling = MAX_MACOS_BY_GEN.get(profile.cpu.generation, "Sonoma")
         order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
-                 "Ventura", "Sonoma", "Sequoia", "Tahoe"]
+                 "Ventura", "Sonoma", "Sequoia", "Tahoe", "Golden Gate"]
 
         def rank(name: str) -> int:
             low = (name or "").lower()

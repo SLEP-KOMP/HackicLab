@@ -79,6 +79,7 @@ def max_macos_for(profile: HardwareProfile) -> str:
 
 # Версии macOS с их кодовыми именами
 MACOS_VERSIONS: list[dict] = [
+    {"name": "macOS Golden Gate", "version": "27", "release": 2026},
     {"name": "macOS Tahoe", "version": "26", "release": 2025},
     {"name": "macOS Sequoia", "version": "15", "release": 2024},
     {"name": "macOS Sonoma", "version": "14", "release": 2023},

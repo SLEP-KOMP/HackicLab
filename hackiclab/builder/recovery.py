@@ -59,6 +59,7 @@ RECOVERY_CACHE_DIR = _recovery_cache_dir()
 
 
 MACOS_VERSIONS: list[MacOSVersion] = [
+    MacOSVersion("macOS Golden Gate (27)", "27", "Mac-27AD2F918AE68F61", "00000000000000000", os_flag="-os latest", release=2026),
     MacOSVersion("macOS Tahoe (26)", "26", "Mac-CFF7D910A743CAAF", "00000000000000000", os_flag="-os latest", release=2025),
     MacOSVersion("macOS Sequoia (15)", "15", "Mac-7BA5B2D9E42DDD94", "00000000000000000", release=2024),
     MacOSVersion("macOS Sonoma (14)", "14", "Mac-827FAC58A8FDFA22", "00000000000000000", release=2023),
