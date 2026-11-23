@@ -1,0 +1,50 @@
+# Настройки инструментов разработки HackicLab.
+# Сам проект устанавливается из requirements.txt, это файл только для линтера,
+# форматтера и анализатора типов (VS Code / Pylance / Ruff).
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["build", "dist", "hackiclab/assets", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+    "SIM",  # flake8-simplify
+    "PERF", # perflint
+    "RUF",  # правила самого Ruff
+]
+ignore = [
+    "E501",    # длинные строки: QSS и тексты интерфейса
+    "E701",    # в UI-коде намеренно короткие "a = X(); a.setY()" в одну строку
+    "E702",
+    "E741",    # однобуквенные имена (l, i) в циклах Qt
+    "B008",    # Qt-идиома: объект создаётся прямо в аргументе по умолчанию
+    "RUF001",  # кириллица и типографика в пользовательских строках
+    "RUF002",
+    "RUF003",
+    "RUF012",  # классовые константы в dataclass-подобных моделях
+    "SIM108",  # тернарник не всегда читается лучше if
+    "SIM105",  # try/except/pass вокруг вызовов ОС и Qt читается проще suppress
+    "PERF203", # try/except внутри циклов — это ретраи и разбор внешних данных
+    "PERF401", # сборка списка в цикле с условиями остаётся читаемой
+    "PERF402", # копирование списка в цикле — не горячий путь
+    "B019",    # lru_cache на методе с ограниченным числом экземпляров
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PERF401", "SIM117"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["hackiclab", "main.py", "tests"]
+exclude = ["build", "dist", "hackiclab/assets"]
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
+reportMissingTypeStubs = "none"
