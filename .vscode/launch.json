@@ -24,6 +24,17 @@
       }
     },
     {
+      "name": "HackicLab: диагностика переводов",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "args": ["--check-i18n"],
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
       "name": "Тесты: все",
       "type": "debugpy",
       "request": "launch",

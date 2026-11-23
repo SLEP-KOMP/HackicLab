@@ -37,6 +37,12 @@
       "problemMatcher": []
     },
     {
+      "label": "Ruff: проверить i18n целиком",
+      "type": "shell",
+      "command": "python -m unittest discover -s tests -t tests -p test_i18n.py -v",
+      "problemMatcher": []
+    },
+    {
       "label": "Собрать EXE",
       "type": "shell",
       "command": "python -m PyInstaller --noconfirm --clean HackicLab.spec",
@@ -47,6 +53,15 @@
       "label": "Установить зависимости",
       "type": "shell",
       "command": "python -m pip install -r requirements.txt",
+      "problemMatcher": []
+    },
+    {
+      "label": "Проверка перед релизом",
+      "dependsOn": [
+        "Ruff: проверка",
+        "Тесты"
+      ],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     }
   ]
