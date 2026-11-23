@@ -1,0 +1,88 @@
+name: macOS build
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "hackiclab/**"
+      - "main.py"
+      - "requirements*.txt"
+      - ".github/workflows/build-macos.yml"
+  workflow_dispatch:
+
+env:
+  PYTHON_PKG: python-3.12.10-macos11.pkg
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Отдельные сборки: universal2 весит вдвое больше, а нужна одна из двух.
+        # label — понятное пользователю имя файла релиза.
+        include:
+          - arch: arm64
+            label: apple_silicon
+          - arch: x86_64
+            label: intel
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Версия приложения
+        id: app
+        run: echo "version=$(python3 -c 'import hackiclab; print(hackiclab.__version__)')" >> "$GITHUB_OUTPUT"
+
+      # python.org — universal2, поэтому из него можно собрать любую из архитектур.
+      - name: Python universal2
+        run: |
+          curl -fsSL -o /tmp/python.pkg "https://www.python.org/ftp/python/3.12.10/${PYTHON_PKG}"
+          sudo installer -pkg /tmp/python.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
+
+      - name: Зависимости
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-dev.txt
+
+      - name: Смоук-тест интерфейса (offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python3 main.py --check-i18n=out-macos.json
+          python3 -c "import json;d=json.load(open('out-macos.json'));print('nav:',len(d['ru']['nav']))"
+
+      - name: Сборка .app (${{ matrix.arch }})
+        run: |
+          pyinstaller --noconfirm --windowed --target-arch ${{ matrix.arch }} --name HackicLab \
+            --add-data "hackiclab/assets:hackiclab/assets" \
+            --hidden-import hackiclab.scanner \
+            --hidden-import hackiclab.knowledge \
+            --hidden-import hackiclab.builder \
+            --hidden-import hackiclab.analyzer \
+            --hidden-import hackiclab.ui \
+            --hidden-import hackiclab.scanner.diskmap \
+            --hidden-import hackiclab.builder.usb_map \
+            --hidden-import hackiclab.builder.config_editor \
+            --hidden-import hackiclab.builder.history \
+            --hidden-import hackiclab.builder.amd_patches \
+            --hidden-import hackiclab.analyzer.oc_log \
+            main.py
+          echo "архитектура: $(lipo -archs dist/HackicLab.app/Contents/MacOS/HackicLab)"
+
+      - name: Архив
+        run: |
+          name="HackicLab_${{ steps.app.outputs.version }}_macos_${{ matrix.label }}.zip"
+          ditto -c -k --keepParent dist/HackicLab.app "$name"
+          shasum -a 256 "$name" | tee "$name.sha256"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: HackicLab_macOS_${{ matrix.label }}
+          path: |
+            HackicLab_${{ steps.app.outputs.version }}_macos_${{ matrix.label }}.zip
+            HackicLab_${{ steps.app.outputs.version }}_macos_${{ matrix.label }}.zip.sha256
