@@ -169,15 +169,17 @@ class ParseReleaseTests(unittest.TestCase):
         self.assertEqual(info.version, "9.9.8")
 
     def test_cache_respected_without_network(self):
+        """Без сети кэш остаётся запасным источником (но не «мгновенным»)."""
         payload = json.dumps(release("9.9.7")).encode("utf-8")
         self._temp_cache()
         with mock.patch.object(updater, "_http", return_value=(200, {}, payload)):
             updater.check_for_update(force=True)
-        with mock.patch.object(updater, "_http") as http:
+        with mock.patch.object(updater, "_http",
+                               side_effect=updater.UpdateError("нет сети")), \
+                mock.patch.object(updater, "_fetch_atom_tag", return_value=""):
             info = updater.check_for_update()
         assert info is not None
         self.assertEqual(info.version, "9.9.7")
-        http.assert_not_called()
 
     def test_not_modified_uses_cache(self):
         payload = json.dumps(release("9.9.6")).encode("utf-8")
@@ -189,6 +191,24 @@ class ParseReleaseTests(unittest.TestCase):
         assert info is not None
         self.assertEqual(info.version, "9.9.6")
 
+
+    def test_removed_release_in_cache_not_offered_when_network_ok(self):
+        """Фантомный кэш (релиз удалён) не побеждает честный ответ API.
+
+        Регресс-тест: релиз 1.0.5 удалили на GitHub, а кэш ещё помнит его.
+        Раньше свежий кэш отдавался fast-path'ом без сети — окно
+        «Доступна новая версия 1.0.5» висело после удаления релиза.
+        """
+        payload = json.dumps(release("1.0.5")).encode("utf-8")
+        self._temp_cache()
+        with mock.patch.object(updater, "_http", return_value=(200, {}, payload)):
+            updater.check_for_update(force=True)
+        with mock.patch.object(updater, "_http",
+                               return_value=(200, {}, json.dumps(
+                                   release("9.9.9")).encode("utf-8"))):
+            info = updater.check_for_update()
+        assert info is not None
+        self.assertEqual(info.version, "9.9.9")  # не 1.0.5 из кэша
 
     def test_stale_cache_does_not_offer_same_version(self):
         """Кэш от прошлой заливки не должен превращаться в «доступно обновление»."""

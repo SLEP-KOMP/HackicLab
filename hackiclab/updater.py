@@ -46,9 +46,6 @@ ASSET_PATTERN = re.compile(r"^HackicLab_(?P<version>[^/]+)_windows_x64\.exe$", r
 #: отличить «ту же сборку» от пересборки, когда GitHub отдаёт 403/429.
 DIGEST_SUFFIX = ".sha256"
 
-#: Сколько держать результат проверки, чтобы не тратить лимит GitHub API.
-CACHE_TTL = 6 * 3600
-
 
 class UpdateError(RuntimeError):
     """Ошибка обновления с текстом, который можно показать пользователю."""
@@ -382,16 +379,15 @@ def _fetch_atom_tag() -> str:
 def check_for_update(timeout: int = 25, force: bool = False) -> Optional[UpdateInfo]:
     """Ищет новый релиз: API → лента releases.atom → кэш.
 
-    При исчерпанном лимите GitHub (HTTP 403/429) это не ошибка для
-    пользователя: сначала пробуем ленту релизов, затем последний удачный
-    ответ из кэша. Исключение UpdateError бросается, только если данных нет
-    совсем.
+    Кэш — только заглушка при недоступной сети или исчерпанном лимите
+    GitHub, а не источник решения: свежую запись из кэша не возвращаем
+    «почти бесплатно», иначе после удаления релиза на GitHub она вечно
+    предлагала бы уже несуществующую версию. Всегда опрашиваем сервер
+    (API, при 403/429 — ленту), и лишь если данных нет совсем — отдаём
+    последний удачный ответ из кэша.
     """
     cache = _read_cache()
     cached = _cached_update(cache)
-    fresh = (time.time() - float(cache.get("ts") or 0)) < CACHE_TTL
-    if not force and cached is not None and fresh:
-        return cached
 
     rate_limited = False
     try:
