@@ -60,6 +60,7 @@ exe = EXE(
     [],
     name=EXE_NAME,
     icon=str(SPEC_DIR / "hackiclab" / "assets" / "branding" / "icon.ico"),
+    version=str(SPEC_DIR / "version_info.txt"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

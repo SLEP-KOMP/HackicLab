@@ -119,6 +119,26 @@ python -m PyInstaller --noconfirm --clean HackicLab.spec
 # результат: dist/HackicLab.exe
 ```
 
+## Ложное срабатывание антивируса
+
+Сборки без цифровой подписи иногда попадают под эвристику Windows Defender
+как «троян». Это ложное срабатывание: EXE собирается из этого репозитория
+через PyInstaller, исходный код открыт.
+
+Сверьте SHA-256 файла с хэшем из релиза (рядом лежит `*.sha256`):
+
+```powershell
+Get-FileHash .\HackicLab_1.0.0_windows_x64.exe -Algorithm SHA256
+```
+
+Хэш текущего релиза v1.0.0:
+
+`4e90274a1bebf140993fa5d6ca0501218a30322d21ab448d3a05c00a0a17fdbc`
+
+Если хэш совпал — файл можно восстановить в «Журнале защиты» кнопкой
+«Разрешить» и сообщить о ложном срабатывании в Microsoft:
+https://www.microsoft.com/en-us/wdsi/filesubmission
+
 ## Структура проекта
 
 ```
