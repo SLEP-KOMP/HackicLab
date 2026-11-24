@@ -1,53 +1,34 @@
-# HackicLab 1.0.0 — новые опции загрузчика и консольный аудит EFI
+# HackicLab 1.1.0 — Pentium/Celeron, Core 2 Duo, Clover и разбор совместимости
 
-Первый релиз с версией `1.0.0`. Файлы называются так, чтобы сразу было видно,
-что это и для какой платформы:
+Файлы релиза:
 
-- `HackicLab_1.0.0_windows_x64.exe` — Windows x64;
-- `HackicLab_1.0.0_macos_apple_silicon.zip` — Mac с Apple Silicon (arm64);
-- `HackicLab_1.0.0_macos_intel.zip` — Mac с Intel (x86_64).
+- `HackicLab_1.1.0_windows_x64.exe` — Windows x64;
+- `HackicLab_1.1.0_macos_apple_silicon.zip` — Mac с Apple Silicon (arm64);
+- `HackicLab_1.1.0_macos_intel.zip` — Mac с Intel (x86_64).
 
 К каждому файлу лежит `.sha256`.
 
-## Новые опции загрузчика
+## Новое железо
 
-Раньше эти UEFI-драйверы OpenCore не поддерживались — теперь у каждого есть
-галочка на вкладке «Сборка» и в шаге «Опции» мастера (по умолчанию выключены):
+- **Pentium/Celeron 7–12 поколений**: подмена CPUID и DummyPowerManagement,
+  iGPU отключается — нужна дискретная карта.
+- **AMD Ryzen 5 5600G (Cezanne)**: графика через NootedRed.
+- **Intel Core 2 Duo/Quad (Penryn)**: High Sierra, FakeSMC вместо VirtualSMC.
+- Sandy Bridge теперь тоже получает FakeSMC.
 
-- **Звук в меню загрузчика (AudioDxe)** — драйвер `AudioDxe.efi` плюс
-  `UEFI/Audio`: включается `AudioSupport`, `PlayChime = Auto`, а адрес
-  HDA-контроллера `AudioDevice` подставляется из сканирования железа
-  (`pci_path`). Сам драйвер без этих ключей звука не даёт.
-- **Сетевая загрузка PXE/HTTP(S) (OpenNetworkBoot)** — `OpenNetworkBoot.efi`
-  и полный сетевой стек в правильном порядке: SNP, MNP, ARP, DHCP4/6, IP4/6,
-  UDP4/6, MTFTP4/6, TCP, PXE BC, DNS, HTTP, HttpUtilities, HttpBoot, TLS. Плагин
-  идёт последним. Нужен сетевой сервер и адаптер, видимый прошивке; для обычной
-  установки с флешки не требуется.
-- **Загрузка legacy-ОС (OpenLegacyBoot)** — `OpenLegacyBoot.efi` для старых
-  MBR/BIOS-систем. Работает только на системах с CSM или при загрузке через
-  OpenDuet.
+## Аудит и предупреждения
 
-## Консольный аудит EFI
+- **Clover EFI**: аудит распознаёт `EFI/CLOVER` и показывает SMBIOS, boot-args,
+  кексты, драйверы и ACPI-таблицы.
+- **macOS 27**: предупреждение, что запуск только через Liberator/патчер.
+- **NVIDIA**: предупреждение об отсутствии поддержки с macOS 11.
+- **Wi-Fi/Bluetooth и GPU**: подсказки по чипсетам и видеокартам на вкладке
+  «Валидация».
 
-- **`tools/efi_doctor.py`** — проверка любого OpenCore EFI прямо из терминала,
-  без запуска интерфейса и без прав администратора (только чтение):
-  `python tools/efi_doctor.py "Y:\EFI"`. Без аргумента сам находит единственный
-  смонтированный EFI (буквы дисков в Windows, `/Volumes` на macOS, `/media` и
-  `/mnt` на Linux).
-- Код возврата удобен для скриптов и баг-репортов: `0` — ошибок нет, `1` — есть
-  ошибки, `2` — цель не найдена.
-- Тот же вход доступен как `python -m hackiclab.analyzer.efi_health <EFI>`.
+## Данные
 
-## Обновления и проверки
+- Аудиокодеков стало 110+ (добито 18 из вики AppleALC).
+- Новые источники: Mist, WhateverGreen, OpenCore Configuration.pdf.
 
-- Поддержка **macOS 27 Golden Gate** (добавлена ранее в этой линии); квирки
-  Booter/Kernel сверены с OpenCore 1.0.9.
-- Апдейтер больше не доверяет локальному кэшу: сервер GitHub опрашивается всегда,
-  кэш используется только как заглушка при недоступности сети или лимите API.
-- Полный прогон юнит-тестов: i18n (40), конфиги (16), генерация config.plist (13),
-  драйверы/пикер/аудио (12), мастер (25), аудит EFI (10) — всё зелёное.
-
-## Установка
-
-Портативный EXE — запустите, установка не требуется. Делайте резервные копии
-важных данных: запись EFI стирает содержимое флешки.
+> Сборка без подписи: Defender иногда ругается на EXE. Сверяйте SHA-256
+> с файлом `.sha256` из релиза.

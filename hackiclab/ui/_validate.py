@@ -386,3 +386,16 @@ class ValidateMixin:
             self.val_hw_box.addWidget(t)
             if w == "broadcom" and p.net.has_bt:
                 self.val_hw_box.addWidget(_val(self.val_hw_card, tr.t("validate.bt_broadcom")))
+        from ..knowledge.gpu_support import gpu_note
+        from ..knowledge.wifi_bt import note_for as wifi_note
+        lang = "en" if tr.current == "en" else "ru"
+        notes = [wifi_note(getattr(p.net, "wifi_name", "") or "").get(lang, "")]
+        gpu = getattr(p, "dgpu", None) or getattr(p, "igpu", None)
+        if gpu is not None:
+            notes.append(gpu_note(getattr(gpu, "vendor", ""),
+                                  getattr(gpu, "device_id", "")).get(lang, ""))
+        extra = [n for n in notes if n]
+        if extra:
+            self.val_hw_card.setVisible(True)
+            for note in extra:
+                self.val_hw_box.addWidget(_val(self.val_hw_card, note))
