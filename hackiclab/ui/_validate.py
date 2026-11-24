@@ -78,7 +78,7 @@ class ValidateMixin:
 
         # --- быстрые правки config.plist ---
         from ..builder.config_editor import (SECURE_BOOT_MODELS, add_boot_args,
-                                             suggest_audio_layout)
+                                             suggest_audio_layouts)
         quick = self._card(page)
         self.quick_card = quick
         qv = QVBoxLayout(quick)
@@ -103,12 +103,14 @@ class ValidateMixin:
         qv.addLayout(preset_row)
         arow = QHBoxLayout()
         self.quick_codec = QLineEdit()
-        self.quick_codec.setPlaceholderText("ALC295")
-        audio_btn = QPushButton("alcid")
+        self.quick_codec.setPlaceholderText(tr.t("validate.audio_placeholder"))
+        audio_btn = QPushButton(tr.t("validate.audio_alcid"))
         audio_btn.clicked.connect(self._quick_audio)
         arow.addWidget(self.quick_codec, 1)
         arow.addWidget(audio_btn)
         qv.addLayout(arow)
+        self.audio_variants = QHBoxLayout()
+        qv.addLayout(self.audio_variants)
         qv.addLayout(qargs)
 
         qrow = QHBoxLayout()
@@ -336,12 +338,24 @@ class ValidateMixin:
             if cand.is_file():
                 return cand
         return None
+
     def _quick_audio(self):
-        """Подставляет alcid по кодеку из базы AppleALC."""
-        layout = suggest_audio_layout(self.quick_codec.text())
-        if layout:
-            self.quick_bootargs.setText(
-                add_boot_args(self.quick_bootargs.text(), f"alcid={layout}"))
+        """Показывает варианты alcid по кодеку из базы AppleALC."""
+        while self.audio_variants.count():
+            item = self.audio_variants.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        variants = suggest_audio_layouts(self.quick_codec.text())
+        if not variants:
+            self.audio_variants.addWidget(QLabel(tr.t("validate.audio_unknown")))
+        for layout in variants:
+            chip = QPushButton(f"alcid={layout}")
+            chip.setObjectName("ghost")
+            chip.clicked.connect(
+                lambda _=False, n=layout: self.quick_bootargs.setText(
+                    add_boot_args(self.quick_bootargs.text(), f"alcid={n}")))
+            self.audio_variants.addWidget(chip)
+        self.audio_variants.addStretch()
 
     def _do_audit(self):
         """Структурный аудит EFI: kexts, ACPI, драйверы, SIP, USB."""

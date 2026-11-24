@@ -153,15 +153,11 @@ def add_boot_args(text: str, *flags: str) -> str:
     return serialize_boot_args(args)
 
 
-def suggest_audio_layout(codec: str) -> int | None:
-    """Первый рабочий layout-id для кодека из базы AppleALC."""
-    from ..knowledge.audio_layouts import LAYOUTS
+def suggest_audio_layouts(codec: str, limit: int = 3) -> tuple[int, ...]:
+    """Первые варианты layout-id для кодека из базы AppleALC."""
+    from ..knowledge.audio_layouts import layouts_for
 
-    want = (codec or "").strip().upper()
-    for name, layouts in LAYOUTS.items():
-        if name.upper() == want and layouts:
-            return layouts[0]
-    return None
+    return layouts_for(codec)[:limit]
 
 
 def _nvram_dict(cfg: dict) -> dict:
