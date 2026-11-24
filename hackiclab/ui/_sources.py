@@ -194,7 +194,9 @@ class SourcesMixin:
         meta.setWordWrap(True)
         cv.addWidget(meta)
 
-        for prefix, values in (("kexts", cfg.kexts), ("SSDT", cfg.ssdts), ("quirks", cfg.quirks)):
+        for prefix, values in ((tr.t("sources.kexts"), cfg.kexts),
+                               (tr.t("sources.ssdt"), cfg.ssdts),
+                               (tr.t("sources.quirks"), cfg.quirks)):
             if values:
                 line = _muted(card, f"{prefix}: " + ", ".join(values))
                 line.setWordWrap(True)
