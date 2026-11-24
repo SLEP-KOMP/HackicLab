@@ -399,3 +399,8 @@ class ValidateMixin:
             self.val_hw_card.setVisible(True)
             for note in extra:
                 self.val_hw_box.addWidget(_val(self.val_hw_card, note))
+        from ..knowledge.compat import warnings_for
+        target = self.macos_combo.currentData() or ""
+        for ru, en in warnings_for(p, target):
+            self.val_hw_card.setVisible(True)
+            self.val_hw_box.addWidget(_val(self.val_hw_card, en if lang == "en" else ru))
