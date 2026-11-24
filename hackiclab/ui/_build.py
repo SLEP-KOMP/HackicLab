@@ -9,6 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
@@ -34,6 +36,7 @@ from .apple_progress import AppleProgressBar
 class BuildPageMixin:
     def _build_build(self):
         page = QWidget()
+        self._build_page = page
         v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(page, v, "build.title")
         self._stat_tiles(page, v, [
@@ -118,6 +121,38 @@ class BuildPageMixin:
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
         main.addWidget(mb)
 
+        # Патчи: что применить к EFI и что — уже на macOS (root-патчи)
+        pb = QGroupBox(tr.t("patches.title"))
+        pv = QVBoxLayout(pb)
+        phint = _muted(page, tr.t("patches.hint")); phint.setWordWrap(True)
+        pv.addWidget(phint)
+        prow = QHBoxLayout()
+        self.patch_auto = QRadioButton(tr.t("patches.auto"))
+        self.patch_auto.setChecked(True)
+        self.patch_manual = QRadioButton(tr.t("patches.manual"))
+        prow.addWidget(self.patch_auto)
+        prow.addWidget(self.patch_manual)
+        prow.addStretch()
+        self.patch_refresh_btn = QPushButton(tr.t("patches.refresh"))
+        self.patch_refresh_btn.setObjectName("ghost")
+        self.patch_refresh_btn.clicked.connect(self._refresh_patches)
+        prow.addWidget(self.patch_refresh_btn)
+        pv.addLayout(prow)
+        self.patch_list = QVBoxLayout()
+        pv.addLayout(self.patch_list)
+        pv.addWidget(_h2(page, tr.t("patches.report")))
+        self.patch_report = QPlainTextEdit()
+        self.patch_report.setReadOnly(True)
+        self.patch_report.setMinimumHeight(150)
+        pv.addWidget(self.patch_report)
+        self.patch_copy_btn = QPushButton(tr.t("patches.copy"))
+        self.patch_copy_btn.setObjectName("ghost")
+        self.patch_copy_btn.clicked.connect(self._copy_patch_report)
+        pv.addWidget(self.patch_copy_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.patch_auto.toggled.connect(lambda _on: self._refresh_patches())
+        main.addWidget(pb)
+        self._refresh_patches()
+
         # destination with explicit button
         dest_card = self._card(page)
         dv = QVBoxLayout(dest_card)
@@ -198,6 +233,62 @@ class BuildPageMixin:
         sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         v.addWidget(share)
         return page
+    def _patch_items(self):
+        """План патчей для текущего профиля и целевой macOS."""
+        from ..knowledge import patches as patch_kb
+        try:
+            profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
+                self._manual_selection())
+        except Exception:
+            profile = None
+        target = self.macos_combo.currentData() or ""
+        if profile is None:
+            return patch_kb, [], None, target
+        return patch_kb, patch_kb.plan(profile, target), profile, target
+
+    def _patch_ids(self):
+        """None — «Авто» (всё нужное), иначе набор отмеченных id."""
+        if getattr(self, "patch_auto", None) is not None and self.patch_auto.isChecked():
+            return None
+        return {i for i, cb in getattr(self, "_patch_checks", {}).items() if cb.isChecked()}
+
+    def _refresh_patches(self):
+        """Пересобирает список патчей и отчёт под железо/язык/режим."""
+        kb, items, profile, target = self._patch_items()
+        while self.patch_list.count():
+            w = self.patch_list.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        self._patch_checks = {}
+        manual = not self.patch_auto.isChecked()
+        if not items:
+            self.patch_list.addWidget(_muted(self._build_page, tr.t("patches.empty")))
+        for p in items:
+            cb = QCheckBox(p.title(tr.current))
+            cb.setToolTip(p.detail(tr.current))
+            cb.setChecked(p.auto)
+            cb.setEnabled(manual)
+            cb.toggled.connect(lambda _on: self._render_patch_report())
+            self.patch_list.addWidget(cb)
+            self._patch_checks[p.id] = cb
+        self._render_patch_report()
+
+    def page_build_owner(self):
+        """Родитель для виджетов патчей (первая найденная страница)."""
+        return self.build_log if hasattr(self, "build_log") else self
+
+    def _render_patch_report(self):
+        kb, items, profile, target = self._patch_items()
+        if profile is None:
+            self.patch_report.setPlainText("")
+            return
+        self.patch_report.setPlainText(
+            kb.report(profile, target, self._patch_ids(), tr.current))
+
+    def _copy_patch_report(self):
+        QApplication.clipboard().setText(self.patch_report.toPlainText())
+        self.manual_result.setText(tr.t("patches.copied"))
+
     def _do_build(self):
         if getattr(self, "_worker_build", None) and self._worker_build.isRunning():
             return
@@ -219,6 +310,7 @@ class BuildPageMixin:
             legacy_boot=self.opt_legacy.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
+            patches=self._patch_ids(),
         )
         plan = BuildPlan(profile=profile, options=opts)
         target = _efi_root_for(dest)

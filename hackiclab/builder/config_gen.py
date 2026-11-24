@@ -72,6 +72,14 @@ class BuildOptions:
     skip_kexts: set = field(default_factory=set)
     # ACPI-патчи, посчитанные по DSDT (переименования под SSDT-HPET)
     extra_acpi_patches: list = field(default_factory=list)
+    # Какие патчи применить: id из knowledge.patches. None — все нужные по железу.
+    patches: Optional[set] = None
+
+
+def _patch_on(options, patch_id: str) -> bool:
+    """Включён ли патч: по умолчанию (None) — всё, что нужно железу."""
+    sel = getattr(options, "patches", None)
+    return True if sel is None else patch_id in sel
 
 
 def _int(name: str) -> bytes:
@@ -177,6 +185,13 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
                 props["framebuffer-fbmem"] = bytes([0x00, 0x00, 0x90, 0x00])
             dp["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"] = props
 
+    # RX 580 2048SP (6FDF): инжект device-id заставляет macOS видеть RX 570.
+    gpu = getattr(profile, "dgpu", None)
+    dev = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "") if gpu else ""
+    gpu_path = (getattr(gpu, "pci_path", "") or "") if gpu else ""
+    if _patch_on(options, "gpu_rx580_spoof") and dev == "6fdf" and gpu_path:
+        dp["Add"].setdefault(gpu_path, {})["device-id"] = bytes([0xDF, 0x67, 0x00, 0x00])
+
     # Аудио: layout-id по UEFI-пути контроллера (AppleALC читает его раньше,
     # чем boot-args, и работает без alcid в обоих режимах).
     audio = getattr(profile, "audio", None)
@@ -212,6 +227,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     # Broadcom Wi-Fi на Sonoma 14+: штатный IOSkywalkFamily не даёт
     # загрузиться legacy-драйверу из набора OCLP — исключаем его на 23.x+.
     if ((profile.net.wifi_chipset or "").lower() == "broadcom"
+            and _patch_on(options, "wifi_broadcom_efi")
             and _macos_major(options.target_macos) >= 14):
         k["Block"] = [{
             "Arch": "x86_64",
@@ -256,14 +272,18 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     if options.disable_sip:
         # меняем только csr-active-config, не теряя boot-args и прочие ключи
         nv["csr-active-config"] = bytes([0x67, 0, 0, 0])
+    if _patch_on(options, "security_root"):
+        # root-патчи OCLP требуют частично отключённого SIP: 0x03080000
+        nv["csr-active-config"] = bytes([0x00, 0x08, 0x03, 0x00])
     # --- Аудио: без alcid AppleALC не знает layout, и звука нет ---
     layout_id = getattr(profile.audio, "layout_id", 0) if profile.audio else 0
-    if layout_id and (profile.audio.codec or "").lower().startswith("alc"):
+    if (layout_id and _patch_on(options, "audio_alcid")
+            and (profile.audio.codec or "").lower().startswith("alc")):
         boot_args = str(nv.get("boot-args") or "")
         if "alcid=" not in boot_args:
             nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
     # Navi: без agdpmod=pikera чёрный экран (Dortania: нужен всем Navi)
-    if is_navi_gpu(profile.dgpu):
+    if is_navi_gpu(profile.dgpu) and _patch_on(options, "gpu_navi_agdp"):
         boot_args = str(nv.get("boot-args") or "")
         if "agdpmod=pikera" not in boot_args:
             nv["boot-args"] = f"{boot_args} agdpmod=pikera".strip()

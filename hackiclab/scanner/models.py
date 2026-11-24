@@ -45,6 +45,7 @@ class GPUInfo:
     pci_device: int = -1
     pci_function: int = -1
     vram_mb: int = 0
+    pci_path: str = ""          # UEFI-путь карты: PciRoot(0x0)/Pci(...)
 
     def as_dict(self) -> dict:
         return {

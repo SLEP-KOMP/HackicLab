@@ -14,7 +14,7 @@ from typing import Optional
 from ..knowledge.kexts import select_kexts, smbios_model_for
 from ..knowledge.ssdt_logics import required_ssdts
 from ..scanner.models import HardwareProfile
-from .config_gen import BuildOptions, generate_config_plist
+from .config_gen import BuildOptions, generate_config_plist, _patch_on
 from .efi_layout import EFIBuildResult, EFILayout
 from .fetcher import GitHubFetcher, download_asset
 from .smbios_gen import SMBIOSData, generate_smbios
@@ -393,7 +393,8 @@ class EFIBuilder:
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)
         kexts_placed = [x.name for x in kexts_dir.iterdir() if x.is_dir() and x.name.endswith('.kext')]
         amd_patches = None
-        if self.plan.profile.cpu.vendor == "amd":
+        if (self.plan.profile.cpu.vendor == "amd"
+                and _patch_on(opts, "cpu_amd")):
             from .amd_patches import fetch_amd_patches
             amd_patches = fetch_amd_patches(log=self._log)
             self._log(f"AMD kernel patches: {len(amd_patches) if amd_patches else 0}")
@@ -401,11 +402,13 @@ class EFIBuilder:
                 res.errors.append(
                     "AMD kernel patches недоступны: EFI не загрузится на Ryzen")
                 res.ok = False
-            layout.write_plist_with_kexts(data, kexts_placed,
-                                          driver_names=res.stats.get("drivers_placed", []),
-                                          kernel_patches=amd_patches,
-                                          acpi_names=res.stats.get("ssdt_placed", []),
-                                          gui_picker=gui_picker)
+        # config.plist пишется всегда: иначе на Intel остаются пустые Kernel/Add
+        # и ACPI/Add — EFI без кекстов и таблиц.
+        layout.write_plist_with_kexts(data, kexts_placed,
+                                      driver_names=res.stats.get("drivers_placed", []),
+                                      kernel_patches=amd_patches,
+                                      acpi_names=res.stats.get("ssdt_placed", []),
+                                      gui_picker=gui_picker)
 
         # Запись в локальную базу отчётов: и удачные, и неудачные сборки.
         # Из неё же строится страница новой задачи GitHub для общей базы.

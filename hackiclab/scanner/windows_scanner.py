@@ -108,6 +108,17 @@ class WindowsScanner:
         if wifi_path:
             p.net.wifi_pci_path = wifi_path
 
+        # Путь видеокарты нужен для инжекта device-id (RX 580 2048SP → 67DF).
+        for gpu in (getattr(p, "dgpu", None), getattr(p, "igpu", None)):
+            if gpu is None or getattr(gpu, "pci_path", ""):
+                continue
+            low = (gpu.name or "").lower()
+            for token in ("radeon", "geforce", "intel(r) hd", "intel(r) uhd",
+                          "intel(r) graphics", "graphics"):
+                if token in low:
+                    gpu.pci_path = pick(token)
+                    break
+
     # --- system ---
     def _detect_system(self, p: HardwareProfile):
         env = ps.run(
