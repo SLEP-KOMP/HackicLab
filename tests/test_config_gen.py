@@ -62,6 +62,22 @@ class ConfigGenTests(unittest.TestCase):
         self.assertNotIn("SSDT-PLUG.aml", paths)
 
 
+    def test_pentium_gets_cpuid_emulation(self):
+        """сообщество: Pentium/Celeron без CPUID-эмуляции падают на старте."""
+        p = desktop_profile()
+        p.cpu.name = "Intel Pentium Gold G5400"
+        p.cpu.generation = 10
+        p.igpu = None
+        cfg = plistlib.loads(generate_config_plist(p, BuildOptions()))
+        emulate = cfg["Kernel"]["Emulate"]
+        self.assertTrue(emulate["DummyPowerManagement"])
+        self.assertEqual(
+            bytes(emulate["Cpuid1Data"]),
+            bytes([0xA0, 0x06, 0x03, 0x00] + [0] * 12))
+        self.assertNotIn("PciRoot(0x0)/Pci(0x2,0x0)",
+                         cfg["DeviceProperties"]["Add"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

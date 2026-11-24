@@ -76,6 +76,16 @@ def parse_intel_model(name: str) -> tuple[int, str]:
             gen = 0
         return gen, _CODENAMES.get(gen, "")
 
+    # Pentium/Celeron: G4560, G5400, G6400, G7400, N5095, J4125
+    mp = re.search(r"(?:pentium|celeron)\s+(?:gold|silver)?\s*([gnj])(\d{4,5})", low)
+    if mp:
+        prefix, num = mp.group(1), int(mp.group(2))
+        if prefix == "g":
+            gen = 8 if num < 5000 else (10 if num < 7000 else 11)
+        else:
+            gen = 10  # Atom-производные Jasper/Tremont: платформа та же
+        return gen, _CODENAMES.get(gen, "")
+
     m1 = re.search(r"i[357]-(\d{3})\b", name, re.IGNORECASE)
     if m1:
         return 1, _CODENAMES[1]

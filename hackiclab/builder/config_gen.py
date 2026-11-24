@@ -91,6 +91,12 @@ _IGPU_RULES = {
 }
 
 
+def _is_pentium_celeron(profile: HardwareProfile) -> bool:
+    """Pentium/Celeron без рабочей iGPU: macOS требует подмену CPUID."""
+    name = (profile.cpu.name or "").lower()
+    return profile.cpu.vendor == "intel" and ("pentium" in name or "celeron" in name)
+
+
 def _igpu_config(profile: HardwareProfile, headless: bool = False):
     """(ig-platform-id, device-id или None) для Intel iGPU."""
     rule = _IGPU_RULES.get(profile.cpu.generation)
@@ -155,7 +161,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     dp = cfg["DeviceProperties"]
     dp["Add"] = {}
     igpu = profile.igpu if (profile.igpu and profile.igpu.vendor == "intel") else None
-    if igpu and profile.cpu.vendor == "intel":
+    if igpu and profile.cpu.vendor == "intel" and not _is_pentium_celeron(profile):
         headless = bool(profile.dgpu and profile.dgpu.vendor == "amd")
         pidi, devid = _igpu_config(profile, headless=headless)
         if pidi:
@@ -195,6 +201,13 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         k["Patch"] = []  # заполняется AMD_Vanilla в сборщике
     else:
         cfg["Kernel"]["Patch"] = []
+        if _is_pentium_celeron(profile):
+            # сообщество (Lux Darkus): Pentium/Celeron 7–12 gen запускаются только
+            # с подменой CPUID и DummyPowerManagement, иначе паника
+            # AppleIntelCPUPowerManagement на старте.
+            k["Emulate"]["Cpuid1Data"] = bytes([0xA0, 0x06, 0x03, 0x00] + [0] * 12)
+            k["Emulate"]["Cpuid1Mask"] = bytes([0xFF] * 4 + [0] * 12)
+            k["Emulate"]["DummyPowerManagement"] = True
 
     # Broadcom Wi-Fi на Ventura 13.3+: штатный IOSkywalkFamily не даёт
     # загрузиться legacy-драйверу из набора OCLP — исключаем его на 23.x+.

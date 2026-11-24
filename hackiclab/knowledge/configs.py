@@ -420,6 +420,55 @@ CONFIGS = tuple(replace(c, **_STRUCT[c.key]) for c in CONFIGS if c.key in _STRUC
 CONFIGS = (*CONFIGS, HwConfig("intel_sandy_desktop", CAT_DESKTOP_INTEL, "Intel Sandy Bridge · i5-2500K + HD 3000", "Intel Sandy Bridge · i5-2500K + HD 3000", cpu="Intel Core i5-2500K / i7-2600K", gpu="HD Graphics 3000", macos="High Sierra 10.13", status=STATUS_LIMITED, kexts=("FakeSMC", "WhateverGreen", "AppleALC", "IntelMausiEthernet"), ssdts=("SSDT-EC",), quirks=("Kernel: AppleCpuPmCfgLock, AppleXcpmCfgLock",), note="Только High Sierra: драйвер HD 3000 в более новых системах удалён. " "Для Sandy Bridge используется FakeSMC, а не VirtualSMC.", note_en="High Sierra only: the HD 3000 driver was removed later. Sandy Bridge " "uses FakeSMC instead of VirtualSMC.", sources=("oc_guide", "gpu_guide"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/sandy-bridge.html", vendor="intel", generation=2, platform="desktop", igpu="0126", macos_min="High Sierra", macos_max="High Sierra"), HwConfig("intel_ivy_desktop", CAT_DESKTOP_INTEL, "Intel Ivy Bridge · i5-3570K + HD 4000", "Intel Ivy Bridge · i5-3570K + HD 4000", cpu="Intel Core i5-3570K / i7-3770K", gpu="HD Graphics 4000", macos="Mojave 10.14 – Catalina 10.15", status=STATUS_LIMITED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausiEthernet"), ssdts=("SSDT-EC", "SSDT-PLUG"), quirks=("Kernel: AppleCpuPmCfgLock",), note="Catalina — последняя система с драйвером HD 4000. Big Sur и новее " "только через OCLP и без аппаратного ускорения графики.", note_en="Catalina is the last release with an HD 4000 driver. Big Sur and " "newer only via OCLP and without graphics acceleration.", sources=("oc_guide", "gpu_guide", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/ivy-bridge.html", vendor="intel", generation=3, platform="desktop", igpu="0162", macos_min="Mojave", macos_max="Catalina"), HwConfig("intel_kaby_desktop", CAT_DESKTOP_INTEL, "Intel Kaby Lake · i5-7600K + HD 630", "Intel Kaby Lake · i5-7600K + HD 630", cpu="Intel Core i5-7600K / i7-7700K", gpu="HD Graphics 630", macos="Big Sur 11 – Ventura 13", status=STATUS_NATIVE, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("DeviceProperties: AAPL,ig-platform-id 0x59120000",), note="Стабильный десктоп без дискретной карты: HD 630 тянет интерфейс, " "SMBIOS — iMac18,3. Sonoma требует OCLP из-за платформы 2017 года.", note_en="A stable desktop without a dGPU: HD 630 drives the UI, SMBIOS " "iMac18,3. Sonoma needs OCLP because the platform is 2017-era.", sources=("oc_guide", "gpu_guide", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/kaby-lake.html", vendor="intel", generation=7, platform="desktop", igpu="5912", macos_min="Big Sur", macos_max="Ventura"), HwConfig("intel_raptor_desktop", CAT_DESKTOP_INTEL, "Intel Raptor Lake · i5-13600K + RX 6600", "Intel Raptor Lake · i5-13600K + RX 6600", cpu="Intel Core i5-13600K / i7-13700K", gpu="Radeon RX 6600 (iGPU не поддерживается)", macos="Ventura 13 – Sonoma 14", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi", "CpuTopologyRebuild", "RestrictEvents"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("Kernel: ProvideCurrentCpuInfo", "Booter: ResizeAppleGpuBars=0"), note="Нужны патчи топологии P+E ядер (CpuTopologyRebuild) и dGPU: iGPU " "Alder/Raptor не имеет драйвера. SMBIOS — MacPro7,1.", note_en="P+E core topology patches (CpuTopologyRebuild) and a dGPU are " "required: Alder/Raptor iGPUs have no driver. Use MacPro7,1 SMBIOS.", sources=("oc_guide", "gpu_amd", "oclp"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/comet-lake.html", vendor="intel", generation=13, platform="desktop", dgpu="73FF", macos_min="Ventura", macos_max="Sonoma"), HwConfig("amd_zen1_1600", CAT_DESKTOP_AMD, "AMD Ryzen 5 1600 · B350 + RX 570", "AMD Ryzen 5 1600 · B350 + RX 570", cpu="AMD Ryzen 5 1600 (Zen)", gpu="Radeon RX 570 (Polaris)", macos="Catalina 10.15 – Ventura 13", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleMCEReporterDisabler"), ssdts=("SSDT-EC-USBX", "SSDT-PLUG"), quirks=("Kernel: AMD Vanilla (Zen)",), note="Zen первого поколения капризнее Zen 2/3: патчи подбираются под " "конкретное число ядер, а часть плат требует RebuildAppleMemoryMap.", note_en="First-gen Zen is pickier than Zen 2/3: patches depend on the core " "count and some boards need RebuildAppleMemoryMap.", sources=("oc_amd", "amd_osx", "efi_subhead"), url="https://dortania.github.io/OpenCore-Install-Guide/AMD/zen.html", vendor="amd", generation=8, platform="desktop", dgpu="67DF", macos_min="Catalina", macos_max="Ventura"), HwConfig("laptop_thinkpad_t440p", CAT_LAPTOP, "Lenovo ThinkPad T440p · i5-4300M + HD 4600", "Lenovo ThinkPad T440p · i5-4300M + HD 4600", cpu="Intel Core i5-4300M (Haswell)", gpu="HD Graphics 4600", macos="Catalina 10.15 – Monterey 12", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "VoodooPS2Controller", "SMCBatteryManager"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX", "SSDT-PNLF"), quirks=("Kernel: AppleCpuPmCfgLock",), note="Классический Haswell-ноутбук: работает до Monterey, дальше нужен OCLP. " "Аккуратно с Wi-Fi: штатный Intel 7260 требует itlwm.", note_en="A classic Haswell laptop: works up to Monterey, then OCLP. Mind the " "Wi-Fi: the stock Intel 7260 needs itlwm.", sources=("oc_guide", "laptop_guide", "itlwm_compat"), url="https://dortania.github.io/OpenCore-Install-Guide/config-laptop.plist/haswell.html", vendor="intel", generation=4, platform="laptop", igpu="0416", macos_min="Catalina", macos_max="Monterey"), HwConfig("mini_nuc7", CAT_MINI, "Intel NUC7i5BNH · i5-7260U + Iris Plus 640", "Intel NUC7i5BNH · i5-7260U + Iris Plus 640", cpu="Intel Core i5-7260U (Kaby Lake-U)", gpu="Iris Plus 640", macos="Big Sur 11 – Ventura 13", status=STATUS_PATCHED, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi", "itlwm"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("DeviceProperties: ig-platform-id 0x59260000",), note="Компактный вариант под macOS без дискретной карты. Wi-Fi Intel 8265 " "работает через itlwm + HeliPort, Bluetooth — через IntelBluetoothFirmware.", note_en="A compact macOS box without a dGPU. The Intel 8265 Wi-Fi works via " "itlwm + HeliPort, Bluetooth via IntelBluetoothFirmware.", sources=("oc_guide", "itlwm_compat"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/kaby-lake.html", vendor="intel", generation=7, platform="mini", igpu="5926", macos_min="Big Sur", macos_max="Ventura"), HwConfig("ws_x299_skylake_x", CAT_WORKSTATION, "Intel Core i9-7900X · X299 + RX 580", "Intel Core i9-7900X · X299 + RX 580", cpu="Intel Core i9-7900X (Skylake-X)", gpu="Radeon RX 580", macos="Monterey 12 – Sonoma 14", status=STATUS_NATIVE, kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi"), ssdts=("SSDT-PLUG", "SSDT-EC-USBX"), quirks=("Kernel: AppleXcpmCfgLock",), note="Skylake-X поддерживается iMac Pro 2017 вплоть до Sonoma/Sequoia: " "SMBIOS iMacPro1,1, ускорение только через dGPU.", note_en="Skylake-X is covered by the 2017 iMac Pro up to Sonoma/Sequoia: use " "iMacPro1,1 SMBIOS, acceleration only via the dGPU.", sources=("oc_guide", "gpu_guide", "tonymacx86"), url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/skylake.html", vendor="intel", generation=6, platform="workstation", dgpu="67DF", macos_min="Monterey", macos_max="Sequoia"))
 
 
+# Pentium/Celeron и APU Cezanne: то, чего не хватало по итогам сообщество.
+CONFIGS = (*CONFIGS,
+    HwConfig(
+        "intel_pentium_g5400",
+        CAT_DESKTOP_INTEL,
+        "Intel Pentium Gold G5400 / Celeron + RX 580",
+        "Intel Pentium Gold G5400 / Celeron + RX 580",
+        cpu="Intel Pentium Gold G5400 / Celeron G5905",
+        gpu="iGPU отключена + Radeon RX 580",
+        macos="Ventura 13 – Sonoma 14",
+        status=STATUS_PATCHED,
+        kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "IntelMausi"),
+        ssdts=("SSDT-PLUG", "SSDT-EC"),
+        quirks=("Kernel: Emulate Cpuid1Data A0060300…, DummyPowerManagement",),
+        note="Pentium/Celeron 7–12 поколений: встроенная графика не поддерживается, "
+             "нужна дискретная карта. macOS запускается с подменой CPUID и "
+             "DummyPowerManagement, иначе паника AppleIntelCPUPowerManagement.",
+        note_en="Pentium/Celeron 7th–12th gen: the iGPU is unsupported, a discrete GPU "
+                "is required. Boot needs CPUID spoofing and DummyPowerManagement, "
+                "otherwise AppleIntelCPUPowerManagement panics.",
+        sources=("oc_guide", "gpu_amd"),
+        url="
+        vendor="intel", generation=10, platform="desktop", igpu="9BC8", dgpu="67DF",
+        macos_min="Ventura", macos_max="Sonoma",
+    ),
+    HwConfig(
+        "amd_ryzen_5600g",
+        CAT_DESKTOP_AMD,
+        "AMD Ryzen 5 5600G (Cezanne) + Vega 7",
+        "AMD Ryzen 5 5600G (Cezanne) + Vega 7",
+        cpu="AMD Ryzen 5 5600G / 5700G (Zen 3)",
+        gpu="Radeon Vega 7 (NootedRed)",
+        macos="Big Sur 11 – Sonoma 14",
+        status=STATUS_PATCHED,
+        kexts=("Lilu", "VirtualSMC", "NootedRed", "AppleALC"),
+        ssdts=("SSDT-EC-USBX",),
+        quirks=("Kernel: AMD Vanilla",),
+        note="APU Cezanne: графику поднимает NootedRed вместо WhateverGreen. "
+             "Нужны AMD-патчи ядра и проверка сна/USB — как на других Ryzen.",
+        note_en="Cezanne APU: NootedRed provides graphics instead of WhateverGreen. "
+                "AMD kernel patches and sleep/USB checks are required as on other Ryzen.",
+        sources=("oc_amd", "amd_osx"),
+        url="https://github.com/ChefKissInc/NootedRed",
+        vendor="amd", generation=11, platform="desktop",
+        macos_min="Big Sur", macos_max="Sonoma",
+    ),
+)
+
+
 def all_configs() -> tuple[HwConfig, ...]:
     return CONFIGS
 
