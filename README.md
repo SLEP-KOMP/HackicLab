@@ -1,5 +1,9 @@
 # HackicLab
 
+<p align="center">
+  <img src="hackiclab/assets/branding/logo-256.png" alt="Логотип HackicLab: синий градиентный квадрат с белой буквой H и дорожкой к узлу" width="140">
+</p>
+
 **Интеллектуальный сборщик Hackintosh EFI** — GUI-приложение (RU/EN), которое сканирует ваше железо на Windows, автоматически подбирает и **реально скачивает** kext и OpenCore, генерирует `config.plist` по **полной схеме OpenCore**, прогоняет его через **ocvalidate** начисто и даёт рекомендации. Включает запись EFI на USB и полноценный установщик macOS Recovery.
 
 [![Release](https://img.shields.io/github/v/release/SLEP-KOMP/HackicLab?include_prereleases&style=flat-square&label=Release)](https://github.com/SLEP-KOMP/HackicLab/releases)

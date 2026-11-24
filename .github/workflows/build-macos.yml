@@ -59,6 +59,7 @@ jobs:
       - name: Сборка .app (${{ matrix.arch }})
         run: |
           pyinstaller --noconfirm --windowed --target-arch ${{ matrix.arch }} --name HackicLab \
+            --icon hackiclab/assets/branding/icon.icns \
             --add-data "hackiclab/assets:hackiclab/assets" \
             --hidden-import hackiclab.scanner \
             --hidden-import hackiclab.knowledge \
