@@ -104,8 +104,8 @@ _reg({
         ),
     ),
     "AirportBrcmFixup": KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup", "AirportBrcmFixup-", "Broadcom WiFi патчи"),
-    # С macOS 13.3 Apple вырезала драйверы Broadcom: нативный модуль работает
-    # только с этим набором — блокировкой штатного IOSkywalkFamily и AMFIPass.
+    # С macOS 14 (Sonoma) Apple вырезала драйверы Broadcom: нативный модуль
+    # работает только с этим набором — блокировкой штатного IOSkywalkFamily.
     "AMFIPass": KextEntry(
         "AMFIPass", "dortania/OpenCore-Legacy-Patcher", "AMFIPass-",
         "Замена amfi=0x80 для патчей OCLP", os_min="big sur",
@@ -114,13 +114,13 @@ _reg({
     ),
     "IOSkywalkFamily": KextEntry(
         "IOSkywalkFamily", "dortania/OpenCore-Legacy-Patcher", "IOSkywalkFamily-",
-        "Legacy Wi-Fi: каркас IOSkywalk для Broadcom", os_min="ventura",
+        "Legacy Wi-Fi: каркас IOSkywalk для Broadcom", os_min="sonoma",
         url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/"
             "Kexts/Wifi/IOSkywalkFamily-v1.2.0.zip",
     ),
     "IO80211FamilyLegacy": KextEntry(
         "IO80211FamilyLegacy", "dortania/OpenCore-Legacy-Patcher", "IO80211FamilyLegacy",
-        "Legacy Wi-Fi: AirPort для Broadcom на Ventura+", os_min="ventura",
+        "Legacy Wi-Fi: AirPort для Broadcom на Sonoma+", os_min="sonoma",
         url="https://github.com/dortania/OpenCore-Legacy-Patcher/raw/main/payloads/Kexts/Wifi/"
             "IO80211FamilyLegacy-v1.0.0.zip",
     ),
@@ -263,12 +263,13 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
     return _intel_desktop_model(profile.cpu.generation, need)
 
 
-_BRCM_LEGACY_FROM = _MACOS_ORDER.index("Ventura")
+_BRCM_LEGACY_FROM = _MACOS_ORDER.index("Sonoma")
 
 
 def _needs_brcm_legacy(target_macos: str = "") -> bool:
-    """Нужен ли набор OCLP для Broadcom: с 13.3 Apple убрала драйверы.
+    """Нужен ли набор OCLP для Broadcom: с macOS 14 Apple убрала драйверы.
 
+    До Sonoma (включая Ventura) BCM4360/43602 работают нативно.
     Пустая цель считается актуальной macOS — тогда набор тоже нужен.
     """
     if not target_macos:
@@ -447,8 +448,8 @@ def _wifi_kexts(chosen: _KextList, profile: HardwareProfile, mode: str,
     if chipset == "broadcom":
         if not native:
             chosen.add("AirportBrcmFixup")
-        # BCM94360/BCM943602 (нативный Apple AirPort): до Ventura 13.2
-        # работает из коробки, на 13.3+ нужен набор OCLP.
+        # BCM94360/BCM943602 (нативный Apple AirPort): до Ventura включительно
+        # работает из коробки, с Sonoma 14+ нужен набор OCLP.
         if native and not _needs_brcm_legacy(target_macos):
             return
         chosen.add("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy")

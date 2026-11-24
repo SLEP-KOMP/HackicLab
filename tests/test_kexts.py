@@ -276,14 +276,15 @@ class AmdAndLegacyWifiTests(unittest.TestCase):
         self.assertIn("NVMeFix", with_nvme)
         self.assertNotIn("NVMeFix", without)
 
-    def test_broadcom_legacy_set_from_ventura(self):
-        for target in ("Ventura", "Sonoma", "Tahoe"):
+    def test_broadcom_legacy_set_from_sonoma(self):
+        """Apple вырезала Broadcom в macOS 14; Ventura ещё работает нативно."""
+        for target in ("Sonoma", "Tahoe"):
             names = [k.name for k in select_kexts(_amd_profile(), target_macos=target)]
             for kext in ("AMFIPass", "IOSkywalkFamily", "IO80211FamilyLegacy"):
                 self.assertIn(kext, names, target)
 
-    def test_broadcom_on_monterey_needs_no_legacy_set(self):
-        names = [k.name for k in select_kexts(_amd_profile(), target_macos="Monterey")]
+    def test_broadcom_on_ventura_needs_no_legacy_set(self):
+        names = [k.name for k in select_kexts(_amd_profile(), target_macos="Ventura")]
         self.assertNotIn("IOSkywalkFamily", names)
         self.assertNotIn("IO80211FamilyLegacy", names)
 
@@ -292,7 +293,7 @@ class AmdAndLegacyWifiTests(unittest.TestCase):
                                               target_macos="Ventura")]
         self.assertIn("AirportBrcmFixup", names)
 
-    def test_config_blocks_stock_ioskywalk_on_ventura_plus(self):
+    def test_config_blocks_stock_ioskywalk_on_sonoma_plus(self):
         cfg = plistlib.loads(generate_config_plist(_amd_profile(),
                                                    BuildOptions(target_macos="Sonoma")))
         blocks = cfg["Kernel"]["Block"]

@@ -209,10 +209,10 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             k["Emulate"]["Cpuid1Mask"] = bytes([0xFF] * 4 + [0] * 12)
             k["Emulate"]["DummyPowerManagement"] = True
 
-    # Broadcom Wi-Fi на Ventura 13.3+: штатный IOSkywalkFamily не даёт
+    # Broadcom Wi-Fi на Sonoma 14+: штатный IOSkywalkFamily не даёт
     # загрузиться legacy-драйверу из набора OCLP — исключаем его на 23.x+.
     if ((profile.net.wifi_chipset or "").lower() == "broadcom"
-            and _macos_major(options.target_macos) >= 13):
+            and _macos_major(options.target_macos) >= 14):
         k["Block"] = [{
             "Arch": "x86_64",
             "Comment": "Broadcom legacy Wi-Fi: IOSkywalk downgrade",
