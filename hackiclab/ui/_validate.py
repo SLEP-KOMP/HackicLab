@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..builder.config_editor import (SECURE_BOOT_MODELS, add_boot_args,
+                                     suggest_audio_layouts)
 from ..i18n import tr
 from ._common import _h2, _has_cyrillic, _issue_title, _muted, _val
 from ._workers import AuditWorker, ValidateWorker
@@ -77,8 +79,6 @@ class ValidateMixin:
         v.addWidget(src)
 
         # --- быстрые правки config.plist ---
-        from ..builder.config_editor import (SECURE_BOOT_MODELS, add_boot_args,
-                                             suggest_audio_layouts)
         quick = self._card(page)
         self.quick_card = quick
         qv = QVBoxLayout(quick)
