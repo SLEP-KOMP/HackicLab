@@ -63,7 +63,9 @@ class ManualBuildMixin:
             vendor_gpu = (getattr(gpu, "vendor", "") or "").lower()
             device = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "")
             if vendor_gpu in ("amd", "nvidia"):
-                gpu_key = vendor_gpu
+                # сначала точный device-id (RX 580 2048SP), потом общий вендор
+                gpu_key = device if device and self.manual_gpu.findData(device) >= 0 \
+                    else vendor_gpu
             elif device and self.manual_gpu.findData(device) >= 0:
                 gpu_key = device
         if gpu_key:

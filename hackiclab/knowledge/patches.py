@@ -163,6 +163,18 @@ def _dev(profile) -> str:
     return (gpu.device_id or "").lower().replace("0x", "")
 
 
+def _is_rx580_2048sp(profile) -> bool:
+    """2048SP узнаём по device-id, а без него — по имени (ручной профиль)."""
+    gpu = getattr(profile, "dgpu", None)
+    if gpu is None:
+        return False
+    dev = _dev(profile)
+    if dev:
+        return dev == "6fdf"
+    name = (gpu.name or "").lower().replace(" ", "")
+    return "2048sp" in name
+
+
 def _is_broadcom(profile) -> bool:
     net = getattr(profile, "net", None)
     return bool(net and (net.wifi_chipset or "").lower() == "broadcom")
@@ -174,6 +186,37 @@ def _has_audio(profile) -> bool:
     return bool(audio and getattr(audio, "layout_id", 0) and codec.startswith("alc"))
 
 
+def merge_scan_paths(profile, scan):
+    """Дополняет ручной профиль UEFI-путями из сканирования.
+
+    Ручная форма не знает PCI-путей, поэтому device-id аудио и видеокарты
+    прописать некуда. Пути и отсутствующий device-id берём у реального скана,
+    если вендор/кодек совпадают.
+    """
+    if profile is None or scan is None:
+        return profile
+    for attr in ("dgpu", "igpu"):
+        mine, real = getattr(profile, attr, None), getattr(scan, attr, None)
+        if not mine or not real:
+            continue
+        if (mine.vendor or "").lower() != (real.vendor or "").lower():
+            continue
+        if not getattr(mine, "pci_path", "") and getattr(real, "pci_path", ""):
+            mine.pci_path = real.pci_path
+        if not getattr(mine, "device_id", "") and getattr(real, "device_id", ""):
+            mine.device_id = real.device_id
+    mine_a, real_a = getattr(profile, "audio", None), getattr(scan, "audio", None)
+    if (mine_a and real_a and not getattr(mine_a, "pci_path", "")
+            and (mine_a.codec or "").upper() == (real_a.codec or "").upper()):
+        mine_a.pci_path = real_a.pci_path
+    mine_n, real_n = getattr(profile, "net", None), getattr(scan, "net", None)
+    if mine_n and real_n:
+        for field in ("eth_pci_path", "wifi_pci_path"):
+            if not getattr(mine_n, field, "") and getattr(real_n, field, ""):
+                setattr(mine_n, field, getattr(real_n, field))
+    return profile
+
+
 def plan(profile, target_macos: str = "") -> list[Patch]:
     """Патчи, которые относятся к этому железу и целевой macOS."""
     major = _macos_major(target_macos)
@@ -182,7 +225,7 @@ def plan(profile, target_macos: str = "") -> list[Patch]:
 
     if cpu is not None and (getattr(cpu, "vendor", "") or "").lower() == "amd":
         out.append(P_AMD_KERNEL)
-    if _dev(profile) == "6fdf":
+    if _is_rx580_2048sp(profile):
         out += [P_GPU_RX580_SPOOF, P_GPU_RX580_VBIOS]
     if _is_broadcom(profile) and major >= 14:
         out += [P_WIFI_BCM_EFI, P_WIFI_BCM_ROOT]
@@ -218,6 +261,13 @@ def report(profile, target_macos: str = "", enabled: set[str] | None = None,
     for p in efi:
         mark = "[x]" if p.id in on else "[ ]"
         lines.append(f"  {mark} {p.title(lang)}")
+    if ("gpu_rx580_spoof" in on and not getattr(
+            getattr(profile, "dgpu", None), "pci_path", "")):
+        lines.append("      ! " + ("Путь карты неизвестен: device-id прописывается "
+                                   "только в сборке по сканированию железа."
+                                   if not lang.startswith("en") else
+                                   "Card PCI path is unknown: device-id is injected "
+                                   "only in builds based on a hardware scan."))
     if sys_:
         lines.append("")
         lines.append("На macOS (root-патчи, вручную после установки):"

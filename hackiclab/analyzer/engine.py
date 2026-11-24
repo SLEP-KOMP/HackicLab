@@ -170,7 +170,7 @@ class Analyzer:
         if not g or (g.vendor or "").lower() != "amd":
             return
         did = (g.device_id or "").lower().replace("0x", "")
-        if did != "6fdf":
+        if did != "6fdf" and "2048sp" not in (g.name or "").lower():
             return
         self.issues.append(AnalysisIssue(
             Severity.ERROR, "gpu_rx580_2048sp",

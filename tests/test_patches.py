@@ -154,5 +154,47 @@ class PatchConfigMixin(unittest.TestCase):
         self.assertNotIn("alcid=", self.nv(self.cfg(set()))["boot-args"])
 
 
+class PatchManualMixin(unittest.TestCase):
+    """Ручной профиль: device-id и UEFI-пути не должны теряться."""
+
+    def test_manual_option_keeps_device_id(self):
+        from hackiclab.knowledge import manual_hw
+        sel = manual_hw.ManualSelection(cpu="amd-zen2d", gpu="6fdf")
+        p = manual_hw.build_profile(sel)
+        self.assertEqual("6FDF", p.dgpu.device_id)
+        ids = [x.id for x in pb.plan(p, "Sequoia")]
+        self.assertIn("gpu_rx580_spoof", ids)
+        self.assertIn("gpu_rx580_vbios", ids)
+
+    def test_name_only_detection_without_device_id(self):
+        p = _ryzen_rx580()
+        p.dgpu.device_id = ""
+        ids = [x.id for x in pb.plan(p, "Sequoia")]
+        self.assertIn("gpu_rx580_spoof", ids)
+
+    def test_merge_copies_pci_path_from_scan(self):
+        manual = _ryzen_rx580()
+        manual.dgpu.pci_path = ""
+        manual.dgpu.device_id = ""
+        pb.merge_scan_paths(manual, _ryzen_rx580())
+        self.assertEqual("PciRoot(0x0)/Pci(0x3,0x1)/Pci(0x0,0x0)",
+                         manual.dgpu.pci_path)
+        self.assertEqual("6fdf", manual.dgpu.device_id.lower())
+
+    def test_merge_keeps_existing_path(self):
+        manual = _ryzen_rx580()
+        manual.dgpu.pci_path = "PciRoot(0x0)/Pci(0x1,0x0)"
+        pb.merge_scan_paths(manual, _ryzen_rx580())
+        self.assertEqual("PciRoot(0x0)/Pci(0x1,0x0)", manual.dgpu.pci_path)
+
+    def test_merge_ignores_other_vendor(self):
+        manual = _ryzen_rx580()
+        manual.dgpu.pci_path = ""
+        scan = _ryzen_rx580()
+        scan.dgpu.vendor = "nvidia"
+        pb.merge_scan_paths(manual, scan)
+        self.assertEqual("", manual.dgpu.pci_path)
+
+
 if __name__ == "__main__":
     unittest.main()

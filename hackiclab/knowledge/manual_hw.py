@@ -164,6 +164,8 @@ GPU_OPTIONS: tuple[GpuOption, ...] = (
     GpuOption("0416", "Intel HD 4600 (Haswell)", "intel", "0416", True),
     GpuOption("1916", "Intel HD 520 (Skylake)", "intel", "1916", True),
     GpuOption("amd", "AMD Radeon (iGPU или дискретная)", "amd", "", False),
+    GpuOption("6fdf", "AMD Radeon RX 580 2048SP", "amd", "6FDF", False,
+              "Нет драйвера: патч device-id или правка VBIOS на RX 570"),
     GpuOption("nvidia", "NVIDIA (macOS не поддерживает)", "nvidia", "", False,
               "Отключите в BIOS или выберите «отключить dGPU» в мастере"),
 )
@@ -236,7 +238,8 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
         profile.igpu = GPUInfo(name=gpu.title.split(" (")[0], vendor="intel",
                                device_id=gpu.device_id, is_integrated=True)
     elif gpu.vendor in ("amd", "nvidia"):
-        profile.dgpu = GPUInfo(name=gpu.title.split(" (")[0], vendor=gpu.vendor)
+        profile.dgpu = GPUInfo(name=gpu.title.split(" (")[0], vendor=gpu.vendor,
+                               device_id=gpu.device_id)
     audio_codec = (selection.audio_codec or "").strip().upper()
     profile.audio = AudioInfo(codec=audio_codec, name=audio_codec)
     if audio_codec:

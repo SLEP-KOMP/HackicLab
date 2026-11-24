@@ -188,8 +188,10 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     # RX 580 2048SP (6FDF): инжект device-id заставляет macOS видеть RX 570.
     gpu = getattr(profile, "dgpu", None)
     dev = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "") if gpu else ""
+    gpu_name = (getattr(gpu, "name", "") or "").lower().replace(" ", "") if gpu else ""
     gpu_path = (getattr(gpu, "pci_path", "") or "") if gpu else ""
-    if _patch_on(options, "gpu_rx580_spoof") and dev == "6fdf" and gpu_path:
+    is_2048sp = dev == "6fdf" or "2048sp" in gpu_name
+    if _patch_on(options, "gpu_rx580_spoof") and is_2048sp and gpu_path:
         dp["Add"].setdefault(gpu_path, {})["device-id"] = bytes([0xDF, 0x67, 0x00, 0x00])
 
     # Аудио: layout-id по UEFI-пути контроллера (AppleALC читает его раньше,

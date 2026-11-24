@@ -146,7 +146,9 @@ class FillFromScanTests(unittest.TestCase):
 
             self.assertEqual(window.manual_cpu.currentData(), "amd-zen2d")
             self.assertEqual(window.manual_cores.value(), 6)
-            self.assertEqual(window.manual_gpu.currentData(), "amd")
+            # 6FDF — это RX 580 2048SP: точная запись важнее общего «AMD Radeon»,
+            # иначе теряется device-id для патча подмены.
+            self.assertEqual(window.manual_gpu.currentData(), "6fdf")
             self.assertEqual(window.manual_audio.text(), "ALC1220")
             self.assertEqual(window.manual_eth.currentData(), "i211")
             self.assertEqual(window.manual_wifi.currentData(), "broadcom")

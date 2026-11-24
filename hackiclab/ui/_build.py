@@ -233,12 +233,18 @@ class BuildPageMixin:
         sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         v.addWidget(share)
         return page
+    def _resolved_profile(self):
+        """Профиль сборки: ручной выбор + UEFI-пути из последнего сканирования."""
+        from ..knowledge import patches as patch_kb
+        profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
+            self._manual_selection())
+        return patch_kb.merge_scan_paths(profile, getattr(self, "profile", None))
+
     def _patch_items(self):
         """План патчей для текущего профиля и целевой macOS."""
         from ..knowledge import patches as patch_kb
         try:
-            profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
-                self._manual_selection())
+            profile = self._resolved_profile()
         except Exception:
             profile = None
         target = self.macos_combo.currentData() or ""
@@ -299,8 +305,7 @@ class BuildPageMixin:
             if dest in ("", "—"):
                 QMessageBox.warning(self, "HackicLab", tr.t("build.pick"))
                 return
-        profile = getattr(self, "manual_profile", None) or manual_hw.build_profile(
-            self._manual_selection())
+        profile = self._resolved_profile()
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
             disable_sip=self.opt_sip.isChecked(),
