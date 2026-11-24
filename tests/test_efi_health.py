@@ -9,7 +9,7 @@ from pathlib import Path
 
 import _bootstrap  # noqa: F401
 
-from hackiclab.analyzer.efi_health import audit
+from hackiclab.analyzer.efi_health import audit, main
 from hackiclab.analyzer.models import Severity
 
 
@@ -84,6 +84,26 @@ class BroadcomAuditTests(unittest.TestCase):
     def test_no_legacy_kext_no_warning(self):
         _make_efi(self.root, ["Lilu"])
         self.assertNotIn("ioskywalk_not_blocked", [i.code for i in audit(self.root)])
+
+
+class ConsoleAuditTests(unittest.TestCase):
+    """Консольный вход python -m hackiclab.analyzer.efi_health."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def test_broken_efi_returns_error_code(self):
+        _make_efi(self.root, ["Lilu"])
+        self.assertEqual(main([str(self.root)]), 1)
+
+    def test_missing_path_returns_usage_code(self):
+        self.assertEqual(main([str(self.root / "nope")]), 2)
+
+    def test_flags_are_ignored(self):
+        _make_efi(self.root, ["Lilu"])
+        self.assertEqual(main(["--doctor", str(self.root)]), 1)
 
 
 if __name__ == "__main__":

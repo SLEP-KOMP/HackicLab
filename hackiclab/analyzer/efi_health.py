@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import plistlib
 import re
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -503,3 +504,74 @@ def format_report(issues: list[AnalysisIssue], efi_root: Path) -> str:
             lines.append(f"    → {issue.suggestion}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+# --- Консольный аудит: python -m hackiclab.analyzer.efi_health <EFI> ---------
+
+def _volume_roots() -> list[Path]:
+    """Корни, где может лежать смонтированный EFI (по платформам)."""
+    if sys.platform == "darwin":
+        return [Path("/Volumes")]
+    if sys.platform.startswith("win"):
+        return [Path(f"{chr(letter)}:\\") for letter in range(ord("A"), ord("Z") + 1)]
+    return [Path("/media"), Path("/mnt")]
+
+
+def find_efi_candidates() -> list[Path]:
+    """Тома, где есть EFI/OC (или сам том является EFI)."""
+    found: list[Path] = []
+    for root in _volume_roots():
+        if not root.is_dir():
+            continue
+        try:
+            volumes = list(root.iterdir())
+        except (PermissionError, OSError):
+            continue
+        for volume in volumes:
+            for efi in (volume / "EFI", volume):
+                try:
+                    if not efi.is_dir():
+                        continue
+                    children = {child.name.lower() for child in efi.iterdir() if child.is_dir()}
+                except (PermissionError, OSError):
+                    continue
+                if "oc" in children:
+                    found.append(efi)
+                    break
+    return found
+
+
+def _usage(candidates: list[Path]) -> None:
+    print("\nИспользование: python -m hackiclab.analyzer.efi_health <папка EFI>\n")
+    print("  Проверяет OpenCore EFI — папку, в которой лежат OC/ и BOOT/.\n")
+    if candidates:
+        print("  Найдено на этом ПК:")
+        for path in candidates:
+            print(f"    {path}")
+    else:
+        print("  Смонтированный EFI не найден — сначала смонтируйте EFI-раздел.")
+    print()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Аудит EFI из консоли. Код возврата: 0 — чисто, 1 — есть ошибки, 2 — нет цели."""
+    args = [a for a in (argv if argv is not None else sys.argv[1:]) if not a.startswith("-")]
+    if args:
+        target = Path(args[0])
+    else:
+        candidates = find_efi_candidates()
+        if len(candidates) != 1:
+            _usage(candidates)
+            return 2
+        target = candidates[0]
+        print(f"Проверяю единственный найденный EFI: {target}")
+    if not target.is_dir():
+        print(f"Не найдена папка: {target}")
+        return 2
+    issues = audit(target)
+    print(format_report(issues, target))
+    return 1 if summarise(issues)["error"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
