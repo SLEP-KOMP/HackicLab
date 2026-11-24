@@ -441,7 +441,7 @@ CONFIGS = (*CONFIGS,
                 "is required. Boot needs CPUID spoofing and DummyPowerManagement, "
                 "otherwise AppleIntelCPUPowerManagement panics.",
         sources=("oc_guide", "gpu_amd"),
-        url="
+        url="",
         vendor="intel", generation=10, platform="desktop", igpu="9BC8", dgpu="67DF",
         macos_min="Ventura", macos_max="Sonoma",
     ),
