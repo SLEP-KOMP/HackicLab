@@ -217,10 +217,15 @@ class AnalyzeMixin:
             return
         from ..knowledge.oc_platforms import MAX_MACOS_BY_GEN
         max_ver = MAX_MACOS_BY_GEN.get(p.cpu.generation, "Sonoma")
+        parts: list[str] = []
         if "unsupported" in max_ver.lower() or (target and target != max_ver and _macos_newer(target, max_ver)):
-            txt = tr.t("build.macos_maybe_incompat")
-        else:
-            txt = ""
+            parts.append(tr.t("build.macos_maybe_incompat"))
+        if target and ("27" in str(target) or "golden gate" in str(target).lower()):
+            parts.append(tr.t("build.macos27_warning"))
+        dgpu = getattr(p, "dgpu", None)
+        if dgpu is not None and str(getattr(dgpu, "vendor", "") or "").lower() == "nvidia":
+            parts.append(tr.t("build.gpu_nvidia_warning"))
+        txt = "\n".join(parts)
         self.macos_incompat.setText(txt)
         self.macos_incompat.setVisible(bool(txt))
     def _pick_build_dir(self):

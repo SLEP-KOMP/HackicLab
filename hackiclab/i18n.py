@@ -384,6 +384,8 @@ T = {
         "build.macos": "Целевая версия macOS",
         "build.macos_desc": "Выберите версию macOS, которую планируете устанавливать. От неё зависит выбор SMBIOS, SecureBootModel и совместимость кекстов. Несовместимые версии будут отмечены.",
         "build.macos_maybe_incompat": "Версия может быть несовместима с вашим железом",
+        "build.macos27_warning": "macOS 27 Golden Gate не запускается нативно: только через Liberator или другой патчер. Нужны x86-64 примерно с 2011 года, 8 ГБ ОЗУ и NVIDIA GTX 16/RTX 20 или новее.",
+        "build.gpu_nvidia_warning": "Видеокарта NVIDIA не поддерживается macOS 11 и новее: нужно либо OCLP, либо более старая macOS, иначе аппаратного ускорения не будет.",
         "build.macos_auto": "— Авто (максимум для железа) —",
         # usb wizard
         "usb.nav": "Запись на USB",
@@ -449,6 +451,7 @@ T = {
         "usb.recovery_download": "Скачивание macOS recovery (может занять время)…",
         "usb.recovery_skip": "Пропустить скачивание recovery",
         "usb.include_recovery": "Скачать macOS Recovery (полноценный установщик)",
+        "usb.mist_hint": "Если установщик не скачивается, возьмите его в Mist (сторонняя утилита):",
         "usb.include_recovery_desc": "Позволяет не только записать EFI, но и установить macOS с этой флешки. Скачивает загрузочные файлы Apple (~1 ГБ) и кладёт их в com.apple.recovery.boot.",
         "usb.recovery_version": "Версия macOS",
         "usb.need_source": "Выберите папку с собранной EFI.",
@@ -1027,6 +1030,8 @@ T = {
         "build.macos": "Target macOS version",
         "build.macos_desc": "Choose the macOS version you plan to install. It affects SMBIOS selection, SecureBootModel and kext compatibility. Incompatible versions will be flagged.",
         "build.macos_maybe_incompat": "Version may be incompatible with your hardware",
+        "build.macos27_warning": "macOS 27 Golden Gate does not run natively: only via Liberator or another patcher. Requires x86-64 from about 2011, 8 GB RAM and NVIDIA GTX 16/RTX 20 or newer.",
+        "build.gpu_nvidia_warning": "NVIDIA GPUs are unsupported on macOS 11 and newer: use OCLP or an older macOS, otherwise there is no hardware acceleration.",
         "build.macos_auto": "— Auto (max for hardware) —",
         # usb wizard
         "usb.nav": "Write to USB",
@@ -1092,6 +1097,7 @@ T = {
         "usb.recovery_download": "Downloading macOS recovery (may take a while)…",
         "usb.recovery_skip": "Skip recovery download",
         "usb.include_recovery": "Download macOS Recovery (full installer)",
+        "usb.mist_hint": "If the installer won't download, get it with Mist (third-party tool):",
         "usb.include_recovery_desc": "Not only writes EFI but also lets you install macOS from this stick. Downloads Apple boot files (~1 GB) into com.apple.recovery.boot.",
         "usb.recovery_version": "macOS version",
         "usb.need_source": "Choose the folder with the built EFI.",

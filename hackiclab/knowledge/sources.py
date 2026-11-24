@@ -45,6 +45,15 @@ SOURCES: dict[str, Source] = {
         "Основной гайд: структура EFI, config.plist, порядок установки",
         "The main guide: EFI layout, config.plist, install order",
     ),
+    "mist": Source(
+        "mist",
+        "https://github.com/ninxsoft/Mist",
+        GROUP_COMMUNITY,
+        "Mist — загрузка образов macOS",
+        "Mist — macOS installer downloader",
+        "Альтернатива macrecovery: скачивает полные установщики macOS",
+        "An alternative to macrecovery: downloads full macOS installers",
+    ),
     "oc_amd": Source(
         "oc_amd",
         "https://dortania.github.io/OpenCore-Install-Guide/AMD/zen.html",

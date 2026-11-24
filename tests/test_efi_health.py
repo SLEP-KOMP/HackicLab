@@ -106,5 +106,33 @@ class ConsoleAuditTests(unittest.TestCase):
         self.assertEqual(main(["--doctor", str(self.root)]), 1)
 
 
+class CloverAuditTests(unittest.TestCase):
+    """Без папки OC аудит должен распознать Clover и разобрать его."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        clover = self.root / "EFI" / "CLOVER"
+        (clover / "kexts" / "Other" / "AppleALC.kext").mkdir(parents=True)
+        (clover / "drivers" / "UEFI").mkdir(parents=True)
+        (clover / "drivers" / "UEFI" / "OpenRuntime.efi").write_bytes(b"x")
+        (clover / "ACPI" / "patched").mkdir(parents=True)
+        (clover / "ACPI" / "patched" / "SSDT-EC.aml").write_bytes(b"x")
+        (clover / "config.plist").write_bytes(plistlib.dumps(
+            {"SMBIOS": {"ProductName": "iMac19,1"},
+             "Boot": {"Arguments": "-v keepsyms=1"}}, fmt=plistlib.FMT_XML))
+
+    def test_clover_is_recognised(self):
+        codes = [i.code for i in audit(self.root)]
+        self.assertIn("clover_efi", codes)
+        self.assertIn("clover_kexts", codes)
+
+    def test_clover_details_list_contents(self):
+        issues = {i.code: i for i in audit(self.root)}
+        self.assertIn("AppleALC", issues["clover_kexts"].detail)
+        self.assertIn("iMac19,1", issues["clover_smbios"].title)
+
+
 if __name__ == "__main__":
     unittest.main()

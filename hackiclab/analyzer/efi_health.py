@@ -440,11 +440,86 @@ def _check_quirks(cfg: dict, issues: list[AnalysisIssue]) -> None:
 
 # --- Публичный API ---------------------------------------------------------
 
+def _clover_dir(root: Path) -> Optional[Path]:
+    """Папка Clover внутри EFI, если OpenCore нет."""
+    for name in ("CLOVER", "Clover"):
+        cand = root / name
+        if (cand / "config.plist").exists():
+            return cand
+    for cfg in root.glob("**/CLOVER/config.plist"):
+        return cfg.parent
+    return None
+
+
+def _audit_clover(clover: Path) -> list[AnalysisIssue]:
+    """Разбор Clover EFI: что там есть и почему нужен переход на OpenCore."""
+    issues: list[AnalysisIssue] = []
+    cfg = _read_plist(clover / "config.plist") or {}
+    issues.append(AnalysisIssue(
+        Severity.WARNING, "clover_efi",
+        "Найден Clover EFI",
+        "Clover не развивается и не подходит для macOS Ventura и новее: "
+        "для современных систем нужен OpenCore.",
+        suggestion="Соберите EFI в HackicLab под это железо и перенесите настройки."))
+
+    smbios = (cfg.get("SMBIOS") or {}).get("ProductName") or ""
+    if smbios:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "clover_smbios", f"SMBIOS: {smbios}",
+            "Проверьте, что выбранная модель поддерживает нужную macOS."))
+
+    boot = cfg.get("Boot") if isinstance(cfg.get("Boot"), dict) else {}
+    args = _as_text((boot or {}).get("Arguments"))
+    if args:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "clover_boot_args", "boot-args: " + args,
+            "Перенесите нужные флаги в NVRAM → boot-args OpenCore."))
+
+    kexts: set[str] = set()
+    kext_root = clover / "kexts"
+    if kext_root.exists():
+        for sub in kext_root.iterdir():
+            if sub.is_dir():
+                kexts.update(k.stem for k in sub.glob("*.kext"))
+    if kexts:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "clover_kexts",
+            f"kexts: {len(kexts)}",
+            ", ".join(sorted(kexts)),
+            suggestion="В OpenCore порядок загрузки задаётся в Kernel → Add."))
+        for name in sorted(kexts & set(LEGACY_KEXTS)):
+            issues.append(AnalysisIssue(
+                Severity.WARNING, "legacy_kext", f"{name}: {LEGACY_KEXTS[name]}",
+                suggestion="Замените на современный аналог."))
+
+    drivers = sorted(p.name for p in
+                     list((clover / "drivers" / "UEFI").glob("*.efi"))
+                     + list((clover / "drivers64UEFI").glob("*.efi"))
+                     if p.is_file())
+    if drivers:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "clover_drivers",
+            f"UEFI-драйверы: {len(drivers)}", ", ".join(drivers),
+            suggestion="В OpenCore обязательны OpenRuntime.efi и HfsPlus.efi."))
+
+    acpi = sorted(p.name for p in (clover / "ACPI" / "patched").glob("*.aml")
+                  if p.is_file())
+    if acpi:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "clover_acpi",
+            f"ACPI-таблицы: {len(acpi)}", ", ".join(acpi),
+            suggestion="Перенесите нужные SSDT в OC/ACPI и включите в config.plist."))
+    return issues
+
+
 def audit(efi_root: Path) -> list[AnalysisIssue]:
     """Полный аудит EFI. Возвращает список замечаний (пусто = всё в порядке)."""
     issues: list[AnalysisIssue] = []
     oc = find_oc_dir(Path(efi_root))
     if oc is None:
+        clover = _clover_dir(Path(efi_root))
+        if clover is not None:
+            return _audit_clover(clover)
         return [AnalysisIssue(
             Severity.ERROR, "efi_structure",
             "Структура EFI/OC не найдена",

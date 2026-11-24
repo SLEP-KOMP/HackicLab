@@ -111,6 +111,11 @@ class UsbMixin:
         rcv.addLayout(rec_row)
         rec_desc = _muted(page, tr.t("usb.include_recovery_desc")); rec_desc.setWordWrap(True)
         rcv.addWidget(rec_desc)
+        mist = QLabel('<a href="https://github.com/ninxsoft/Mist">Mist</a> — '
+                      + tr.t("usb.mist_hint"))
+        mist.setOpenExternalLinks(True)
+        mist.setWordWrap(True)
+        rcv.addWidget(mist)
         ver_row = QHBoxLayout()
         ver_row.addWidget(_h2(page, tr.t("usb.recovery_version")))
         self.usb_recovery_ver = QComboBox()
