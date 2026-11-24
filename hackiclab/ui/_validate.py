@@ -90,10 +90,10 @@ class ValidateMixin:
         self.quick_bootargs.setPlaceholderText("-v debug=0x100 keepsyms=1")
         qargs.addWidget(self.quick_bootargs, 1)
         preset_row = QHBoxLayout()
-        for label, flags in (("Verbose", ("-v", "debug=0x100", "keepsyms=1")),
-                             ("No eGPU", ("-wegnoegpu",)),
-                             ("Safe mode", ("-x",))):
-            pb = QPushButton(label)
+        for key, flags in (("validate.preset_verbose", ("-v", "debug=0x100", "keepsyms=1")),
+                           ("validate.preset_no_egpu", ("-wegnoegpu",)),
+                           ("validate.preset_safe", ("-x",))):
+            pb = QPushButton(tr.t(key))
             pb.setObjectName("ghost")
             pb.clicked.connect(
                 lambda _=False, f=flags: self.quick_bootargs.setText(
@@ -111,6 +111,9 @@ class ValidateMixin:
         qv.addLayout(arow)
         self.audio_variants = QHBoxLayout()
         qv.addLayout(self.audio_variants)
+        if getattr(self, "_audio_codec_text", ""):
+            self.quick_codec.setText(self._audio_codec_text)
+            self._render_audio_variants()
         qv.addLayout(qargs)
 
         qrow = QHBoxLayout()
@@ -340,12 +343,16 @@ class ValidateMixin:
         return None
 
     def _quick_audio(self):
-        """Показывает варианты alcid по кодеку из базы AppleALC."""
+        """Запоминает кодек и показывает варианты alcid."""
+        self._audio_codec_text = self.quick_codec.text()
+        self._render_audio_variants()
+
+    def _render_audio_variants(self):
         while self.audio_variants.count():
             item = self.audio_variants.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        variants = suggest_audio_layouts(self.quick_codec.text())
+        variants = suggest_audio_layouts(getattr(self, "_audio_codec_text", ""))
         if not variants:
             self.audio_variants.addWidget(QLabel(tr.t("validate.audio_unknown")))
         for layout in variants:
