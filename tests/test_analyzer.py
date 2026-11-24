@@ -67,6 +67,26 @@ class AnalyzerKextTests(unittest.TestCase):
         extra = [i for i in issues if i.code == "kext_extra"]
         self.assertFalse([i for i in extra if i.title.endswith("SMCSuperIO")])
 
+    def test_target_macos_selects_ethernet_driver(self):
+        """I211: до Monterey — AppleIntelI210Ethernet, с Monterey — AppleIGB."""
+        _make_efi(self.root, ["Lilu.kext"])
+        names = lambda m: [i.kext for i in Analyzer(_profile(), m)
+                           .analyze_folder(self.root) if i.code == "kext_missing"]
+        self.assertIn("AppleIGB", names("Ventura"))
+        self.assertNotIn("AppleIGB", names("Big Sur"))
+        self.assertIn("AppleIntelI210Ethernet", names("Big Sur"))
+
+    def test_broadcom_native_requires_oclp_set(self):
+        """Нативный Broadcom на Ventura+ без набора OCLP не поднимется."""
+        p = _profile()
+        p.net = NetInfo(eth_chipset="i211", eth_name="Intel I211",
+                        wifi_chipset="broadcom", bt_native_apple=True)
+        _make_efi(self.root, ["Lilu.kext"])
+        missing = [i.kext for i in Analyzer(p, "Ventura").analyze_folder(self.root)
+                   if i.code == "kext_missing"]
+        self.assertIn("AMFIPass", missing)
+        self.assertIn("IOSkywalkFamily", missing)
+
 
 class AnalyzerKextConflictTests(unittest.TestCase):
     """Кексты, которые нельзя держать в одном EFI (ловим и чужие сборки)."""

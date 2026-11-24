@@ -121,14 +121,15 @@ class AnalyzeWorker(QThread):
     done = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, profile, folder):
+    def __init__(self, profile, folder, target_macos: str = ""):
         super().__init__()
         self.profile = profile
         self.folder = folder
+        self.target_macos = target_macos
 
     def run(self):
         try:
-            issues = Analyzer(self.profile).analyze_folder(self.folder)
+            issues = Analyzer(self.profile, self.target_macos).analyze_folder(self.folder)
             self.done.emit(issues)
         except Exception as e:
             self.failed.emit(str(e))

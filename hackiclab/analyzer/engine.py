@@ -21,8 +21,10 @@ from .models import KEXT_CONFLICTS, AnalysisIssue, Severity
 class Analyzer:
     """Проверяет папку с файлами клиента против профиля железа."""
 
-    def __init__(self, profile: HardwareProfile):
+    def __init__(self, profile: HardwareProfile, target_macos: str = ""):
         self.profile = profile
+        # Целевая macOS влияет на набор кекстов (AppleIGB, набор OCLP для Broadcom)
+        self.target_macos = target_macos
         self.issues: list[AnalysisIssue] = []
 
     # --- сравнение с папкой EFI / kexts ---
@@ -95,10 +97,12 @@ class Analyzer:
         # Собранный нами EFI содержит USB-карту и кексты под все режимы Wi-Fi,
         # поэтому сверяемся с объединением вариантов: иначе собственные файлы
         # выглядят как «необязательные кексты».
-        required = list(select_kexts(self.profile, usb_toolbox=True))
+        required = list(select_kexts(self.profile, usb_toolbox=True,
+                                     target_macos=self.target_macos))
         known_names = {e.name for e in required}
         for mode in ("itlwm", "airportitlwm", "native"):
-            for e in select_kexts(self.profile, mode, usb_toolbox=True):
+            for e in select_kexts(self.profile, mode, usb_toolbox=True,
+                                  target_macos=self.target_macos):
                 if e.name not in known_names:
                     known_names.add(e.name)
                     required.append(e)

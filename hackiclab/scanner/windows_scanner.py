@@ -46,6 +46,10 @@ _VIRTUAL_GPU = ("microsoft", "virtual", "remote", "parsec", "displaylink",
                 "spacedesk", "vmware", "virtualbox", "citrix", "teamviewer",
                 "idd", "meta")
 
+#: Признаки виртуальной машины в Manufacturer/Model компьютера.
+_VM_MARKERS = ("vmware", "virtualbox", "innotek", "qemu", "kvm", "xen",
+               "hyper-v", "virtual machine", "bochs", "parallels")
+
 
 class WindowsScanner:
     """Собирает HardwareProfile текущего Windows-хоста."""
@@ -136,13 +140,17 @@ class WindowsScanner:
             p.bios_version = str(bios.get("SMBIOSBIOSVersion") or "")
 
         comp = ps.run_json(
-            '(Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,HypervisorPresent) '
+            '(Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model) '
             '| ConvertTo-Json -Compress'
         )
         if isinstance(comp, dict):
-            h = bool(comp.get("HypervisorPresent"))
-            if h:
-                p.virtual_machine = "hypervisor"
+            # HypervisorPresent = True бывает и на живом ПК с включённой
+            # VBS/Hyper-V, поэтому ВМ определяем по вендору и модели.
+            desc = f"{comp.get('Manufacturer') or ''} {comp.get('Model') or ''}".lower()
+            for marker in _VM_MARKERS:
+                if marker in desc:
+                    p.virtual_machine = marker
+                    break
 
     # --- CPU ---
     def _detect_cpu(self, p: HardwareProfile):

@@ -250,7 +250,7 @@ class AnalyzeMixin:
         self.issue_list.clear()
         self.issue_detail.clear()
         self.an_empty_hint.setVisible(False)
-        self._worker_an = AnalyzeWorker(self.profile, folder)
+        self._worker_an = AnalyzeWorker(self.profile, folder, self._wizard_macos())
         self._worker_an.done.connect(self._analyze_done)
         self._worker_an.failed.connect(self._analyze_failed)
         self._worker_an.start()
