@@ -201,7 +201,7 @@ _AMD_DESKTOP_SMBIOS = [
 # Intel desktop: привязаны к поколению, но если выбранная macOS новее, чем
 # поддерживает ближайшая модель — берём более новую модель того же форм-фактора.
 _INTEL_DESKTOP_BY_GEN = {
-    2: "iMac13,1", 3: "iMac14,2", 4: "iMac15,1",
+    0: "iMac13,1", 2: "iMac13,1", 3: "iMac14,2", 4: "iMac15,1",
     5: "iMac17,1", 6: "iMac17,1", 7: "iMac18,3",
     8: "iMac19,1", 9: "iMac19,1", 10: "iMac20,1",
     11: "MacPro7,1", 12: "MacPro7,1", 13: "MacPro7,1",
@@ -484,8 +484,12 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
     только до Sonoma, поэтому на Sequoia/Tahoe выбирается itlwm.
     """
     chosen = _KextList()
-    # Ядро всегда
-    chosen.add("Lilu", "VirtualSMC")
+    # Ядро всегда: Core 2 и Sandy Bridge используют FakeSMC, новый — VirtualSMC
+    chosen.add("Lilu")
+    if profile.cpu.vendor == "intel" and profile.cpu.generation <= 2:
+        chosen.add("FakeSMC")
+    else:
+        chosen.add("VirtualSMC")
     # USB-маппинг: USBToolBox.kext — инжектор для UTBMap.kext
     if usb_toolbox:
         chosen.add("USBToolBox")

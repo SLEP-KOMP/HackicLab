@@ -126,7 +126,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         cfg["ACPI"]["Add"].append(
             {"Enabled": True, "Path": "SSDT-PNLF.aml", "Comment": "Backlight"})
     else:
-        if profile.cpu.vendor == "intel":
+        if profile.cpu.vendor == "intel" and profile.cpu.generation > 0:
             # SSDT-PLUG включает X86PlatformPlugin — только для Intel
             cfg["ACPI"]["Add"].append(
                 {"Enabled": True, "Path": "SSDT-PLUG.aml", "Comment": "CPU power management"})

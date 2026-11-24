@@ -21,6 +21,7 @@ OC_PLATFORMS: dict[int, str] = {
     3: "Ivy Bridge",
     2: "Sandy Bridge",
     1: "Nehalem/Westmere",
+    0: "Core 2",
 }
 
 
@@ -41,6 +42,7 @@ def oc_platform_for(profile: HardwareProfile) -> str:
 # Драйверы iGPU Haswell/Broadwell/Skylake удалены в Ventura, поэтому для них
 # потолок — Monterey, даже если SMBIOS можно подставить новее.
 MAX_MACOS_BY_GEN: dict[int, str] = {
+    0: "High Sierra",   # Core 2 Duo/Quad (Penryn, SSE4.1): выше Sierra не идут
     1: "High Sierra",   # Nehalem/Westmere: 2010–2011 Mac Pro
     2: "High Sierra",   # Sandy Bridge: 2011 Mac, Catalina уже без них
     3: "Catalina",      # Ivy Bridge: 2012 Mac, Big Sur уже без них

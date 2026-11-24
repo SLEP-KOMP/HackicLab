@@ -466,6 +466,28 @@ CONFIGS = (*CONFIGS,
         vendor="amd", generation=11, platform="desktop",
         macos_min="Big Sur", macos_max="Sonoma",
     ),
+    HwConfig(
+        "intel_core2_duo",
+        CAT_DESKTOP_INTEL,
+        "Intel Core 2 Duo E8400 + Radeon HD 5770",
+        "Intel Core 2 Duo E8400 + Radeon HD 5770",
+        cpu="Intel Core 2 Duo E8400 / Core 2 Quad Q9400",
+        gpu="Radeon HD 5770",
+        macos="High Sierra 10.13",
+        status=STATUS_LIMITED,
+        kexts=("FakeSMC", "WhateverGreen", "AppleALC", "RealtekRTL8111"),
+        ssdts=("SSDT-EC",),
+        quirks=("Kernel: AppleCpuPmCfgLock",),
+        note="Core 2 Duo/Quad (Penryn, SSE4.1): максимум High Sierra. "
+             "Используется FakeSMC вместо VirtualSMC, встроенная графика не "
+             "работает — нужна дискретная карта с поддержкой High Sierra.",
+        note_en="Core 2 Duo/Quad (Penryn, SSE4.1): High Sierra is the ceiling. "
+                "Uses FakeSMC instead of VirtualSMC; the iGPU is unsupported, so a "
+                "discrete GPU with High Sierra support is required.",
+        sources=("oc_guide", "gpu_guide"),
+        vendor="intel", generation=0, platform="desktop", dgpu="68B8",
+        macos_min="High Sierra", macos_max="High Sierra",
+    ),
 )
 
 

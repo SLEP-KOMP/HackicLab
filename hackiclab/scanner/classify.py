@@ -76,6 +76,9 @@ def parse_intel_model(name: str) -> tuple[int, str]:
             gen = 0
         return gen, _CODENAMES.get(gen, "")
 
+    if "core 2" in low or "core2" in low:
+        return 0, "Core 2"
+
     # Pentium/Celeron: G4560, G5400, G6400, G7400, N5095, J4125
     mp = re.search(r"(?:pentium|celeron)\s+(?:gold|silver)?\s*([gnj])(\d{4,5})", low)
     if mp:

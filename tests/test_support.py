@@ -32,7 +32,7 @@ class CeilingTests(unittest.TestCase):
         self.assertEqual(max_macos_for(profile), "Sequoia")
 
     def test_all_generations_have_ceiling(self):
-        for generation in range(1, 16):
+        for generation in range(0, 16):
             self.assertIn(generation, MAX_MACOS_BY_GEN)
 
 
@@ -60,7 +60,7 @@ class SupportReportTests(unittest.TestCase):
         for c in cfg.all_configs():
             self.assertIn(c.platform, ("desktop", "laptop", "mini", "workstation"), c.key)
             self.assertIn(c.vendor, ("intel", "amd"), c.key)
-            self.assertTrue(c.generation >= 1, c.key)
+            self.assertTrue(c.generation >= 0, c.key)
 
     def test_kexts_in_catalog_exist_in_database(self):
         for c in cfg.all_configs():
