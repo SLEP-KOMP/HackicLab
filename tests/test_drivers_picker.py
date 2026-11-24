@@ -9,7 +9,7 @@ import _bootstrap  # noqa: F401
 
 from hackiclab.builder.builder import want_drivers
 from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
-from hackiclab.scanner.models import CPUInfo, HardwareProfile
+from hackiclab.scanner.models import AudioInfo, CPUInfo, HardwareProfile
 
 
 def _desktop() -> HardwareProfile:
@@ -75,6 +75,44 @@ class DriverEntriesTests(unittest.TestCase):
         self.assertIn("OpenCanopy.efi", with_gui)
         self.assertIn("OpenRuntime.efi", with_gui)
         self.assertIn("ResetNvramEntry.efi", with_gui)
+
+
+class ExtraDriverTests(unittest.TestCase):
+    """Дополнительные драйверы загрузчика: AudioDxe, OpenLegacyBoot, сеть."""
+
+    def test_audio_dxe_flag_adds_driver(self):
+        self.assertIn("AudioDxe.efi", want_drivers(BuildOptions(audio_dxe=True)))
+
+    def test_legacy_boot_flag_adds_driver(self):
+        self.assertIn("OpenLegacyBoot.efi", want_drivers(BuildOptions(legacy_boot=True)))
+
+    def test_network_boot_adds_stack_and_plugin_last(self):
+        names = want_drivers(BuildOptions(network_boot=True))
+        for drv in ("SnpDxe.efi", "Ip4Dxe.efi", "HttpBootDxe.efi", "TlsDxe.efi"):
+            self.assertIn(drv, names)
+        self.assertEqual(names[-1], "OpenNetworkBoot.efi")
+
+    def test_flags_off_add_nothing(self):
+        names = want_drivers(BuildOptions())
+        for drv in ("AudioDxe.efi", "OpenLegacyBoot.efi", "OpenNetworkBoot.efi"):
+            self.assertNotIn(drv, names)
+
+
+class AudioConfigTests(unittest.TestCase):
+    def test_audio_dxe_enables_audio_support(self):
+        cfg = plistlib.loads(
+            generate_config_plist(_desktop(), BuildOptions(audio_dxe=True)))
+        aud = cfg["UEFI"]["Audio"]
+        self.assertTrue(aud["AudioSupport"])
+        self.assertEqual(aud["PlayChime"], "Auto")
+
+    def test_audio_device_uses_scanned_pci_path(self):
+        profile = _desktop()
+        profile.audio = AudioInfo(pci_path="PciRoot(0x0)/Pci(0x1f,0x3)")
+        cfg = plistlib.loads(
+            generate_config_plist(profile, BuildOptions(audio_dxe=True)))
+        self.assertEqual(cfg["UEFI"]["Audio"]["AudioDevice"],
+                         "PciRoot(0x0)/Pci(0x1f,0x3)")
 
 
 if __name__ == "__main__":

@@ -71,6 +71,21 @@ class BuildPageMixin:
         opts.addWidget(self.opt_gui)
         opts.addWidget(gui_desc)
         opts.addSpacing(8)
+        self.opt_audio = QCheckBox(tr.t("build.audio_dxe"))
+        audio_desc = _muted(page, tr.t("build.audio_dxe_desc")); audio_desc.setWordWrap(True)
+        opts.addWidget(self.opt_audio)
+        opts.addWidget(audio_desc)
+        opts.addSpacing(8)
+        self.opt_netboot = QCheckBox(tr.t("build.network_boot"))
+        net_desc = _muted(page, tr.t("build.network_boot_desc")); net_desc.setWordWrap(True)
+        opts.addWidget(self.opt_netboot)
+        opts.addWidget(net_desc)
+        opts.addSpacing(8)
+        self.opt_legacy = QCheckBox(tr.t("build.legacy_boot"))
+        legacy_desc = _muted(page, tr.t("build.legacy_boot_desc")); legacy_desc.setWordWrap(True)
+        opts.addWidget(self.opt_legacy)
+        opts.addWidget(legacy_desc)
+        opts.addSpacing(8)
         wmode_row = QHBoxLayout()
         wmode_row.addWidget(_h2(page, tr.t("build.wifi_mode")))
         self.wifi_mode = QComboBox()
@@ -199,6 +214,9 @@ class BuildPageMixin:
             usb_toolbox=self.opt_usb.isChecked(),
             disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
+            audio_dxe=self.opt_audio.isChecked(),
+            network_boot=self.opt_netboot.isChecked(),
+            legacy_boot=self.opt_legacy.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
         )

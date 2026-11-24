@@ -42,6 +42,7 @@ class WizardMixin:
                 "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
                 "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
                 "gui_picker": False,
+                "audio_dxe": False, "network_boot": False, "legacy_boot": False,
                 "share_log": False,
             }
             self._wiz = state
@@ -292,6 +293,17 @@ class WizardMixin:
         gui_note = _muted(page, tr.t("build.gui_picker_desc"))
         gui_note.setWordWrap(True)
         lay.addWidget(gui_note)
+
+        for key, state_key in (("build.audio_dxe", "audio_dxe"),
+                               ("build.network_boot", "network_boot"),
+                               ("build.legacy_boot", "legacy_boot")):
+            chk = QCheckBox(tr.t(key))
+            chk.toggled.connect(
+                lambda on, k=state_key: self._wiz_state().__setitem__(k, bool(on)))
+            lay.addWidget(chk)
+            note = _muted(page, tr.t(f"{key}_desc"))
+            note.setWordWrap(True)
+            lay.addWidget(note)
 
         self.wiz_share_chk = QCheckBox(tr.t("wizard.options.share"))
         self.wiz_share_chk.toggled.connect(
@@ -644,6 +656,9 @@ class WizardMixin:
             disable_dgpu=bool(state.get("disable_dgpu")),
             dual_boot=str(state.get("dual_boot") or ""),
             gui_picker=bool(state.get("gui_picker")),
+            audio_dxe=bool(state.get("audio_dxe")),
+            network_boot=bool(state.get("network_boot")),
+            legacy_boot=bool(state.get("legacy_boot")),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target

@@ -62,6 +62,12 @@ class BuildOptions:
     dual_boot: str = ""
     # Графическое меню OpenCore (OpenCanopy + Resources) вместо текстового
     gui_picker: bool = False
+    # Звук в загрузчике (AudioDxe + UEFI/Audio): звук и сигнал ошибки в меню
+    audio_dxe: bool = False
+    # Сетевая загрузка (OpenNetworkBoot + сетевой стек): PXE и HTTP(S)
+    network_boot: bool = False
+    # Загрузка legacy-ОС (OpenLegacyBoot, нужен CSM или OpenDuet)
+    legacy_boot: bool = False
     # Патчи, которые клиент хочет искусственно пропустить (набор имён kext)
     skip_kexts: set = field(default_factory=set)
     # ACPI-патчи, посчитанные по DSDT (переименования под SSDT-HPET)
@@ -219,6 +225,15 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot["PickerMode"] = "External"
         boot["PickerVariant"] = "Acidanthera\\GoldenGate"
         boot["PickerAttributes"] = 17
+
+    if getattr(options, "audio_dxe", False):
+        # AudioDxe мало подключить драйвером: без AudioSupport звука нет.
+        aud = cfg["UEFI"]["Audio"]
+        aud["AudioSupport"] = True
+        aud["PlayChime"] = "Auto"
+        pci = getattr(getattr(profile, "audio", None), "pci_path", "") or ""
+        if pci:
+            aud["AudioDevice"] = pci
 
     # --- macOS-версия влияет на SecureBootModel и boot-args ---
     _apply_macos_model(cfg, options.target_macos, profile)

@@ -21,6 +21,17 @@ from .smbios_gen import SMBIOSData, generate_smbios
 from .ssdt_factory import SSDTFactory, compile_dsl, find_iasl, irq_conflict_devices
 
 
+#: Сетевой стек для OpenNetworkBoot. Порядок важен: протоколы (SNP/MNP/IP/
+#: UDP/TCP/DNS/HTTP/TLS) регистрируются раньше самого плагина загрузки.
+_NETWORK_BOOT_DRIVERS = [
+    "SnpDxe.efi", "MnpDxe.efi", "ArpDxe.efi", "Dhcp4Dxe.efi", "Ip4Dxe.efi",
+    "Udp4Dxe.efi", "Mtftp4Dxe.efi", "Dhcp6Dxe.efi", "Ip6Dxe.efi", "Udp6Dxe.efi",
+    "Mtftp6Dxe.efi", "TcpDxe.efi", "UefiPxeBcDxe.efi", "DnsDxe.efi",
+    "HttpDxe.efi", "HttpUtilitiesDxe.efi", "HttpBootDxe.efi", "TlsDxe.efi",
+    "OpenNetworkBoot.efi",
+]
+
+
 def want_drivers(options) -> list:
     """UEFI-драйверы, которые кладём в EFI/OC/Drivers.
 
@@ -34,6 +45,12 @@ def want_drivers(options) -> list:
         names.append("OpenLinuxBoot.efi")
     if getattr(options, "gui_picker", False):
         names.append("OpenCanopy.efi")
+    if getattr(options, "audio_dxe", False):
+        names.append("AudioDxe.efi")
+    if getattr(options, "legacy_boot", False):
+        names.append("OpenLegacyBoot.efi")
+    if getattr(options, "network_boot", False):
+        names.extend(_NETWORK_BOOT_DRIVERS)
     return names
 
 @dataclass
