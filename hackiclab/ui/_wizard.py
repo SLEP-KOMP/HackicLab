@@ -498,7 +498,9 @@ class WizardMixin:
             desc = f"{entry.get('version', '')} · {entry.get('release', '')}"
             if rank(name) == limit:
                 desc += " · " + tr.t("wizard.macos.max")
-            btn = self._wiz_option(None, layout, "macos", name, name, desc)
+            ver = str(entry.get("version") or "")
+            btn = self._wiz_option(None, layout, "macos", name,
+                                   f"{name} ({ver})" if ver else name, desc)
             btn.setChecked(state.get("macos") == name)
     def _wiz_fill_target(self):
         layout = getattr(self, "wiz_target_box", None)

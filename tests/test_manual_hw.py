@@ -154,6 +154,11 @@ class FillFromScanTests(unittest.TestCase):
             self.assertEqual(window.manual_wifi.currentData(), "broadcom")
             self.assertTrue(window.manual_nvme.isChecked())
             self.assertTrue(window.manual_cpu.isEditable())
+            # регресс: список патчей должен заполниться сразу, без «Обновить список»
+            self.assertTrue(window._patch_checks)
+            self.assertIn("gpu_rx580_spoof", window._patch_checks)
+            # регресс: в подписях macOS виден номер версии
+            self.assertIn("(15)", window.manual_macos.currentText())
         finally:
             window.close()
             window.deleteLater()

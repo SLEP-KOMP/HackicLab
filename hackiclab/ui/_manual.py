@@ -231,6 +231,9 @@ class ManualBuildMixin:
         self._manual_fill_macos(profile)
         target = str(self.manual_macos.currentData() or "")
         self._manual_render(profile, manual_hw.review(profile, target, "itlwm"))
+        # патчи зависят от железа и macOS — пересчитываем сразу после правки формы
+        if hasattr(self, "_refresh_patches"):
+            self._refresh_patches()
     def _manual_fill_macos(self, profile):
         from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
         ceiling = MAX_MACOS_BY_GEN.get(profile.cpu.generation, "Sonoma")
@@ -249,7 +252,8 @@ class ManualBuildMixin:
             name = str(entry.get("name") or "")
             if limit >= 0 and rank(name) > limit:
                 continue
-            self.manual_macos.addItem(name, name)
+            ver = str(entry.get("version") or "")
+            self.manual_macos.addItem(f"{name} ({ver})" if ver else name, name)
         index = self.manual_macos.findData(current)
         if index < 0 and self.manual_macos.count():
             index = 0

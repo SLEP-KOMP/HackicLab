@@ -108,7 +108,9 @@ class BuildPageMixin:
         from ..knowledge.oc_platforms import MACOS_VERSIONS
         self.macos_combo.addItem(tr.t("build.macos_auto"), "")
         for mver in MACOS_VERSIONS:
-            self.macos_combo.addItem(mver["name"], mver["name"])
+            # номер версии в подписи: по «15» ориентироваться проще, чем по имени
+            self.macos_combo.addItem(
+                f"{mver['name']} ({mver['version']})", mver["name"])
         # пометим подсказкой о возможной несовместимости (tooltip)
         mrow.addWidget(self.macos_combo, 1)
         mv.addLayout(mrow)
@@ -119,6 +121,8 @@ class BuildPageMixin:
         self.macos_incompat.setVisible(False)
         mv.addWidget(self.macos_incompat)
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
+        self.macos_combo.currentIndexChanged.connect(
+            lambda _i: self._refresh_patches())
         main.addWidget(mb)
 
         # Патчи: что применить к EFI и что — уже на macOS (root-патчи)
@@ -260,6 +264,11 @@ class BuildPageMixin:
 
     def _refresh_patches(self):
         """Пересобирает список патчей и отчёт под железо/язык/режим."""
+        # Сборка страницы идёт по шагам: ручная форма обновляется раньше, чем
+        # появляются список macOS и сами виджеты патчей. Без этой проверки
+        # первый вызов падал и список оставался пустым до «Обновить список».
+        if not hasattr(self, "patch_list") or not hasattr(self, "macos_combo"):
+            return
         kb, items, profile, target = self._patch_items()
         while self.patch_list.count():
             w = self.patch_list.takeAt(0).widget()
