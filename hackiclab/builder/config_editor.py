@@ -133,6 +133,37 @@ def serialize_boot_args(args: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
+#: Готовые наборы флагов: одна кнопка — нужное сочетание.
+BOOT_ARG_PRESETS: dict[str, tuple[str, ...]] = {
+    "verbose": ("-v", "debug=0x100", "keepsyms=1"),
+    "no_egpu": ("-wegnoegpu",),
+    "safe": ("-x",),
+}
+
+
+def add_boot_args(text: str, *flags: str) -> str:
+    """Добавляет флаги в строку boot-args без дублей."""
+    args = parse_boot_args(text)
+    for flag in flags:
+        if "=" in flag:
+            key, value = flag.split("=", 1)
+            args[key] = value
+        else:
+            args[flag] = True
+    return serialize_boot_args(args)
+
+
+def suggest_audio_layout(codec: str) -> int | None:
+    """Первый рабочий layout-id для кодека из базы AppleALC."""
+    from ..knowledge.audio_layouts import LAYOUTS
+
+    want = (codec or "").strip().upper()
+    for name, layouts in LAYOUTS.items():
+        if name.upper() == want and layouts:
+            return layouts[0]
+    return None
+
+
 def _nvram_dict(cfg: dict) -> dict:
     nvram = cfg.setdefault("NVRAM", {})
     add = nvram.setdefault("Add", {})

@@ -77,7 +77,8 @@ class ValidateMixin:
         v.addWidget(src)
 
         # --- быстрые правки config.plist ---
-        from ..builder.config_editor import SECURE_BOOT_MODELS
+        from ..builder.config_editor import (SECURE_BOOT_MODELS, add_boot_args,
+                                             suggest_audio_layout)
         quick = self._card(page)
         self.quick_card = quick
         qv = QVBoxLayout(quick)
@@ -88,6 +89,26 @@ class ValidateMixin:
         self.quick_bootargs = QLineEdit()
         self.quick_bootargs.setPlaceholderText("-v debug=0x100 keepsyms=1")
         qargs.addWidget(self.quick_bootargs, 1)
+        preset_row = QHBoxLayout()
+        for label, flags in (("Verbose", ("-v", "debug=0x100", "keepsyms=1")),
+                             ("No eGPU", ("-wegnoegpu",)),
+                             ("Safe mode", ("-x",))):
+            pb = QPushButton(label)
+            pb.setObjectName("ghost")
+            pb.clicked.connect(
+                lambda _=False, f=flags: self.quick_bootargs.setText(
+                    add_boot_args(self.quick_bootargs.text(), *f)))
+            preset_row.addWidget(pb)
+        preset_row.addStretch()
+        qv.addLayout(preset_row)
+        arow = QHBoxLayout()
+        self.quick_codec = QLineEdit()
+        self.quick_codec.setPlaceholderText("ALC295")
+        audio_btn = QPushButton("alcid")
+        audio_btn.clicked.connect(self._quick_audio)
+        arow.addWidget(self.quick_codec, 1)
+        arow.addWidget(audio_btn)
+        qv.addLayout(arow)
         qv.addLayout(qargs)
 
         qrow = QHBoxLayout()
@@ -315,6 +336,13 @@ class ValidateMixin:
             if cand.is_file():
                 return cand
         return None
+    def _quick_audio(self):
+        """Подставляет alcid по кодеку из базы AppleALC."""
+        layout = suggest_audio_layout(self.quick_codec.text())
+        if layout:
+            self.quick_bootargs.setText(
+                add_boot_args(self.quick_bootargs.text(), f"alcid={layout}"))
+
     def _do_audit(self):
         """Структурный аудит EFI: kexts, ACPI, драйверы, SIP, USB."""
         if getattr(self, "_worker_audit", None) and self._worker_audit.isRunning():
