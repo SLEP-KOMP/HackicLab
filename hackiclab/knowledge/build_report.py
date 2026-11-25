@@ -43,6 +43,11 @@ def build_report(profile: Optional["HardwareProfile"], options=None,
         rng = mac_range(p, macos) if p is not None else None
     except Exception:
         rng = None
+    try:
+        from .storage_support import storage_notes
+        notes = storage_notes(getattr(p, "storage", None)) if p is not None else []
+    except Exception:
+        notes = []
     dual_boot = str(getattr(options, "dual_boot", "") or "")
     device = " ".join(part for part in (getattr(p, "board_vendor", ""),
                                        getattr(p, "board_name", "")) if part)
@@ -67,6 +72,7 @@ def build_report(profile: Optional["HardwareProfile"], options=None,
         "",
         line("touchpad_type", getattr(p, "touchpad_type", "") or "n/a"),
         line("nvme", "yes" if getattr(storage, "nvme_present", False) else "no"),
+        line("storage_notes", "; ".join(f"{n.severity}: {n.en}" for n in notes) or "none"),
         line("thunderbolt", "yes" if getattr(p, "has_thunderbolt", False) else "no"),
         "",
         line("dual_boot", dual_boot or "none"),

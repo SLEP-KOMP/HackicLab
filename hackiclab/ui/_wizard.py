@@ -278,6 +278,15 @@ class WizardMixin:
             btn.setChecked(value == "")
         lay.addLayout(self.wiz_dual_box)
 
+        self.wiz_usb_chk = QCheckBox(tr.t("wizard.options.usb"))
+        self.wiz_usb_chk.setChecked(True)
+        self.wiz_usb_chk.toggled.connect(
+            lambda on: self._wiz_state().__setitem__("usb_toolbox", bool(on)))
+        lay.addWidget(self.wiz_usb_chk)
+        usb_note = _muted(page, tr.t("build.usb_toolbox_desc"))
+        usb_note.setWordWrap(True)
+        lay.addWidget(usb_note)
+
         self.wiz_dgpu_chk = QCheckBox(tr.t("wizard.options.dgpu"))
         self.wiz_dgpu_chk.toggled.connect(
             lambda on: self._wiz_state().__setitem__("disable_dgpu", bool(on)))
@@ -328,6 +337,7 @@ class WizardMixin:
             self.wiz_dgpu_chk.setChecked(True)
             state["disable_dgpu"] = True
         self.wiz_share_chk.setChecked(bool(state.get("share_log", False)))
+        self.wiz_usb_chk.setChecked(bool(state.get("usb_toolbox", True)))
         for index in range(self.wiz_dual_box.count()):
             item = self.wiz_dual_box.itemAt(index)
             widget = item.widget() if item is not None else None

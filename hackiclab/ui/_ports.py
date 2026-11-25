@@ -80,13 +80,14 @@ class PortsMixin:
 
         disk_card = self._card(page)
         dv = QVBoxLayout(disk_card)
-        dv.addWidget(_h2(page, tr.t("diskmap.title")))
-        ddesc = _muted(page, tr.t("diskmap.desc")); ddesc.setWordWrap(True)
-        dv.addWidget(ddesc)
-        dnote = _muted(page, tr.t("diskmap.note")); dnote.setWordWrap(True)
-        dv.addWidget(dnote)
+        dv.addWidget(_h2(page, tr.t("storage.title")))
+        sdesc = _muted(page, tr.t("storage.desc")); sdesc.setWordWrap(True)
+        dv.addWidget(sdesc)
+        # Известные проблемы накопителя: те же правила, что в предупреждениях сборки.
+        self.storage_warn = _muted(page, ""); self.storage_warn.setWordWrap(True)
+        dv.addWidget(self.storage_warn)
         drow = QHBoxLayout()
-        self.disk_scan_btn = QPushButton(tr.t("diskmap.scan"))
+        self.disk_scan_btn = QPushButton(tr.t("storage.scan"))
         self.disk_scan_btn.clicked.connect(self._do_diskmap)
         drow.addWidget(self.disk_scan_btn)
         drow.addStretch()
@@ -100,7 +101,19 @@ class PortsMixin:
         dv.addWidget(self.disk_tree, 1)
         v.addWidget(disk_card)
         v.addStretch(1)
+        self._refresh_storage_notes()
         return page
+
+    def _refresh_storage_notes(self, *_args):
+        """Предупреждения о накопителе для вкладки «USB и накопители»."""
+        if not hasattr(self, "storage_warn"):
+            return
+        from ..knowledge.storage_support import warnings as storage_warnings
+        profile = getattr(self, "profile", None)
+        storage = getattr(profile, "storage", None) if profile is not None else None
+        lines = storage_warnings(storage, tr.current) if storage is not None else []
+        self.storage_warn.setText("\n".join(f"⚠ {line}" for line in lines)
+                                  or tr.t("storage.none"))
 
     # --- карта USB-портов ---
 

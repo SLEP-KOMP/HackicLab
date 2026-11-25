@@ -62,6 +62,9 @@ class BuildPageMixin:
         usb_desc = _muted(page, tr.t("build.usb_toolbox_desc")); usb_desc.setWordWrap(True)
         opts.addWidget(self.opt_usb)
         opts.addWidget(usb_desc)
+        # Накопитель проверяем сразу в сборке: проблемный диск не даст загрузиться.
+        self.build_storage = _muted(page, ""); self.build_storage.setWordWrap(True)
+        opts.addWidget(self.build_storage)
         opts.addSpacing(8)
         self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
         self.opt_sip.setChecked(True)
@@ -285,6 +288,16 @@ class BuildPageMixin:
             highest=label(rng.highest)))
         pick = 0 if tr.current == "ru" else 1
         self.macos_range.setToolTip("\n".join(r[pick] for r in rng.reasons))
+        self._refresh_build_storage(profile)
+
+    def _refresh_build_storage(self, profile):
+        """Предупреждения о накопителе прямо на странице сборки."""
+        if not hasattr(self, "build_storage"):
+            return
+        from ..knowledge.storage_support import warnings as storage_warnings
+        storage = getattr(profile, "storage", None) if profile is not None else None
+        lines = storage_warnings(storage, tr.current) if storage is not None else []
+        self.build_storage.setText("\n".join(f"⚠ {line}" for line in lines))
 
     def _refresh_patches(self):
         """Пересобирает список патчей и отчёт под железо/язык/режим."""
