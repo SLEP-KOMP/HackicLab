@@ -217,6 +217,16 @@ class EFIBuilder:
                             layout.warnings.append(
                                 "OpenCanopy: иконки не скачаны — меню будет без "
                                 "графики, положите Resources в EFI/OC вручную")
+                    # Оставляем только отмеченные варианты темы: меньше файлов в EFI.
+                    chosen = getattr(self.plan.options, "themes", None)
+                    theme_root = dst_res / "Image" / "Acidanthera"
+                    if chosen and theme_root.is_dir():
+                        keep = {str(item).replace("/", "\\").split("\\")[-1]
+                                for item in chosen}
+                        for child in list(theme_root.iterdir()):
+                            if child.is_dir() and child.name not in keep:
+                                shutil.rmtree(str(child), ignore_errors=True)
+                        self._log("  Темы меню: " + ", ".join(sorted(keep)))
                 if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
                            for d in placed_drivers):
                     layout.warnings.append(

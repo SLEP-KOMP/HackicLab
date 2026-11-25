@@ -52,6 +52,9 @@ class BuildOptions:
     usb_toolbox: bool = True
     # Порты, выбранные в мастере: None — все (как видит macOS, до 15 на контроллер)
     usb_ports: Optional[set] = None
+    # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
+    themes: Optional[set] = None
+    picker_variant: str = ""
     wifi_kext_mode: str = "itlwm"       # itlwm / airport
     disable_sip: bool = True
     has_amd_vgpu: bool = False
@@ -256,7 +259,8 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         # Графическое меню: OpenCanopy читает иконки из EFI/OC/Resources
         boot = cfg["Misc"]["Boot"]
         boot["PickerMode"] = "External"
-        boot["PickerVariant"] = "Acidanthera\\GoldenGate"
+        boot["PickerVariant"] = (getattr(options, "picker_variant", "")
+                                 or "Acidanthera\\GoldenGate")
         boot["PickerAttributes"] = 17
 
     if getattr(options, "audio_dxe", False):

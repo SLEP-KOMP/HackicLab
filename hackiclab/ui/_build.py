@@ -32,6 +32,7 @@ from ._common import _efi_root_for, _h2, _muted, _val
 from ._workers import BuildWorker
 from .apple_progress import AppleProgressBar
 from .usb_picker import UsbPortPicker
+from .theme_cards import ThemeCards
 
 
 class BuildPageMixin:
@@ -81,6 +82,10 @@ class BuildPageMixin:
         gui_desc = _muted(page, tr.t("build.gui_picker_desc")); gui_desc.setWordWrap(True)
         opts.addWidget(self.opt_gui)
         opts.addWidget(gui_desc)
+        theme_hint = _muted(page, tr.t("themes.hint")); theme_hint.setWordWrap(True)
+        opts.addWidget(theme_hint)
+        self.build_themes = ThemeCards(page)
+        opts.addWidget(self.build_themes)
         opts.addSpacing(8)
         self.opt_audio = QCheckBox(tr.t("build.audio_dxe"))
         audio_desc = _muted(page, tr.t("build.audio_dxe_desc")); audio_desc.setWordWrap(True)
@@ -364,9 +369,13 @@ class BuildPageMixin:
                 QMessageBox.warning(self, "HackicLab", tr.t("build.pick"))
                 return
         profile = self._resolved_profile()
+        theme_sel = sorted(self.build_themes.selection()) if hasattr(
+            self, "build_themes") else []
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
             usb_ports=getattr(self, "_build_usb_ports", None),
+            themes=set(theme_sel) or None,
+            picker_variant=theme_sel[0] if theme_sel else "",
             disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),

@@ -1,120 +1,123 @@
-"""Тесты тем оформления и сохранения состояния интерфейса."""
+"""Тесты каталога тем OpenCanopy и карточек выбора."""
 
 from __future__ import annotations
 
+import struct
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import _bootstrap  # noqa: F401
 
-from hackiclab import themes, uistate
+from hackiclab.knowledge import themes
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 24 + b"IEND" + b"\x00" * 4
 
 
-class ThemeTests(unittest.TestCase):
-    def test_system_scheme_is_known_value(self):
-        self.assertIn(themes.detect_system_scheme(), ("light", "dark"))
-
-    def test_all_builtin_themes_have_palettes(self):
-        for name in (*themes.BUILTIN_THEMES, "light", "dark", "custom"):
-            self.assertIn(name, themes.PALETTES)
-        # «system» не палитра, а ссылка на текущую схему ОС
-        self.assertIn(themes.resolve("system"), ("light", "dark"))
-
-    def test_qss_contains_palette_colors(self):
-        qss = themes.get_qss("dark")
-        self.assertIn("#14151f", qss)
-        self.assertIn("#8b5cf6", qss)
-
-    def test_unknown_theme_falls_back_to_dark(self):
-        self.assertEqual(themes.get_qss("nonsense"), themes.get_qss("dark"))
-
-    def test_background_applies_only_to_custom_theme(self):
-        path = r"C:\pics\wall.png"
-        custom = themes.get_qss("custom", path)
-        self.assertIn("background-image", custom)
-        self.assertIn("wall.png", custom)
-        dark = themes.get_qss("dark", path)
-        self.assertNotIn("background-image: url", dark)
-
-    def test_background_path_is_escaped(self):
-        qss = themes.get_qss("custom", r'C:\pics\my "wall".png')
-        self.assertIn("my \\\"wall\\\".png", qss)
-        self.assertNotIn('url("C:\\pics', qss)
-
-    def test_preview_colors_are_hex(self):
-        for name in (*themes.BASE_THEMES, *themes.BUILTIN_THEMES):
-            top, bottom = themes.preview(name)
-            self.assertTrue(top.startswith("#"))
-            self.assertTrue(bottom.startswith("#"))
+def _icns(png: bytes = _PNG) -> bytes:
+    chunk = struct.pack(">4sI", b"ic07", 8 + len(png)) + png
+    return b"icns" + struct.pack(">I", 8 + len(chunk)) + chunk
 
 
-class SystemSchemeTests(unittest.TestCase):
-    def test_high_contrast_wins_over_apps_light(self):
-        """HC-схема с чёрным окном важнее AppsUseLightTheme=1."""
-        with mock.patch.object(themes, "_hc_enabled", return_value=True), \
-             mock.patch.object(themes, "_hc_scheme", return_value="dark"), \
-             mock.patch.object(themes, "_apps_light", return_value=True):
-            self.assertEqual(themes.detect_system_scheme(), "dark")
+class ThemeCatalogTests(unittest.TestCase):
+    def test_variants_have_full_ids(self):
+        ids = themes.variant_ids()
+        self.assertIn("Acidanthera\\GoldenGate", ids)
+        self.assertEqual(len(ids), 3)
 
-    def test_high_contrast_light_scheme(self):
-        with mock.patch.object(themes, "_hc_enabled", return_value=True), \
-             mock.patch.object(themes, "_hc_scheme", return_value="light"), \
-             mock.patch.object(themes, "_apps_light", return_value=False):
-            self.assertEqual(themes.detect_system_scheme(), "light")
+    def test_picker_variant_accepts_short_and_full(self):
+        self.assertEqual(themes.picker_variant("GoldenGate"),
+                         "Acidanthera\\GoldenGate")
+        self.assertEqual(themes.picker_variant("Acidanthera\\GoldenGate"),
+                         "Acidanthera\\GoldenGate")
 
-    def test_apps_theme_without_high_contrast(self):
-        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
-             mock.patch.object(themes, "_apps_light", return_value=True):
-            self.assertEqual(themes.detect_system_scheme(), "light")
+    def test_labels_are_localised(self):
+        self.assertIn("GoldenGate", themes.variant_label("GoldenGate", "ru"))
+        self.assertIn("dark", themes.variant_label("GoldenGate", "en"))
 
-    def test_qt_scheme_fallback(self):
-        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
-             mock.patch.object(themes, "_apps_light", return_value=None), \
-             mock.patch.object(themes, "_qt_color_scheme", return_value="dark"):
-            self.assertEqual(themes.detect_system_scheme(), "dark")
+    def test_extract_png_from_icns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "HardDrive.icns"
+            path.write_bytes(_icns())
+            self.assertEqual(themes.extract_png(path), _PNG)
 
-    def test_default_is_dark(self):
-        with mock.patch.object(themes, "_hc_enabled", return_value=False), \
-             mock.patch.object(themes, "_apps_light", return_value=None), \
-             mock.patch.object(themes, "_qt_color_scheme", return_value=None), \
-             mock.patch.object(themes, "_palette_scheme", return_value=None):
-            self.assertEqual(themes.detect_system_scheme(), "dark")
+    def test_extract_png_returns_none_for_garbage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "broken.icns"
+            path.write_bytes(b"not an icns")
+            self.assertIsNone(themes.extract_png(path))
+
+    def test_available_reports_existing_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "Image" / "Acidanthera" / "Syrah"
+            folder.mkdir(parents=True)
+            (folder / "HardDrive.icns").write_bytes(_icns())
+            self.assertEqual(themes.available(Path(tmp)), ["Acidanthera\\Syrah"])
+
+    def test_preview_pngs_uses_theme_icons(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "Image" / "Acidanthera" / "Syrah"
+            folder.mkdir(parents=True)
+            (folder / "HardDrive.icns").write_bytes(_icns())
+            pngs = themes.preview_pngs(Path(tmp), "Syrah")
+            self.assertEqual(pngs, [_PNG])
 
 
-class UiStateTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.home = Path(self.tmp.name)
-        self.addCleanup(self.tmp.cleanup)
-        self.patch = mock.patch("hackiclab.uistate.app_home", return_value=self.home)
-        self.patch.start()
-        self.addCleanup(self.patch.stop)
+class ThemeCardsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
 
-    def test_defaults_use_system_theme(self):
-        state = uistate.load()
-        self.assertEqual(state["theme"], "system")
-        self.assertEqual(state["background"], "")
-        self.assertTrue(state["check_updates"])
+    def _cards(self):
+        from hackiclab.ui.theme_cards import ThemeCards
 
-    def test_save_and_reload(self):
-        uistate.save(theme="aqua", background="C:/bg.png")
-        state = uistate.load()
-        self.assertEqual(state["theme"], "aqua")
-        self.assertEqual(state["background"], "C:/bg.png")
+        return ThemeCards()
 
-    def test_unknown_keys_are_ignored(self):
-        uistate.save(theme="dark", evil="payload")
-        self.assertNotIn("evil", uistate.load())
+    def test_empty_by_default(self):
+        self.assertEqual(self._cards().selection(), set())
 
-    def test_broken_file_falls_back_to_defaults(self):
-        (self.home / "ui.json").write_text("{ not json", encoding="utf-8")
-        self.assertEqual(uistate.load()["theme"], "system")
+    def test_set_selection_marks_variant(self):
+        cards = self._cards()
+        cards.set_selection({"Acidanthera\\GoldenGate"})
+        self.assertEqual(cards.selection(), {"Acidanthera\\GoldenGate"})
 
-    def test_get_and_set_value(self):
-        uistate.set_value("postponed_update", "1.0.2")
-        self.assertEqual(uistate.get("postponed_update"), "1.0.2")
+    def test_select_all_checks_every_variant(self):
+        cards = self._cards()
+        cards.select_all()
+        self.assertEqual(cards.selection(), set(themes.variant_ids()))
+
+
+class ThemeConfigTests(unittest.TestCase):
+    """PickerVariant попадает в config.plist из выбранной темы."""
+
+    def _boot(self, options):
+        import plistlib
+
+        from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="Intel Core i5", vendor="intel", generation=9)
+        cfg = plistlib.loads(generate_config_plist(profile, options))
+        return cfg["Misc"]["Boot"]
+
+    def test_custom_variant_is_written(self):
+        from hackiclab.builder.config_gen import BuildOptions
+
+        boot = self._boot(BuildOptions(gui_picker=True,
+                                       picker_variant="Acidanthera\\Syrah"))
+        self.assertEqual(boot["PickerVariant"], "Acidanthera\\Syrah")
+        self.assertEqual(boot["PickerMode"], "External")
+
+    def test_default_variant_when_not_selected(self):
+        from hackiclab.builder.config_gen import BuildOptions
+
+        boot = self._boot(BuildOptions(gui_picker=True))
+        self.assertEqual(boot["PickerVariant"], "Acidanthera\\GoldenGate")
 
 
 if __name__ == "__main__":
