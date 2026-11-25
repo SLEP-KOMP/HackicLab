@@ -120,6 +120,9 @@ class BuildPageMixin:
         self.macos_incompat.setObjectName("warn")
         self.macos_incompat.setVisible(False)
         mv.addWidget(self.macos_incompat)
+        # Диапазон macOS под железо: минимум, потолок и рекомендация с причинами в подсказке.
+        self.macos_range = _muted(page, ""); self.macos_range.setWordWrap(True)
+        mv.addWidget(self.macos_range)
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
         self.macos_combo.currentIndexChanged.connect(
             lambda _i: self._refresh_patches())
@@ -262,6 +265,27 @@ class BuildPageMixin:
             return None
         return {i for i, cb in getattr(self, "_patch_checks", {}).items() if cb.isChecked()}
 
+    def _refresh_mac_range(self):
+        """Подпись с диапазоном macOS под железо; причины — в подсказке."""
+        if not hasattr(self, "macos_range") or not hasattr(self, "macos_combo"):
+            return
+        from ..knowledge.mac_range import label, mac_range
+        try:
+            profile = self._resolved_profile()
+        except Exception:
+            profile = None
+        if profile is None:
+            self.macos_range.setText("")
+            self.macos_range.setToolTip("")
+            return
+        rng = mac_range(profile, self.macos_combo.currentData() or "")
+        self.macos_range.setText(tr.t("build.range").format(
+            recommended=label(rng.recommended),
+            lowest=label(rng.lowest),
+            highest=label(rng.highest)))
+        pick = 0 if tr.current == "ru" else 1
+        self.macos_range.setToolTip("\n".join(r[pick] for r in rng.reasons))
+
     def _refresh_patches(self):
         """Пересобирает список патчей и отчёт под железо/язык/режим."""
         # Сборка страницы идёт по шагам: ручная форма обновляется раньше, чем
@@ -287,6 +311,7 @@ class BuildPageMixin:
             self.patch_list.addWidget(cb)
             self._patch_checks[p.id] = cb
         self._render_patch_report()
+        self._refresh_mac_range()
 
     def page_build_owner(self):
         """Родитель для виджетов патчей (первая найденная страница)."""
