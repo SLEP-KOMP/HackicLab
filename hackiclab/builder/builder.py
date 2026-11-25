@@ -302,8 +302,13 @@ class EFIBuilder:
             self._step(66, "Строю карту USB-портов…")
             map_kext = None
             try:
-                from .usb_map import generate_auto_map, write_map_kext
+                from .usb_map import filter_ports, generate_auto_map, write_map_kext
                 map_plist = generate_auto_map(tmp, log=self._log)
+                # Выбор из мастера: оставляем только отмеченные порты.
+                if map_plist and getattr(self.plan.options, "usb_ports", None):
+                    filtered = filter_ports(map_plist, self.plan.options.usb_ports)
+                    if filtered:
+                        map_plist = filtered
                 if map_plist:
                     map_kext = write_map_kext(map_plist, kexts_dir)
             except Exception as ex:

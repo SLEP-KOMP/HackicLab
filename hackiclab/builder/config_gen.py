@@ -50,6 +50,8 @@ IG_PLATFORM_IDS = {
 @dataclass
 class BuildOptions:
     usb_toolbox: bool = True
+    # Порты, выбранные в мастере: None — все (как видит macOS, до 15 на контроллер)
+    usb_ports: Optional[set] = None
     wifi_kext_mode: str = "itlwm"       # itlwm / airport
     disable_sip: bool = True
     has_amd_vgpu: bool = False

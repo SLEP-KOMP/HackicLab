@@ -287,6 +287,12 @@ class WizardMixin:
         usb_note.setWordWrap(True)
         lay.addWidget(usb_note)
 
+        # Полноценный выбор портов прямо в мастере: карта строится до сборки.
+        from .usb_picker import UsbPortPicker
+        self.wiz_usb_picker = UsbPortPicker(widget)
+        self.wiz_usb_picker.changed.connect(self._wiz_usb_changed)
+        lay.addWidget(self.wiz_usb_picker)
+
         self.wiz_dgpu_chk = QCheckBox(tr.t("wizard.options.dgpu"))
         self.wiz_dgpu_chk.toggled.connect(
             lambda on: self._wiz_state().__setitem__("disable_dgpu", bool(on)))
@@ -323,6 +329,13 @@ class WizardMixin:
         lay.addWidget(share_note)
         lay.addStretch()
         return widget
+    def _wiz_usb_changed(self):
+        """Выбор портов в пикере → состояние мастера (пусто = карта как есть)."""
+        state = self._wiz_state()
+        picker = getattr(self, "wiz_usb_picker", None)
+        selection = picker.selection() if picker is not None else set()
+        state["usb_ports"] = {tuple(item) for item in selection} or None
+
     def _wiz_fill_options(self):
         state = self._wiz_state()
         profile = state.get("profile")
@@ -662,6 +675,7 @@ class WizardMixin:
             return
         opts = BuildOptions(
             usb_toolbox=bool(state.get("usb_toolbox", True)),
+            usb_ports=state.get("usb_ports"),
             disable_sip=True,
             wifi_kext_mode=str(state.get("wifi") or "itlwm"),
             target_macos=str(state.get("macos") or ""),
