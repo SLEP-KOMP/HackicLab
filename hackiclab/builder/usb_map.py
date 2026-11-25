@@ -432,7 +432,16 @@ def _hex_int(value) -> int:
 
 
 def _port_speed_class(port: dict) -> str:
-    """SuperSpeed/HighSpeed/FullSpeed/Unknown по флагам протокола."""
+    """Скорость порта: сначала ConnectionInfo.Speed, затем флаги протоколов.
+
+    Speed: 0 Low, 1 Full, 2 High, 3 Super, 4 SuperPlus — на этой прошивке
+    Usb300 в SupportedUsbProtocols не поднимается, поэтому поле Speed точнее.
+    """
+    speed = (port.get("ConnectionInfo") or {}).get("Speed")
+    by_speed = {0: "LowSpeed", 1: "FullSpeed", 2: "HighSpeed",
+                3: "SuperSpeed", 4: "SuperSpeed"}
+    if isinstance(speed, int) and speed in by_speed:
+        return by_speed[speed]
     v2 = port.get("ConnectionInfoV2")
     if not v2 or not v2.get("SupportedUsbProtocols"):
         return "Unknown"

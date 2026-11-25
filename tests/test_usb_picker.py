@@ -142,5 +142,30 @@ class UnknownConnectorTests(unittest.TestCase):
         self.assertIn("3.0", picker.hint.text())
 
 
+class SpeedClassTests(unittest.TestCase):
+    """Скорость берём из ConnectionInfo.Speed, а не только из флагов протоколов."""
+
+    def test_super_speed_by_speed_field(self):
+        from hackiclab.builder.usb_map import _port_speed_class
+
+        self.assertEqual(_port_speed_class({"ConnectionInfo": {"Speed": 3}}), "SuperSpeed")
+
+    def test_high_speed_by_speed_field(self):
+        from hackiclab.builder.usb_map import _port_speed_class
+
+        self.assertEqual(_port_speed_class({"ConnectionInfo": {"Speed": 2}}), "HighSpeed")
+
+    def test_falls_back_to_protocol_flags(self):
+        from hackiclab.builder.usb_map import _port_speed_class
+
+        port = {"ConnectionInfoV2": {"SupportedUsbProtocols": {"Usb300": 1}}}
+        self.assertEqual(_port_speed_class(port), "SuperSpeed")
+
+    def test_unknown_without_data(self):
+        from hackiclab.builder.usb_map import _port_speed_class
+
+        self.assertEqual(_port_speed_class({}), "Unknown")
+
+
 if __name__ == "__main__":
     unittest.main()
