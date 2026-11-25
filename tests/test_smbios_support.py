@@ -31,6 +31,12 @@ class SmbiosSupportTests(unittest.TestCase):
         self.assertTrue(supports("iMac99,9", "Sequoia"))
         self.assertTrue(supports("MacPro7,1", ""))
 
+    def test_imacpro_reaches_sequoia_but_not_tahoe(self):
+        # iMac Pro (2017) поддерживается Apple до Sequoia; в Tahoe уже вычеркнут.
+        self.assertEqual(support("iMacPro1,1"), ("High Sierra", "Sequoia"))
+        self.assertTrue(supports("iMacPro1,1", "Sequoia"))
+        self.assertFalse(supports("iMacPro1,1", "Tahoe"))
+
     def test_pick_returns_first_supported(self):
         ladder = ["iMac18,3", "iMac19,1", "iMac20,1", "MacPro7,1"]
         self.assertEqual(pick(ladder, "High Sierra"), "iMac18,3")

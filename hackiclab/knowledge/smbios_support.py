@@ -1,7 +1,8 @@
 """Диапазоны macOS для SMBIOS-моделей, которые мы выдаём.
 
 Модель обязана существовать в выбранной macOS: iMac19,1 не появится в
-High Sierra, а iMacPro1,1 не «доживает» до Sequoia. Таблица — только те
+High Sierra, а iMacPro1,1 не «доживает» до Tahoe (iMac Pro 2017 есть в
+Sequoia, но уже вычеркнут из списка Tahoe). Таблица — только те
 модели, которые встречаются в SMBIOS_MAP/_AMD_DESKTOP_SMBIOS; сверять с
 официальными списками Apple при добавлении новых.
 """
@@ -26,7 +27,7 @@ SUPPORT: dict[str, tuple[str, str]] = {
     "iMac18,3": ("High Sierra", "Ventura"),
     "iMac19,1": ("Mojave", "Sequoia"),
     "iMac20,1": ("Catalina", "Tahoe"),
-    "iMacPro1,1": ("High Sierra", "Sonoma"),
+    "iMacPro1,1": ("High Sierra", "Sequoia"),
     "MacPro7,1": ("Catalina", "Tahoe"),
 }
 
