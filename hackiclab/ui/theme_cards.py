@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -100,6 +101,16 @@ class ThemeCards(QWidget):
         head.addWidget(self.all_btn)
         v.addLayout(head)
 
+        font_row = QHBoxLayout()
+        font_row.addWidget(QLabel(tr.t("themes.font")))
+        self.font_combo = QComboBox()
+        self.font_combo.addItem(tr.t("themes.font_default"), "")
+        for name in ("Terminus", "TerminusCore"):
+            self.font_combo.addItem(name, name)
+        self.font_combo.currentIndexChanged.connect(lambda _i: self.changed.emit())
+        font_row.addWidget(self.font_combo, 1)
+        v.addLayout(font_row)
+
         for name, _ru, _en in themes.VARIANTS:
             variant = f"{themes.THEME_NAME}\\{name}"
             self._add_card(variant, themes.variant_label(variant, tr.current),
@@ -174,6 +185,10 @@ class ThemeCards(QWidget):
         else:
             self.status.setText("")
         self.changed.emit()
+
+    def menu_font(self) -> str:
+        """Выбранный шрифт меню (пусто — как в OpenCore по умолчанию)."""
+        return str(self.font_combo.currentData() or "")
 
     # --- данные ---
 

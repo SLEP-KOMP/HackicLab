@@ -705,6 +705,8 @@ class WizardMixin:
             picker_variant=str(state.get("picker_variant") or ""),
             custom_themes=dict(getattr(getattr(self, "wiz_themes", None),
                                        "custom_dirs", {}) or {}),
+            menu_font=(self.wiz_themes.menu_font()
+                       if hasattr(self, "wiz_themes") else ""),
             disable_sip=True,
             wifi_kext_mode=str(state.get("wifi") or "itlwm"),
             target_macos=str(state.get("macos") or ""),

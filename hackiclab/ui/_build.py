@@ -377,6 +377,8 @@ class BuildPageMixin:
             themes=set(theme_sel) or None,
             picker_variant=theme_sel[0] if theme_sel else "",
             custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),
+            menu_font=(self.build_themes.menu_font()
+                       if hasattr(self, "build_themes") else ""),
             disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),

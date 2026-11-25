@@ -120,5 +120,29 @@ class ThemeConfigTests(unittest.TestCase):
         self.assertEqual(boot["PickerVariant"], "Acidanthera\\GoldenGate")
 
 
+    def test_menu_font_is_written(self):
+        import plistlib
+
+        from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="Intel Core i5", vendor="intel", generation=9)
+        cfg = plistlib.loads(generate_config_plist(
+            profile, BuildOptions(menu_font="Terminus")))
+        self.assertEqual(cfg["UEFI"]["Output"]["ConsoleFont"], "Terminus")
+
+    def test_menu_font_default_is_empty(self):
+        import plistlib
+
+        from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
+        from hackiclab.scanner.models import CPUInfo, HardwareProfile
+
+        profile = HardwareProfile(platform="desktop")
+        profile.cpu = CPUInfo(name="Intel Core i5", vendor="intel", generation=9)
+        cfg = plistlib.loads(generate_config_plist(profile, BuildOptions()))
+        self.assertEqual(cfg["UEFI"]["Output"]["ConsoleFont"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

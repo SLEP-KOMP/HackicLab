@@ -55,6 +55,8 @@ class BuildOptions:
     # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
     themes: Optional[set] = None
     picker_variant: str = ""
+    # Шрифт текстового режима/меню: "" (по умолчанию), Terminus, TerminusCore
+    menu_font: str = ""
     # Сторонние темы: id вида "custom\<Имя>" -> папка с .icns
     custom_themes: Optional[dict] = None
     wifi_kext_mode: str = "itlwm"       # itlwm / airport
@@ -280,6 +282,11 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot["PickerVariant"] = (getattr(options, "picker_variant", "")
                                  or "Acidanthera\\GoldenGate")
         boot["PickerAttributes"] = 17
+
+    font = (getattr(options, "menu_font", "") or "").strip()
+    if font:
+        # Terminus/TerminusCore лежат в Resources/Font и рисуют текст меню.
+        cfg["UEFI"]["Output"]["ConsoleFont"] = font
 
     if getattr(options, "audio_dxe", False):
         # AudioDxe мало подключить драйвером: без AudioSupport звука нет.
