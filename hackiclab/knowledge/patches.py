@@ -296,7 +296,15 @@ def merge_scan_paths(profile, scan):
 
 
 def plan(profile, target_macos: str = "") -> list[Patch]:
-    """Патчи, которые относятся к этому железу и целевой macOS."""
+    """Патчи, которые относятся к этому железу и целевой macOS.
+
+    Пустая цель («Авто») — это не «никакая macOS»: считаем её максимальной
+    поддерживаемой версией для железа, иначе в ручной сборке пропадают
+    патчи Broadcom/OCLP, которые в автосборке работают.
+    """
+    if not target_macos:
+        from .mac_range import mac_range
+        target_macos = mac_range(profile).recommended
     major = _macos_major(target_macos)
     cpu = getattr(profile, "cpu", None)
     out: list[Patch] = []

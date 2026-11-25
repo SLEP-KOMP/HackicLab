@@ -56,5 +56,21 @@ class OclpAmfiConfigTests(unittest.TestCase):
         self.assertNotIn("OCLP-Settings", nv)
 
 
+class OclpAutoTargetTests(unittest.TestCase):
+    """Пустая цель («Авто») не должна отключать версионные патчи."""
+
+    def test_plan_with_empty_target_keeps_broadcom(self):
+        ids = {p.id for p in plan(_broadcom_profile(), "")}
+        self.assertIn("wifi_broadcom_efi", ids)
+        self.assertIn("wifi_broadcom_root", ids)
+        self.assertIn("oclp_amfi", ids)
+
+    def test_config_with_empty_target_blocks_ioskywalk(self):
+        cfg = plistlib.loads(generate_config_plist(
+            _broadcom_profile(), BuildOptions(target_macos="", patches=None)))
+        blocks = [b.get("Identifier") for b in (cfg["Kernel"].get("Block") or [])]
+        self.assertIn("com.apple.iokit.IOSkywalkFamily", blocks)
+
+
 if __name__ == "__main__":
     unittest.main()

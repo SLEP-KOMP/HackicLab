@@ -89,6 +89,22 @@ def _patch_on(options, patch_id: str) -> bool:
     return True if sel is None else patch_id in sel
 
 
+def _target_of(options, profile) -> str:
+    """Целевая macOS: пустая цель — это максимум для железа, а не «никакая».
+
+    Иначе в ручной сборке («Авто») пропадали версионные правила: набор OCLP
+    для Broadcom, alcid, правила macOS 26.
+    """
+    target = getattr(options, "target_macos", "") or ""
+    if target:
+        return target
+    try:
+        from ..knowledge.mac_range import mac_range
+        return mac_range(profile).recommended
+    except Exception:
+        return ""
+
+
 def _int(name: str) -> bytes:
     return bytes((int(name, 16) & 0xFF, (int(name, 16) >> 8) & 0xFF, 0, 0))
 
@@ -237,7 +253,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     # загрузиться legacy-драйверу из набора OCLP — исключаем его на 23.x+.
     if ((profile.net.wifi_chipset or "").lower() == "broadcom"
             and _patch_on(options, "wifi_broadcom_efi")
-            and _macos_major(options.target_macos) >= 14):
+            and _macos_major(_target_of(options, profile)) >= 14):
         k["Block"] = [{
             "Arch": "x86_64",
             "Comment": "Broadcom legacy Wi-Fi: IOSkywalk downgrade",
@@ -294,7 +310,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     layout_id = getattr(profile.audio, "layout_id", 0) if profile.audio else 0
     if (layout_id and _patch_on(options, "audio_alcid")
             and (profile.audio.codec or "").lower().startswith("alc")
-            and _macos_major(options.target_macos) < 26):
+            and _macos_major(_target_of(options, profile)) < 26):
         boot_args = str(nv.get("boot-args") or "")
         if "alcid=" not in boot_args:
             nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
@@ -309,12 +325,12 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         if "-wegnoegpu" not in boot_args:
             nv["boot-args"] = f"{boot_args} -wegnoegpu".strip()
     # macOS 26: Intel Bluetooth требует отдельного boot-arg (Dortania Tahoe)
-    if _patch_on(options, "bt_intel_26") and _macos_major(options.target_macos) >= 26:
+    if _patch_on(options, "bt_intel_26") and _macos_major(_target_of(options, profile)) >= 26:
         boot_args = str(nv.get("boot-args") or "")
         if "-ibtcompatbeta" not in boot_args:
             nv["boot-args"] = f"{boot_args} -ibtcompatbeta".strip()
     # OTA с 14.4: RestrictEvents + revpatch=sbvmm при SecureBootModel Disabled
-    if _patch_on(options, "ota_updates") and _macos_major(options.target_macos) >= 14:
+    if _patch_on(options, "ota_updates") and _macos_major(_target_of(options, profile)) >= 14:
         boot_args = str(nv.get("boot-args") or "")
         if "revpatch=sbvmm" not in boot_args:
             nv["boot-args"] = f"{boot_args} revpatch=sbvmm".strip()
