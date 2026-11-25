@@ -350,13 +350,9 @@ class SettingsMixin:
         v = QVBoxLayout(body); v.setContentsMargins(28, 24, 28, 24)
         self._page_header(body, v, "about.title", "about.subtitle")
 
-        # Витрина: название, версия, ссылки
+        # Витрина: версия, описание и ссылки (имя уже в заголовке страницы)
         hero = self._card(body)
         hv = QVBoxLayout(hero); hv.setSpacing(8)
-        name = QLabel("HackicLab")
-        name.setObjectName("heroTitle")
-        name.setStyleSheet("font-size:22px;font-weight:600;")
-        hv.addWidget(name)
         meta = _muted(body, f"{tr.t('about.version')} {__version__}  ·  {tr.t('about.license')}")
         hv.addWidget(meta)
         tagline = _muted(body, tr.t("about.tagline")); tagline.setWordWrap(True)
