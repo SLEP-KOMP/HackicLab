@@ -258,8 +258,14 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
     return profile
 
 
+def supports_model(model: str, macos_target: str) -> bool:
+    """Поддерживает ли принудительная модель выбранную macOS (неизвестная — да)."""
+    from .smbios_support import supports
+    return supports(model, macos_target or "")
+
+
 def review(profile: HardwareProfile, macos_target: str = "",
-           wifi_mode: str = "itlwm") -> dict:
+           wifi_mode: str = "itlwm", smbios_override: str = "") -> dict:
     """Проверка выбора по нашим базам: что получится и где будут проблемы."""
     from .kexts import KEXT_DB, select_kexts, smbios_model_for
     from .oc_platforms import MAX_MACOS_BY_GEN
@@ -267,7 +273,7 @@ def review(profile: HardwareProfile, macos_target: str = "",
 
     gen = profile.cpu.generation
     max_macos = MAX_MACOS_BY_GEN.get(gen, "Sonoma")
-    smbios = smbios_model_for(profile, macos_target)
+    smbios = smbios_override or smbios_model_for(profile, macos_target)
     kexts = [entry.name for entry in select_kexts(profile, wifi_mode,
                                                   target_macos=macos_target)]
     ssdts = [entry.name for entry in required_ssdts(profile)]
@@ -305,6 +311,9 @@ def review(profile: HardwareProfile, macos_target: str = "",
         add("info", "thunderbolt", "Thunderbolt: проверьте BIOS и IOMMU")
     if profile.audio.codec and not profile.audio.layout_id:
         add("warn", "audio_layout", "Кодек не в таблице layout — подберите alcid вручную")
+    if smbios_override and not supports_model(smbios_override, macos_target):
+        add("err", "smbios_range",
+            f"Модель {smbios_override} не поддерживает {macos_target or 'эту macOS'} — она не появится в этой системе")
     return {
         "max_macos": max_macos,
         "smbios": smbios,

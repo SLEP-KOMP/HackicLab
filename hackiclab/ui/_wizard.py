@@ -41,10 +41,10 @@ class WizardMixin:
             state = {
                 "step": 0, "profile": None, "macos": "", "kind": "usb",
                 "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
-                "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
+"usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
                 "gui_picker": False,
                 "audio_dxe": False, "network_boot": False, "legacy_boot": False,
-                "share_log": False,
+                "share_log": False, "smbios_model": "",
             }
             self._wiz = state
         return state
@@ -318,6 +318,26 @@ class WizardMixin:
         dgpu_note.setWordWrap(True)
         lay.addWidget(dgpu_note)
 
+        srow = QHBoxLayout()
+        self.wiz_smbios = QComboBox()
+        self.wiz_smbios.addItem(tr.t("manual.smbios_auto"), "")
+        for _model in ("iMacPro1,1", "MacPro7,1", "iMac20,1", "iMac19,1", "MacBookPro16,1"):
+            self.wiz_smbios.addItem(_model, _model)
+        self.wiz_smbios.setCurrentIndex(max(0, self.wiz_smbios.findData(
+            self._wiz_state().get("smbios_model", ""))))
+        self.wiz_smbios.currentIndexChanged.connect(
+            lambda _i: self._wiz_state().__setitem__(
+                "smbios_model", str(self.wiz_smbios.currentData() or "")))
+        smb_label = QLabel(tr.t("manual.smbios"), page)
+        smb_label.setObjectName("kv")
+        smb_label.setMinimumWidth(150)
+        srow.addWidget(smb_label)
+        srow.addWidget(self.wiz_smbios, 1)
+        lay.addLayout(srow)
+        smb_note = _muted(page, tr.t("manual.smbios_desc"))
+        smb_note.setWordWrap(True)
+        lay.addWidget(smb_note)
+
         self.wiz_gui_chk = QCheckBox(tr.t("build.gui_picker"))
         self.wiz_gui_chk.toggled.connect(
             lambda on: self._wiz_state().__setitem__("gui_picker", bool(on)))
@@ -588,7 +608,8 @@ class WizardMixin:
         smbios = ""
         try:
             from ..knowledge.kexts import smbios_model_for
-            smbios = smbios_model_for(profile, state.get("macos") or "")
+            chosen = str(state.get("smbios_model") or "")
+            smbios = chosen or smbios_model_for(profile, state.get("macos") or "")
         except Exception:
             smbios = ""
         rows = [
@@ -716,6 +737,7 @@ class WizardMixin:
             audio_dxe=bool(state.get("audio_dxe")),
             network_boot=bool(state.get("network_boot")),
             legacy_boot=bool(state.get("legacy_boot")),
+            smbios_model=str(state.get("smbios_model") or ""),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target

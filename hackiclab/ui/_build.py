@@ -386,6 +386,8 @@ class BuildPageMixin:
             legacy_boot=self.opt_legacy.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
+            smbios_model=getattr(getattr(self, "manual_smbios", None),
+                                 "currentData", lambda: "")() or "",
             patches=self._patch_ids(),
         )
         plan = BuildPlan(profile=profile, options=opts)

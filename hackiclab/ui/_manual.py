@@ -183,6 +183,14 @@ class ManualBuildMixin:
         self.manual_macos.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.macos", self.manual_macos)
 
+        self.manual_smbios = QComboBox()
+        self._make_searchable(self.manual_smbios)
+        self.manual_smbios.addItem(tr.t("manual.smbios_auto"), "")
+        for _model in ("iMacPro1,1", "MacPro7,1", "iMac20,1", "iMac19,1", "MacBookPro16,1"):
+            self.manual_smbios.addItem(_model, _model)
+        self.manual_smbios.currentIndexChanged.connect(self._manual_refresh)
+        self._manual_field(page, form, "manual.smbios", self.manual_smbios)
+
         self.manual_result = _val(page, "")
         self.manual_result.setWordWrap(True)
         form.addWidget(self.manual_result)
@@ -227,10 +235,11 @@ class ManualBuildMixin:
             return
         profile = manual_hw.build_profile(self._manual_selection())
         self.manual_profile = profile
-        self.manual_touchpad.setEnabled(profile.platform == "laptop")
         self._manual_fill_macos(profile)
         target = str(self.manual_macos.currentData() or "")
-        self._manual_render(profile, manual_hw.review(profile, target, "itlwm"))
+        override = str(self.manual_smbios.currentData() or "")
+        self._manual_render(profile, manual_hw.review(
+            profile, target, "itlwm", smbios_override=override))
         # патчи зависят от железа и macOS — пересчитываем сразу после правки формы
         if hasattr(self, "_refresh_patches"):
             self._refresh_patches()

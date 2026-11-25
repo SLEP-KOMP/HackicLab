@@ -72,6 +72,19 @@ class ReviewTests(unittest.TestCase):
         ok, _ = manual_hw.check_macos(modern, "Sonoma")
         self.assertTrue(ok)
 
+    def test_smbios_override_forces_model_and_warns_on_range(self):
+        # AMD desktop: авто даёт iMacPro1,1 под Sequoia, override меняет модель.
+        profile = manual_hw.build_profile(manual_hw.ManualSelection(
+            cpu="amd-zen2d", gpu="amd"))
+        auto = manual_hw.review(profile, "Sequoia")
+        self.assertEqual(auto["smbios"], "iMacPro1,1")
+        forced = manual_hw.review(profile, "Sequoia", smbios_override="MacPro7,1")
+        self.assertEqual(forced["smbios"], "MacPro7,1")
+        # Модель, которой ещё нет в целевой macOS, помечается ошибкой.
+        bad = manual_hw.review(profile, "High Sierra", smbios_override="MacPro7,1")
+        keys = [i["key"] for i in bad["issues"]]
+        self.assertIn("smbios_range", keys)
+
 
 class PageTests(unittest.TestCase):
     @classmethod

@@ -62,11 +62,12 @@ class BuildPlan:
     ssdt_names: list = field(default_factory=list)
     target_dir: Path = None                   # type: ignore[assignment]
 
-    def __post_init__(self):
+def __post_init__(self):
         if self.options is None:
             self.options = BuildOptions()
         if self.smbios is None:
-            model = smbios_model_for(self.profile, self.options.target_macos)
+            model = self.options.smbios_model or smbios_model_for(
+                self.profile, self.options.target_macos)
             self.smbios = generate_smbios(model)
         if not self.kext_names:
             for e in select_kexts(self.profile, self.options.wifi_kext_mode,

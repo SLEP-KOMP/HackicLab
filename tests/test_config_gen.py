@@ -31,6 +31,16 @@ class ConfigGenTests(unittest.TestCase):
         self.assertIsInstance(cfg["ACPI"]["Add"], list)
         self.assertTrue(cfg["ACPI"]["Add"], "ACPI Add пуст")
 
+    def test_forced_smbios_model_lands_in_platforminfo(self):
+        # AMD-подобный профиль: авто дал бы iMacPro1,1, принудительно — MacPro7,1.
+        p = desktop_profile()
+        p.cpu.vendor = "amd"
+        auto = plistlib.loads(generate_config_plist(p, BuildOptions(target_macos="Sequoia")))
+        self.assertEqual(auto["PlatformInfo"]["Generic"]["SystemProductName"], "iMacPro1,1")
+        forced = plistlib.loads(generate_config_plist(
+            p, BuildOptions(target_macos="Sequoia", smbios_model="MacPro7,1")))
+        self.assertEqual(forced["PlatformInfo"]["Generic"]["SystemProductName"], "MacPro7,1")
+
     def test_intel_gets_ssdt_plug(self):
         cfg = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
         paths = [x["Path"] for x in cfg["ACPI"]["Add"]]

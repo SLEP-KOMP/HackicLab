@@ -64,6 +64,8 @@ class BuildOptions:
     has_amd_vgpu: bool = False
     custom_smbios: Optional["SMBIOSData"] = None
     target_macos: str = ""              # e.g. "Sonoma"
+    # Конкретная модель SMBIOS: "" — автоматический выбор по железу и macOS
+    smbios_model: str = ""
     verbose: bool = False
     # Отключить дискретную видеокарту (WhateverGreen: -wegnoegpu)
     disable_dgpu: bool = False
@@ -349,7 +351,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     else:
         # без полного SMBIOS конфиг не проходит ocvalidate («unknown model»),
         # поэтому всегда подставляем модель, поддерживающую целевую macOS
-        model = smbios_model_for(profile, options.target_macos)
+        model = options.smbios_model or smbios_model_for(profile, options.target_macos)
         if model:
             cfg["PlatformInfo"]["Generic"]["SystemProductName"] = model
 
