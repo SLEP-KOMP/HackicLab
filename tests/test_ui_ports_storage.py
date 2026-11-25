@@ -43,6 +43,32 @@ class PortsStorageUiTests(unittest.TestCase):
             window.close()
             window.deleteLater()
 
+    def test_manual_builder_has_picker(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            self.assertTrue(hasattr(window, "build_usb_picker"))
+            window._on_build_usb_changed()
+            self.assertIsNone(window._build_usb_ports)
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_wizard_options_step_is_scrollable(self):
+        from PySide6.QtWidgets import QScrollArea
+
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            pages = [window.wiz_stack.widget(i)
+                     for i in range(window.wiz_stack.count())]
+            self.assertTrue(any(isinstance(p, QScrollArea) for p in pages))
+        finally:
+            window.close()
+            window.deleteLater()
+
     def test_storage_notes_render_for_profile(self):
         from hackiclab.scanner.models import CPUInfo, HardwareProfile, StorageInfo
         from hackiclab.ui.main_window import MainWindow

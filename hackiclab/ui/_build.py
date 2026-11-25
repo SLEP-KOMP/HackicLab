@@ -31,6 +31,7 @@ from ..knowledge import manual_hw
 from ._common import _efi_root_for, _h2, _muted, _val
 from ._workers import BuildWorker
 from .apple_progress import AppleProgressBar
+from .usb_picker import UsbPortPicker
 
 
 class BuildPageMixin:
@@ -65,6 +66,10 @@ class BuildPageMixin:
         # Накопитель проверяем сразу в сборке: проблемный диск не даст загрузиться.
         self.build_storage = _muted(page, ""); self.build_storage.setWordWrap(True)
         opts.addWidget(self.build_storage)
+        # Выбор портов прямо в ручной сборке: те же чекбоксы, что в мастере.
+        self.build_usb_picker = UsbPortPicker(page)
+        self.build_usb_picker.changed.connect(self._on_build_usb_changed)
+        opts.addWidget(self.build_usb_picker)
         opts.addSpacing(8)
         self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
         self.opt_sip.setChecked(True)
@@ -299,6 +304,12 @@ class BuildPageMixin:
         lines = storage_warnings(storage, tr.current) if storage is not None else []
         self.build_storage.setText("\n".join(f"⚠ {line}" for line in lines))
 
+    def _on_build_usb_changed(self):
+        """Выбор портов в ручной сборке → набор для фильтрации карты."""
+        picker = getattr(self, "build_usb_picker", None)
+        selection = picker.selection() if picker is not None else set()
+        self._build_usb_ports = {tuple(item) for item in selection} or None
+
     def _refresh_patches(self):
         """Пересобирает список патчей и отчёт под железо/язык/режим."""
         # Сборка страницы идёт по шагам: ручная форма обновляется раньше, чем
@@ -355,6 +366,7 @@ class BuildPageMixin:
         profile = self._resolved_profile()
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
+            usb_ports=getattr(self, "_build_usb_ports", None),
             disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),

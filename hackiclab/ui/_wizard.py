@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
+    QScrollArea,
     QWidget,
 )
 
@@ -80,7 +81,7 @@ class WizardMixin:
         self.wiz_stack.addWidget(self._wiz_step_target(page))
         self.wiz_stack.addWidget(self._wiz_step_mode(page))
         self.wiz_stack.addWidget(self._wiz_step_wifi(page))
-        self.wiz_stack.addWidget(self._wiz_step_options(page))
+        self.wiz_stack.addWidget(self._wiz_scroll(self._wiz_step_options(page)))
         self.wiz_stack.addWidget(self._wiz_step_summary(page))
         v.addWidget(self.wiz_stack, 1)
 
@@ -260,6 +261,14 @@ class WizardMixin:
             button = self._wiz_option(self, layout, "wifi", value,
                                       tr.t(title), tr.t(desc))
             button.setChecked(value == state.get("wifi"))
+    def _wiz_scroll(self, widget) -> QScrollArea:
+        """Длинные шаги (параметры и порты) прокручиваются, а не обрезаются."""
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QScrollArea.Shape.NoFrame)
+        area.setWidget(widget)
+        return area
+
     def _wiz_step_options(self, page) -> QWidget:
         widget = QWidget()
         lay = QVBoxLayout(widget)
