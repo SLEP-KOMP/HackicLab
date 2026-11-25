@@ -482,8 +482,12 @@ def _serialize_hub(hub: dict) -> dict:
 
 
 def _guess_port_type(port: dict) -> Optional[int]:
-    """Оценка типа коннектора по данным usbdump (без companion-портов)."""
-    if not str(port["status"]).endswith("DeviceConnected"):
+    """Оценка типа коннектора по данным usbdump (без companion-портов).
+
+    Тип можно понять только по подключённому устройству: пустой порт остаётся
+    неизвестным («NoDeviceConnected» — тоже не подключён, суффикс не годится).
+    """
+    if str(port.get("status") or "") != "DeviceConnected":
         return None
     if port["type_c"]:
         return 9  # USB3 Type-C с переключателем
@@ -546,13 +550,15 @@ def build_map_plist(controllers: list, limit: Optional[int] = MAX_PORTS_PER_CONT
         for i, port in enumerate(selected, start=1):
             highest_index = max(highest_index, port["index"])
             connector = port["type"] if port["type"] is not None else port["guessed"]
-            if connector is None:
-                connector = TYPE_USB_A
             port_name = f"{prefix}{str(i).zfill(max(1, 4 - len(prefix)))}"
-            entry_ports[port_name] = {
+            entry = {
                 "port": port["index"].to_bytes(4, byteorder="little"),
-                "UsbConnector": connector,
             }
+            # Тип неизвестен (порт пуст) — не врём «USB 2.0»: ключ не пишем,
+            # macOS возьмёт USB-A по умолчанию, а интерфейс покажет «не определён».
+            if connector is not None:
+                entry["UsbConnector"] = connector
+            entry_ports[port_name] = entry
         if not entry_ports:
             continue
         personalities[personality_name] = {
@@ -654,6 +660,8 @@ def port_rows(plist: Optional[dict]) -> list:
                 "name": name,
                 "index": index,
                 "connector": int(info.get("UsbConnector") or 0),
+                # Нет ключа — тип не определён (пустой порт при определении).
+                "type_known": "UsbConnector" in info,
             })
     rows.sort(key=lambda row: (row["controller"], row["index"]))
     return rows

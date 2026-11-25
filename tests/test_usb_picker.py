@@ -88,5 +88,59 @@ class PickerTests(unittest.TestCase):
         self.assertEqual(picker.selection(), keep)
 
 
+class UnknownConnectorTests(unittest.TestCase):
+    """Порт без подключённого устройства не должен выдаваться за USB 2.0."""
+
+    def test_empty_port_has_no_type(self):
+        from hackiclab.builder.usb_map import _guess_port_type
+
+        self.assertIsNone(_guess_port_type({"status": "NoDeviceConnected"}))
+
+    def test_connected_superspeed_is_usb3(self):
+        from hackiclab.builder.usb_map import _guess_port_type
+
+        self.assertEqual(_guess_port_type({
+            "status": "DeviceConnected", "class": "SuperSpeed",
+            "type_c": False, "user_connectable": True}), 3)
+
+    def test_connected_highspeed_is_usb2(self):
+        from hackiclab.builder.usb_map import _guess_port_type
+
+        self.assertEqual(_guess_port_type({
+            "status": "DeviceConnected", "class": "HighSpeed",
+            "type_c": False, "user_connectable": True}), 0)
+
+    def _unknown_plist(self):
+        from hackiclab.builder.usb_map import build_map_plist
+
+        return build_map_plist([{
+            "identifiers": {"bdf": [2, 0, 0]},
+            "ports": [{"index": 1, "type": None, "guessed": None,
+                       "status": "NoDeviceConnected", "class": "Unknown",
+                       "type_c": False, "user_connectable": True}],
+        }], limit=None)
+
+    def test_map_omits_connector_when_unknown(self):
+        from hackiclab.builder.usb_map import port_rows
+
+        rows = port_rows(self._unknown_plist())
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["type_known"])
+
+    def test_known_connector_keeps_flag(self):
+        from hackiclab.builder.usb_map import port_rows
+
+        plist = build_map_plist([_controller(20, 2)], limit=None)
+        self.assertTrue(all(row["type_known"] for row in port_rows(plist)))
+
+    def test_picker_shows_unknown_type_and_hint(self):
+        from hackiclab.ui.usb_picker import UsbPortPicker
+
+        picker = UsbPortPicker()
+        picker.set_plist(self._unknown_plist())
+        self.assertIn("не определён", picker.tree.topLevelItem(0).child(0).text(1))
+        self.assertIn("3.0", picker.hint.text())
+
+
 if __name__ == "__main__":
     unittest.main()

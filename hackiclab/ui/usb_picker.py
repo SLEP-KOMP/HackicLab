@@ -26,6 +26,7 @@ from ._workers import UsbMapWorker
 
 _CONNECTORS = {0: "usbmap.conn_usb2", 3: "usbmap.conn_usb3", 255: "usbmap.conn_internal"}
 _WARN = QColor("#e5484d")
+_MUTED = QColor("#8b93a1")
 
 
 class UsbPortPicker(QWidget):
@@ -60,6 +61,9 @@ class UsbPortPicker(QWidget):
         self.status = QLabel(tr.t("usbmap.dsdt_note"))
         self.status.setWordWrap(True)
         v.addWidget(self.status)
+        self.hint = QLabel(tr.t("usbmap.hint_types"))
+        self.hint.setWordWrap(True)
+        v.addWidget(self.hint)
         self.log = QPlainTextEdit(); self.log.setReadOnly(True)
         self.log.setMaximumHeight(80)
         self.log.setPlaceholderText(tr.t("usbmap.log_hint"))
@@ -100,7 +104,10 @@ class UsbPortPicker(QWidget):
 
     # --- построение дерева ---
 
-    def _connector_text(self, connector: int) -> str:
+    def _connector_text(self, row: dict) -> str:
+        if not row.get("type_known", True):
+            return tr.t("usbmap.conn_unknown")
+        connector = row["connector"]
         key = _CONNECTORS.get(connector)
         return tr.t(key) if key else tr.t("usbmap.conn_other").format(type=connector)
 
@@ -120,8 +127,12 @@ class UsbPortPicker(QWidget):
                 group.setData(0, Qt.ItemDataRole.UserRole, ("controller", controller))
             child = QTreeWidgetItem(group, [
                 tr.t("usbmap.port_no").format(index=row["index"]),
-                self._connector_text(row["connector"]),
+                self._connector_text(row),
             ])
+            if not row.get("type_known", True):
+                # Пустой порт: тип неизвестен, не выдаём его за USB 2.0.
+                for column in range(2):
+                    child.setForeground(column, QBrush(_MUTED))
             child.setFlags(child.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             child.setData(0, Qt.ItemDataRole.UserRole, (controller, row["name"]))
             if keep is not None:
