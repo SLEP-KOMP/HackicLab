@@ -302,6 +302,14 @@ class WizardMixin:
         self.wiz_usb_picker.changed.connect(self._wiz_usb_changed)
         lay.addWidget(self.wiz_usb_picker)
 
+        # Тема графического меню: те же карточки, что в ручной сборке.
+        from .theme_cards import ThemeCards
+        thint = _muted(page, tr.t("themes.hint")); thint.setWordWrap(True)
+        lay.addWidget(thint)
+        self.wiz_themes = ThemeCards(widget)
+        self.wiz_themes.changed.connect(self._wiz_themes_changed)
+        lay.addWidget(self.wiz_themes)
+
         self.wiz_dgpu_chk = QCheckBox(tr.t("wizard.options.dgpu"))
         self.wiz_dgpu_chk.toggled.connect(
             lambda on: self._wiz_state().__setitem__("disable_dgpu", bool(on)))
@@ -344,6 +352,14 @@ class WizardMixin:
         picker = getattr(self, "wiz_usb_picker", None)
         selection = picker.selection() if picker is not None else set()
         state["usb_ports"] = {tuple(item) for item in selection} or None
+
+    def _wiz_themes_changed(self):
+        """Выбранные темы меню → состояние мастера (первая — по умолчанию)."""
+        state = self._wiz_state()
+        cards = getattr(self, "wiz_themes", None)
+        chosen = sorted(cards.selection()) if cards is not None else []
+        state["themes"] = set(chosen) or None
+        state["picker_variant"] = chosen[0] if chosen else ""
 
     def _wiz_fill_options(self):
         state = self._wiz_state()
@@ -685,6 +701,10 @@ class WizardMixin:
         opts = BuildOptions(
             usb_toolbox=bool(state.get("usb_toolbox", True)),
             usb_ports=state.get("usb_ports"),
+            themes=state.get("themes"),
+            picker_variant=str(state.get("picker_variant") or ""),
+            custom_themes=dict(getattr(getattr(self, "wiz_themes", None),
+                                       "custom_dirs", {}) or {}),
             disable_sip=True,
             wifi_kext_mode=str(state.get("wifi") or "itlwm"),
             target_macos=str(state.get("macos") or ""),

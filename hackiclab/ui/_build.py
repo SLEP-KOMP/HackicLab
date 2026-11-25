@@ -376,6 +376,7 @@ class BuildPageMixin:
             usb_ports=getattr(self, "_build_usb_ports", None),
             themes=set(theme_sel) or None,
             picker_variant=theme_sel[0] if theme_sel else "",
+            custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),
             disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),

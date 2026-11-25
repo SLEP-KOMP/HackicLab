@@ -55,6 +55,8 @@ class BuildOptions:
     # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
     themes: Optional[set] = None
     picker_variant: str = ""
+    # Сторонние темы: id вида "custom\<Имя>" -> папка с .icns
+    custom_themes: Optional[dict] = None
     wifi_kext_mode: str = "itlwm"       # itlwm / airport
     disable_sip: bool = True
     has_amd_vgpu: bool = False

@@ -85,13 +85,13 @@ def extract_png(icns_path: Path) -> bytes | None:
     return data[start:end + 8]
 
 
-def preview_pngs(resources: Path, variant: str) -> list[bytes]:
-    """PNG-иконки варианта для карточки (порядок как в PREVIEW_ICONS)."""
-    folder = variant_dir(resources, variant)
+def preview_pngs_from_dir(folder: Path) -> list[bytes]:
+    """PNG-иконки из указанной папки темы (порядок как в PREVIEW_ICONS)."""
     out: list[bytes] = []
+    base = Path(folder)
     for name in PREVIEW_ICONS:
         for suffix in (".icns", ".png", ".jpg"):
-            path = folder / f"{name}{suffix}"
+            path = base / f"{name}{suffix}"
             if not path.is_file():
                 continue
             png = (extract_png(path) if suffix == ".icns" else path.read_bytes())
@@ -99,3 +99,24 @@ def preview_pngs(resources: Path, variant: str) -> list[bytes]:
                 out.append(png)
             break
     return out
+
+
+def preview_pngs(resources: Path, variant: str) -> list[bytes]:
+    """PNG-иконки варианта для карточки."""
+    return preview_pngs_from_dir(variant_dir(resources, variant))
+
+
+def looks_like_theme(folder: Path) -> bool:
+    """Похожа ли папка на тему OpenCanopy (есть файлы .icns)."""
+    path = Path(folder)
+    return path.is_dir() and any(path.glob("*.icns"))
+
+
+def custom_id(folder: Path) -> str:
+    """Идентификатор сторонней темы: «custom\\<имя папки>»."""
+    return f"custom\\{Path(folder).name}"
+
+
+def is_custom(variant: str) -> bool:
+    """Сторонняя ли тема (импортирована из папки)."""
+    return str(variant).replace("/", "\\").startswith("custom\\")

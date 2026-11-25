@@ -227,6 +227,18 @@ class EFIBuilder:
                             if child.is_dir() and child.name not in keep:
                                 shutil.rmtree(str(child), ignore_errors=True)
                         self._log("  Темы меню: " + ", ".join(sorted(keep)))
+                    # Сторонние темы из папок: копируем целиком в Resources/Image.
+                    custom = getattr(self.plan.options, "custom_themes", None) or {}
+                    for variant, folder in custom.items():
+                        if chosen and variant not in chosen:
+                            continue
+                        name = str(variant).replace("/", "\\").split("\\")[-1]
+                        if not name or not Path(folder).is_dir():
+                            continue
+                        target = dst_res / "Image" / name
+                        shutil.rmtree(str(target), ignore_errors=True)
+                        shutil.copytree(str(folder), str(target))
+                        self._log(f"  Тема меню «{name}» → Resources/Image")
                 if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
                            for d in placed_drivers):
                     layout.warnings.append(
