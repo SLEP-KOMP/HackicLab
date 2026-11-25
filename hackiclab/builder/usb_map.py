@@ -590,20 +590,36 @@ def build_map_plist(controllers: list, limit: Optional[int] = MAX_PORTS_PER_CONT
 
 
 def generate_auto_map(tmp_dir: Path, log=None, limit: Optional[int] = MAX_PORTS_PER_CONTROLLER) -> Optional[dict]:
-    """Полный конвейер: DSDT -> usbdump.exe. None, если ничего не вышло."""
-    from .cache_manager import cache_dir
+    """Полный конвейер: usbdump.exe (живые порты и скорости) -> DSDT.
 
+    DSDT описывает порты статически: типы разъёмов в SSDT и подключённые
+    устройства ему не видны, поэтому он используется как запасной путь, когда
+    usbdump недоступен (нет интернета, нет exe).
+    """
     def _log(msg, level="info"):
         if log:
             log(msg)
 
+    live = _map_from_usbdump(limit, _log)
+    if live:
+        return live
+
     dsdt_plist = generate_dsdt_map(tmp_dir, log=_log, limit=limit)
     if dsdt_plist:
+        _log("Карта из DSDT: скорость устройств не видна — типы портов останутся "
+             "неизвестными", "warn")
         return dsdt_plist
+    return None
+
+
+def _map_from_usbdump(limit: Optional[int], _log) -> Optional[dict]:
+    """Карта по живой топологии USB (usbdump): контроллеры, порты, скорости."""
+    from .cache_manager import cache_dir
 
     cache = cache_dir() / "usbmap"
     zip_path = download_usbtoolbox_zip(cache, log=_log)
     if not zip_path:
+        _log("USBToolBox не скачался — остаётся DSDT", "warn")
         return None
     exe = extract_usbdump(zip_path, cache_dir() / "tools")
     if not exe:
