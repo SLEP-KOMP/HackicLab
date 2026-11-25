@@ -8,9 +8,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
+    QLabel,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -341,40 +343,82 @@ class SettingsMixin:
             self.bg_label.setText(tr.t("settings.theme_bg_none"))
     def _build_about(self):
         page = QWidget()
-        v = QVBoxLayout(page); v.setContentsMargins(28, 24, 28, 24)
-        self._page_header(page, v, "about.title", "about.subtitle")
+        outer = QVBoxLayout(page); outer.setContentsMargins(0, 0, 0, 0)
+        area = QScrollArea(); area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        v = QVBoxLayout(body); v.setContentsMargins(28, 24, 28, 24)
+        self._page_header(body, v, "about.title", "about.subtitle")
+
+        # Витрина: название, версия, ссылки
+        hero = self._card(body)
+        hv = QVBoxLayout(hero); hv.setSpacing(8)
+        name = QLabel("HackicLab")
+        name.setObjectName("heroTitle")
+        name.setStyleSheet("font-size:22px;font-weight:600;")
+        hv.addWidget(name)
+        meta = _muted(body, f"{tr.t('about.version')} {__version__}  ·  {tr.t('about.license')}")
+        hv.addWidget(meta)
+        tagline = _muted(body, tr.t("about.tagline")); tagline.setWordWrap(True)
+        hv.addWidget(tagline)
+        links = QHBoxLayout(); links.setSpacing(8)
+        for key, url in (
+            ("about.link_github", "https://github.com/SLEP-KOMP/HackicLab"),
+            ("about.link_releases", "https://github.com/SLEP-KOMP/HackicLab/releases"),
+            ("about.link_issues", "https://github.com/SLEP-KOMP/HackicLab/issues"),
+        ):
+            btn = QPushButton(tr.t(key))
+            btn.setObjectName("ghost")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(
+                lambda _checked=False, target=url: QDesktopServices.openUrl(QUrl(target)))
+            links.addWidget(btn)
+        links.addStretch()
+        hv.addLayout(links)
+        v.addWidget(hero)
 
         # Что это
-        c_what = self._card(page)
+        c_what = self._card(body)
         wv = QVBoxLayout(c_what)
-        wv.addWidget(_h2(page, tr.t("about.whatis")))
-        wv.addWidget(_muted(page, tr.t("about.whatis_text")))
+        wv.addWidget(_h2(body, tr.t("about.whatis")))
+        what = _muted(body, tr.t("about.whatis_text")); what.setWordWrap(True)
+        wv.addWidget(what)
         v.addWidget(c_what)
 
         # Возможности
-        c_feat = self._card(page)
-        fv = QVBoxLayout(c_feat)
-        fv.addWidget(_h2(page, tr.t("about.features_title")))
-        for key in ("about.feature1", "about.feature2", "about.feature3", "about.feature4", "about.feature5"):
-            fv.addWidget(_muted(page, tr.t(key)))
+        c_feat = self._card(body)
+        fv = QVBoxLayout(c_feat); fv.setSpacing(4)
+        fv.addWidget(_h2(body, tr.t("about.features_title")))
+        for key in ("about.feature1", "about.feature2", "about.feature3",
+                    "about.feature4", "about.feature5", "about.feature6",
+                    "about.feature7"):
+            item = _muted(body, "▸  " + tr.t(key)); item.setWordWrap(True)
+            fv.addWidget(item)
         v.addWidget(c_feat)
 
         # Технологии
-        c_tech = self._card(page)
+        c_tech = self._card(body)
         tv = QVBoxLayout(c_tech)
-        tv.addWidget(_h2(page, tr.t("about.tech_title")))
-        tv.addWidget(_muted(page, tr.t("about.tech_text")))
+        tv.addWidget(_h2(body, tr.t("about.tech_title")))
+        tech = _muted(body, tr.t("about.tech_text")); tech.setWordWrap(True)
+        tv.addWidget(tech)
         tv.addSpacing(6)
-        tv.addWidget(_muted(page, f"{tr.t('about.version')} {__version__} · {tr.t('about.license')}"))
+        import PySide6
+
+        tv.addWidget(_muted(body, f"{tr.t('about.version')} {__version__}  ·  "
+                                  f"PySide6 {PySide6.__version__}  ·  "
+                                  f"{tr.t('about.license')}"))
         v.addWidget(c_tech)
 
         # Дисклеймер
-        c_disc = self._card(page)
+        c_disc = self._card(body)
         dv = QVBoxLayout(c_disc)
-        dv.addWidget(_h2(page, tr.t("about.disc")))
-        disc = _muted(page, tr.t("about.disc_text")); disc.setWordWrap(True)
+        dv.addWidget(_h2(body, tr.t("about.disc")))
+        disc = _muted(body, tr.t("about.disc_text")); disc.setWordWrap(True)
         dv.addWidget(disc)
         v.addWidget(c_disc)
 
         v.addStretch()
+        area.setWidget(body)
+        outer.addWidget(area)
         return page
