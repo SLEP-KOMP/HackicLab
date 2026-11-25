@@ -239,6 +239,19 @@ class EFIBuilder:
                         shutil.rmtree(str(target), ignore_errors=True)
                         shutil.copytree(str(folder), str(target))
                         self._log(f"  Тема меню «{name}» → Resources/Image")
+                    # Проверяем, что графическому меню хватает файлов.
+                    from .canopy import missing_parts
+                    variant = (getattr(self.plan.options, "picker_variant", "")
+                               or "Acidanthera\\GoldenGate")
+                    missing = missing_parts(dst_res, str(variant).split("\\")[-1])
+                    if missing:
+                        layout.warnings.append(
+                            "OpenCanopy: в Resources нет " + ", ".join(missing)
+                            + " — меню может остаться без графики или подписей")
+                    if (getattr(self.plan.options, "audio_dxe", False)
+                            and not (dst_res / "Audio").is_dir()):
+                        layout.warnings.append(
+                            "AudioDxe: в Resources нет папки Audio — звук меню не заиграет")
                 if not any(d.lower() in ("openhfsplus.efi", "hfsplus.efi")
                            for d in placed_drivers):
                     layout.warnings.append(

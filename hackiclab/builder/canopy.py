@@ -18,7 +18,7 @@ RESOURCES_URL = ("https://codeload.github.com/acidanthera/OcBinaryData/"
                  "tar.gz/refs/heads/master")
 
 #: Папки внутри Resources, которые нужны OpenCanopy.
-_KEEP = ("Font", "Image", "Label")
+_KEEP = ("Font", "Image", "Label", "Audio")
 
 
 def has_real_files(folder: Optional[Path]) -> bool:
@@ -90,6 +90,29 @@ def fetch_resources(dest: Path, log: Optional[Callable[[str], None]] = None,
     if written and log:
         log(f"Resources: {written} файлов из OcBinaryData")
     return written
+
+
+#: Что OpenCanopy обязан найти в Resources, иначе меню будет пустым.
+REQUIRED_FILES = (
+    "Font/Font_1x.bin",
+    "Font/Font_1x.png",
+    "Font/Font_2x.bin",
+)
+
+
+def missing_parts(resources: Optional[Path], variant: str = "GoldenGate") -> list[str]:
+    """Чего не хватает в Resources: шрифтов, иконок темы, подписей."""
+    if resources is None:
+        return ["Resources"]
+    root = Path(resources)
+    missing = [item for item in REQUIRED_FILES if not (root / item).is_file()]
+    theme = root / "Image" / "Acidanthera" / variant
+    if not (theme.is_dir() and any(theme.iterdir())):
+        missing.append("Image/Acidanthera/" + variant)
+    labels = root / "Label"
+    if not (labels.is_dir() and any(labels.glob("*.lbl"))):
+        missing.append("Label")
+    return missing
 
 
 def count_files(folder: Optional[Path]) -> int:
