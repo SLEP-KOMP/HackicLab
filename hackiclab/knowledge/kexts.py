@@ -255,12 +255,28 @@ def smbios_model_for(profile: HardwareProfile, macos_target: str = "") -> str:
 
     if profile.cpu.vendor == "amd":
         if profile.platform == "laptop":
-            return "MacBookPro15,2"
+            return _fit_smbios("MacBookPro15,2", macos_target, _LAPTOP_LADDER)
         return _amd_desktop_model(need)
 
     if profile.platform == "laptop":
-        return SMBIOS_MAP.get((profile.cpu.generation, "laptop"), "MacBookPro15,2")
-    return _intel_desktop_model(profile.cpu.generation, need)
+        base = SMBIOS_MAP.get((profile.cpu.generation, "laptop"), "MacBookPro15,2")
+        return _fit_smbios(base, macos_target, _LAPTOP_LADDER)
+    return _fit_smbios(_intel_desktop_model(profile.cpu.generation, need),
+                       macos_target, _DESKTOP_LADDER)
+
+
+#: Лестницы моделей: от старых к новым (первая подходящая по диапазону).
+_DESKTOP_LADDER = ("iMac18,3", "iMac19,1", "iMac20,1", "MacPro7,1")
+_LAPTOP_LADDER = ("MacBookPro14,1", "MacBookPro15,2", "MacBookPro16,1")
+
+
+def _fit_smbios(model: str, target: str, ladder: tuple[str, ...]) -> str:
+    """Не отдаёт модель, которой нет в целевой macOS (диапазон из smbios_support)."""
+    from .smbios_support import pick, supports
+
+    if supports(model, target):
+        return model
+    return pick(list(ladder), target) or model
 
 
 _BRCM_LEGACY_FROM = _MACOS_ORDER.index("Sonoma")

@@ -284,6 +284,19 @@ class EFIBuilder:
             elif child.is_file():
                 child.unlink(missing_ok=True)
 
+        # 2.6) Wi-Fi-профили Windows → WiFiConfig.plist для itlwm
+        if (self.plan.options.wifi_kext_mode == "itlwm"
+                and (kexts_dir / "itlwm.kext").is_dir()):
+            try:
+                from .wifi_profiles import export_windows_profiles, write_wifi_config
+                entries = export_windows_profiles()
+                cfg = write_wifi_config(kexts_dir / "itlwm.kext", entries)
+                if cfg:
+                    res.stats["wifi_profiles"] = len(entries)
+                    self._log(f"Wi-Fi: профилей {len(entries)} → WiFiConfig.plist")
+            except Exception as ex:
+                self._log(f"Wi-Fi-профили: пропущено ({ex})")
+
         # USBToolBox без карты портов бесполезен: либо строим UTBMap, либо убираем
         if any(e.name == "USBToolBox" for e in selected):
             self._step(66, "Строю карту USB-портов…")

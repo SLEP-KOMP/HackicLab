@@ -149,10 +149,83 @@ P_SECURITY_FOR_ROOT = Patch(
     source="5T33Z0 WiFi_Sonoma",
 )
 
+#: macOS 26: AppleHDA удалён, AppleALC/alcid аналогового звука не дают.
+P_AUDIO_TAHOE = Patch(
+    "audio_tahoe", "audio", "system",
+    "Звук на macOS 26: AppleHDA удалён",
+    "Audio on macOS 26: AppleHDA is gone",
+    "В macOS 26 AppleHDA.kext больше нет, поэтому AppleALC и alcid не дают звук "
+    "через аналоговый выход. Варианты: VoodooHDA (csr-active-config 03000000) "
+    "или root-патч с возвратом AppleHDA. HDMI/DP и USB-аудио работают как обычно.",
+    "macOS 26 ships without AppleHDA.kext, so AppleALC and alcid give no analog "
+    "sound. Options: VoodooHDA (csr-active-config 03000000) or a root patch that "
+    "restores AppleHDA. HDMI/DP and USB audio keep working.",
+    auto=False,
+    source="Dortania OS Specific: macOS 26 Tahoe",
+)
+
+#: macOS 26: Intel Bluetooth требует отдельного boot-arg.
+P_BT_INTEL_26 = Patch(
+    "bt_intel_26", "boot", "efi",
+    "Intel Bluetooth на macOS 26: -ibtcompatbeta",
+    "Intel Bluetooth on macOS 26: -ibtcompatbeta",
+    "Dortania для macOS 26 просит boot-arg -ibtcompatbeta, иначе Intel "
+    "Bluetooth не поднимается.",
+    "Dortania requires the -ibtcompatbeta boot-arg on macOS 26, otherwise Intel "
+    "Bluetooth does not come up.",
+    source="Dortania OS Specific: macOS 26 Tahoe",
+)
+
+#: OTA-обновления с 14.4 идут только с revpatch=sbvmm.
+P_OTA_REVPATCH = Patch(
+    "ota_updates", "boot", "efi",
+    "OTA-обновления: revpatch=sbvmm",
+    "OTA updates: revpatch=sbvmm",
+    "С macOS 14.4 обновления по воздуху работают только с RestrictEvents и "
+    "boot-arg revpatch=sbvmm; SecureBootModel должен быть Disabled (либо "
+    "добавьте iBridged для Secure Boot).",
+    "Since macOS 14.4 over-the-air updates need RestrictEvents and the "
+    "revpatch=sbvmm boot-arg; SecureBootModel must be Disabled (or add iBridged "
+    "to keep Secure Boot).",
+    auto=False,
+    source="Dortania OS Specific: macOS 26 Tahoe",
+)
+
+#: Broadcom на 15/26: альтернатива root-патчу OCLP.
+P_WIFI_BCM_COMPANION = Patch(
+    "wifi_broadcom_companion", "wifi", "efi",
+    "Broadcom на 15/26: AppleBCMWLANCompanion",
+    "Broadcom on 15/26: AppleBCMWLANCompanion",
+    "Вместо набора OCLP и root-патча можно поставить AppleBCMWLANCompanion: "
+    "Wi-Fi без правки системного тома. Требует VT-d (на AMD недоступно), "
+    "стабильность пока неполная — только осознанный выбор.",
+    "Instead of the OCLP set and a root patch you can use "
+    "AppleBCMWLANCompanion: Wi-Fi without touching the system volume. Needs VT-d "
+    "(unavailable on AMD) and is not fully stable — pick it deliberately.",
+    auto=False,
+    source="Dortania OS Specific: macOS 26 Tahoe",
+)
+
+#: OCLP/AMFIPass на macOS 14+: переменная NVRAM, которую читает патчер.
+P_OCLP_AMFI = Patch(
+    "oclp_amfi", "boot", "efi",
+    "OCLP: NVRAM OCLP-Settings = -allow_amfi",
+    "OCLP: NVRAM OCLP-Settings = -allow_amfi",
+    "OpenCore Legacy Patcher и AMFIPass на macOS 14+ читают флаг "
+    "-allow_amfi из NVRAM-переменной OCLP-Settings. Без неё root-патч Wi-Fi и "
+    "подмена AMFI не применяются.",
+    "OpenCore Legacy Patcher and AMFIPass read the -allow_amfi flag from the "
+    "OCLP-Settings NVRAM variable on macOS 14+. Without it the Wi-Fi root patch "
+    "and AMFI bypass do not apply.",
+    auto=False,
+    source="OpenCore-Legacy-Patcher (NVRAM OCLP-Settings)",
+)
+
 CATALOG: tuple[Patch, ...] = (
     P_AMD_KERNEL, P_GPU_RX580_SPOOF, P_GPU_RX580_VBIOS,
     P_WIFI_BCM_EFI, P_WIFI_BCM_ROOT, P_AUDIO_ALCID,
-    P_GPU_NAVI_AGDP, P_SECURITY_FOR_ROOT,
+    P_GPU_NAVI_AGDP, P_SECURITY_FOR_ROOT, P_OCLP_AMFI,
+    P_AUDIO_TAHOE, P_BT_INTEL_26, P_OTA_REVPATCH, P_WIFI_BCM_COMPANION,
 )
 
 
@@ -184,6 +257,11 @@ def _has_audio(profile) -> bool:
     audio = getattr(profile, "audio", None)
     codec = (getattr(audio, "codec", "") or "").lower() if audio else ""
     return bool(audio and getattr(audio, "layout_id", 0) and codec.startswith("alc"))
+
+
+def _has_intel_bt(profile) -> bool:
+    net = getattr(profile, "net", None)
+    return bool(net and "intel" in (net.bt_chipset or "").lower())
 
 
 def merge_scan_paths(profile, scan):
@@ -229,12 +307,24 @@ def plan(profile, target_macos: str = "") -> list[Patch]:
         out += [P_GPU_RX580_SPOOF, P_GPU_RX580_VBIOS]
     if _is_broadcom(profile) and major >= 14:
         out += [P_WIFI_BCM_EFI, P_WIFI_BCM_ROOT]
+        if major >= 15:
+            out.append(P_WIFI_BCM_COMPANION)
     if _has_audio(profile):
         out.append(P_AUDIO_ALCID)
+        if major >= 26:
+            out.append(P_AUDIO_TAHOE)
+    if _has_intel_bt(profile) and major >= 26:
+        out.append(P_BT_INTEL_26)
+    # OTA-правило действует с 14.4, но показываем его только для 26+: на
+    # старых целях оно не нужно, а список патчей не должен пухнуть.
+    if major >= 26:
+        out.append(P_OTA_REVPATCH)
     if is_navi_gpu(getattr(profile, "dgpu", None)):
         out.append(P_GPU_NAVI_AGDP)
     if any(p.scope == "system" for p in out):
         out.append(P_SECURITY_FOR_ROOT)
+        if major >= 14:
+            out.append(P_OCLP_AMFI)
     return out
 
 

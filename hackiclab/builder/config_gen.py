@@ -277,10 +277,16 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     if _patch_on(options, "security_root"):
         # root-патчи OCLP требуют частично отключённого SIP: 0x03080000
         nv["csr-active-config"] = bytes([0x00, 0x08, 0x03, 0x00])
-    # --- Аудио: без alcid AppleALC не знает layout, и звука нет ---
+    if (_patch_on(options, "oclp_amfi")
+            and _macos_major(options.target_macos) >= 14):
+        # OCLP/AMFIPass читают флаг из NVRAM; в Delete его нет, значит переживёт перезагрузку
+        nv["OCLP-Settings"] = "-allow_amfi"
+    # --- Аудио: без alcid AppleALC не знает layout, и звука нет.
+    # В macOS 26 AppleHDA удалён, поэтому alcid бесполезен (Dortania Tahoe).
     layout_id = getattr(profile.audio, "layout_id", 0) if profile.audio else 0
     if (layout_id and _patch_on(options, "audio_alcid")
-            and (profile.audio.codec or "").lower().startswith("alc")):
+            and (profile.audio.codec or "").lower().startswith("alc")
+            and _macos_major(options.target_macos) < 26):
         boot_args = str(nv.get("boot-args") or "")
         if "alcid=" not in boot_args:
             nv["boot-args"] = f"{boot_args} alcid={layout_id}".strip()
@@ -294,6 +300,16 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot_args = str(nv.get("boot-args") or "")
         if "-wegnoegpu" not in boot_args:
             nv["boot-args"] = f"{boot_args} -wegnoegpu".strip()
+    # macOS 26: Intel Bluetooth требует отдельного boot-arg (Dortania Tahoe)
+    if _patch_on(options, "bt_intel_26") and _macos_major(options.target_macos) >= 26:
+        boot_args = str(nv.get("boot-args") or "")
+        if "-ibtcompatbeta" not in boot_args:
+            nv["boot-args"] = f"{boot_args} -ibtcompatbeta".strip()
+    # OTA с 14.4: RestrictEvents + revpatch=sbvmm при SecureBootModel Disabled
+    if _patch_on(options, "ota_updates") and _macos_major(options.target_macos) >= 14:
+        boot_args = str(nv.get("boot-args") or "")
+        if "revpatch=sbvmm" not in boot_args:
+            nv["boot-args"] = f"{boot_args} revpatch=sbvmm".strip()
 
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---
