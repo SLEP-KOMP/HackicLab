@@ -32,7 +32,6 @@ class ConfigGenTests(unittest.TestCase):
         self.assertTrue(cfg["ACPI"]["Add"], "ACPI Add пуст")
 
     def test_forced_smbios_model_lands_in_platforminfo(self):
-        # AMD-подобный профиль: авто дал бы iMacPro1,1, принудительно — MacPro7,1.
         p = desktop_profile()
         p.cpu.vendor = "amd"
         auto = plistlib.loads(generate_config_plist(p, BuildOptions(target_macos="Sequoia")))
@@ -45,6 +44,16 @@ class ConfigGenTests(unittest.TestCase):
         cfg = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
         paths = [x["Path"] for x in cfg["ACPI"]["Add"]]
         self.assertIn("SSDT-PLUG.aml", paths)
+
+    def test_custom_boot_args_are_added_without_duplicates(self):
+        cfg = plistlib.loads(generate_config_plist(
+            desktop_profile(),
+            BuildOptions(boot_args="npci=0x2000 unfairgva=1 npci=0x2000")))
+        args = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
+        tokens = args.split()
+        self.assertIn("npci=0x2000", tokens)
+        self.assertIn("unfairgva=1", tokens)
+        self.assertEqual(tokens.count("npci=0x2000"), 1)
 
     def test_laptop_gets_backlight_and_no_fake_ec(self):
         p = desktop_profile()

@@ -26,6 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "usb_mode": "full",
     "usb_recovery": True,
     "usb_map": True,
+    "build_boot_args": "",
     "ui_schema": 2,
 }
 

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -45,6 +46,7 @@ class WizardMixin:
                 "gui_picker": False,
                 "audio_dxe": False, "network_boot": False, "legacy_boot": False,
                 "share_log": False, "smbios_model": "",
+                "boot_args": "",
             }
             self._wiz = state
         return state
@@ -333,6 +335,22 @@ class WizardMixin:
         smb_note = _muted(page, tr.t("manual.smbios_desc"))
         smb_note.setWordWrap(True)
         lay.addWidget(smb_note)
+
+        ba_row = QHBoxLayout()
+        ba_label = QLabel(tr.t("build.boot_args"), page)
+        ba_label.setObjectName("kv")
+        ba_label.setMinimumWidth(150)
+        ba_row.addWidget(ba_label)
+        self.wiz_bootargs = QLineEdit()
+        self.wiz_bootargs.setPlaceholderText("npci=0x2000 unfairgva=1")
+        self.wiz_bootargs.setText(str(self._wiz_state().get("boot_args") or ""))
+        self.wiz_bootargs.textChanged.connect(
+            lambda text: self._wiz_state().__setitem__("boot_args", text))
+        ba_row.addWidget(self.wiz_bootargs, 1)
+        lay.addLayout(ba_row)
+        ba_note = _muted(page, tr.t("build.boot_args_desc"))
+        ba_note.setWordWrap(True)
+        lay.addWidget(ba_note)
 
         self.wiz_gui_chk = QCheckBox(tr.t("build.gui_picker"))
         self.wiz_gui_chk.toggled.connect(
@@ -746,6 +764,7 @@ class WizardMixin:
             network_boot=bool(state.get("network_boot")),
             legacy_boot=bool(state.get("legacy_boot")),
             smbios_model=str(state.get("smbios_model") or ""),
+            boot_args=str(state.get("boot_args") or ""),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target
@@ -859,6 +878,12 @@ class WizardMixin:
         index = self.usb_combo.findData(device) if device else -1
         if index >= 0:
             self.usb_combo.setCurrentIndex(index)
+        # Режим записи, выбранный в мастере, переносим на вкладку записи:
+        # иначе выбор «Полная/Formatted/Repair» ни на что не влиял.
+        mode = str(state.get("mode") or "")
+        mode_index = self.usb_mode.findData(mode) if mode else -1
+        if mode_index >= 0 and mode_index != self.usb_mode.currentIndex():
+            self.usb_mode.setCurrentIndex(mode_index)
         self._sync_recovery_version(str(state.get("macos") or ""))
         self._go_page(self.page_usb)
     def _badge(self, parent, text: str, tone: str) -> QLabel:

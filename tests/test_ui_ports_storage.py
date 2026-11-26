@@ -91,6 +91,24 @@ class PortsStorageUiTests(unittest.TestCase):
             window.close()
             window.deleteLater()
 
+    def test_boot_args_field_adds_presets_once(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            window.build_boot_args.setText("")
+            window._add_boot_arg("npci=0x2000")
+            window._add_boot_arg("npci=0x2000")
+            window._add_boot_arg("unfairgva=1")
+            text = window.build_boot_args.text().split()
+            self.assertEqual(text.count("npci=0x2000"), 1)
+            self.assertIn("unfairgva=1", text)
+            # тот же выбор есть в мастере
+            self.assertTrue(hasattr(window, "wiz_bootargs"))
+        finally:
+            window.close()
+            window.deleteLater()
+
     def test_verify_requires_device(self):
         from hackiclab.ui.main_window import MainWindow
 

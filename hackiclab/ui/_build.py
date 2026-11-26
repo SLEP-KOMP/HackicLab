@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -74,6 +75,26 @@ class BuildPageMixin:
         sip_desc = _muted(page, tr.t("build.sip_desc")); sip_desc.setWordWrap(True)
         opts.addWidget(self.opt_sip)
         opts.addWidget(sip_desc)
+        opts.addSpacing(8)
+
+        # Свои boot-args: часть плат AMD без npci=0x2000 не стартует,
+        # а AMD GPU теряет ускорение без unfairgva=1.
+        ba_row = QHBoxLayout()
+        ba_row.addWidget(_val(page, tr.t("build.boot_args")))
+        self.build_boot_args = QLineEdit()
+        self.build_boot_args.setPlaceholderText("npci=0x2000 unfairgva=1")
+        self.build_boot_args.setText(str(uistate.get("build_boot_args", "") or ""))
+        ba_row.addWidget(self.build_boot_args, 1)
+        for label, flag in (("npci=0x2000", "npci=0x2000"),
+                            ("unfairgva=1", "unfairgva=1")):
+            preset = QPushButton(label)
+            preset.setObjectName("ghost")
+            preset.clicked.connect(
+                lambda _=False, f=flag: self._add_boot_arg(f))
+            ba_row.addWidget(preset)
+        opts.addLayout(ba_row)
+        ba_desc = _muted(page, tr.t("build.boot_args_desc")); ba_desc.setWordWrap(True)
+        opts.addWidget(ba_desc)
         opts.addSpacing(8)
         self.opt_gui = QCheckBox(tr.t("build.gui_picker"))
         gui_desc = _muted(page, tr.t("build.gui_picker_desc")); gui_desc.setWordWrap(True)
@@ -255,6 +276,13 @@ class BuildPageMixin:
         sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         v.addWidget(share)
         return page
+    def _add_boot_arg(self, flag: str):
+        """Добавляет флаг в поле boot-args без дублей."""
+        current = self.build_boot_args.text().split()
+        if flag not in current:
+            current.append(flag)
+        self.build_boot_args.setText(" ".join(current))
+
     def _resolved_profile(self):
         """Профиль сборки: ручной выбор + UEFI-пути из последнего сканирования."""
         from ..knowledge import patches as patch_kb
@@ -347,6 +375,7 @@ class BuildPageMixin:
     def _do_build(self):
         if getattr(self, "_worker_build", None) and self._worker_build.isRunning():
             return
+        uistate.save(build_boot_args=self.build_boot_args.text().strip())
         dest = (self.build_dest.text() or "").strip()
         if dest in ("", "—"):
             self._pick_build_dir()
@@ -373,6 +402,7 @@ class BuildPageMixin:
             target_macos=self.macos_combo.currentData() or "",
             smbios_model=getattr(getattr(self, "manual_smbios", None),
                                  "currentData", lambda: "")() or "",
+            boot_args=self.build_boot_args.text().strip(),
             patches=self._patch_ids(),
         )
         plan = BuildPlan(profile=profile, options=opts)

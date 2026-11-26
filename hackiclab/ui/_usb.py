@@ -658,7 +658,8 @@ class UsbMixin:
         if dev is None:
             self.usb_verify_status.setText(tr.t("usb.verify_need_device"))
             return
-        letter = getattr(dev, "planned_letter", "") or getattr(dev, "letter", "")
+        letter = (getattr(self, "_usb_last_letter", "")
+                  or getattr(dev, "letter", "") or "")
         root = Path(f"{letter}:\\EFI") if letter and letter != "RAW" else None
         if root is None or not (root / "OC" / "config.plist").is_file():
             self.usb_verify_status.setText(tr.t("usb.verify_no_efi"))
@@ -707,6 +708,8 @@ class UsbMixin:
             return
         self.statusBar().showMessage(
             f"{tr.t('usb.done')} → {target_letter}", 5000)
+        # буква после записи нужна «Проверить флешку»: у RAW-флешки её ещё нет
+        self._usb_last_letter = (target_letter or "").rstrip(":")
         # BIOS-чеклист
         self._usb_bios_dialog()
     def _usb_bios_dialog(self):

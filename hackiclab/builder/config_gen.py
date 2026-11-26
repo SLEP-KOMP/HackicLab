@@ -66,6 +66,8 @@ class BuildOptions:
     target_macos: str = ""              # e.g. "Sonoma"
     # Конкретная модель SMBIOS: "" — автоматический выбор по железу и macOS
     smbios_model: str = ""
+    # Дополнительные boot-args (npci=0x2000, unfairgva=1 и т.п.)
+    boot_args: str = ""
     verbose: bool = False
     # Отключить дискретную видеокарту (WhateverGreen: -wegnoegpu)
     disable_dgpu: bool = False
@@ -343,6 +345,17 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         boot_args = str(nv.get("boot-args") or "")
         if "revpatch=sbvmm" not in boot_args:
             nv["boot-args"] = f"{boot_args} revpatch=sbvmm".strip()
+    # Пользовательские флаги из сборки: npci=0x2000, unfairgva=1 и любые свои.
+    # Без них часть плат AMD не стартует или теряет ускорение GPU.
+    extra_args = str(getattr(options, "boot_args", "") or "").strip()
+    if extra_args:
+        boot_args = str(nv.get("boot-args") or "")
+        have = set(boot_args.split())
+        for token in extra_args.split():
+            if token not in have:
+                boot_args = f"{boot_args} {token}".strip()
+                have.add(token)
+        nv["boot-args"] = boot_args
 
 
     # --- SMBIOS: инжектим сгенерированные данные в PlatformInfo ---

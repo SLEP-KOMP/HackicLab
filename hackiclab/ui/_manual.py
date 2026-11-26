@@ -95,11 +95,12 @@ class ManualBuildMixin:
             self.manual_nvme.setChecked(bool(getattr(storage, "nvme_present", False)))
         self._manual_refresh()
     def _build_manual(self):
+        # Страница встроена в «Ручную сборку» как шаг 1, поэтому без своего
+        # заголовка и внешних отступов: их уже даёт страница-хозяин.
         page = QWidget()
         v = QVBoxLayout(page)
-        v.setContentsMargins(28, 24, 28, 24)
+        v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
-        v.addWidget(_h2(page, tr.t("manual.title")))
         from_scan = QPushButton(tr.t("manual.from_scan"))
         from_scan.clicked.connect(self._manual_from_scan)
         v.addWidget(from_scan, alignment=Qt.AlignmentFlag.AlignLeft)
