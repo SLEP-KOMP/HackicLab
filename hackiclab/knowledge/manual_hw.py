@@ -258,6 +258,17 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
     return profile
 
 
+def smbios_options(profile: HardwareProfile) -> tuple[str, ...]:
+    """Модели, которые имеет смысл предлагать вручную для этого железа."""
+    if getattr(profile, "platform", "") == "laptop":
+        return ("MacBookPro14,1", "MacBookPro15,2", "MacBookPro16,1")
+    cpu = getattr(profile, "cpu", None)
+    if str(getattr(cpu, "vendor", "")).lower() == "amd":
+        # У AMD нет iGPU: годятся только модели, где всё рисует дискретка.
+        return ("iMacPro1,1", "MacPro7,1")
+    return ("iMac18,3", "iMac19,1", "iMac20,1", "MacPro7,1")
+
+
 def supports_model(model: str, macos_target: str) -> bool:
     """Поддерживает ли принудительная модель выбранную macOS (неизвестная — да)."""
     from .smbios_support import supports
@@ -314,6 +325,10 @@ def review(profile: HardwareProfile, macos_target: str = "",
     if smbios_override and not supports_model(smbios_override, macos_target):
         add("err", "smbios_range",
             f"Модель {smbios_override} не поддерживает {macos_target or 'эту macOS'} — она не появится в этой системе")
+    if profile.cpu.vendor == "amd" and smbios in ("iMacPro1,1", "MacPro7,1"):
+        add("info", "smbios_pm",
+            "Dortania: iMacPro1,1/MacPro7,1 на не-Mac железе могут потребовать "
+            "правки питания — при проблемах со сном смотрите Fixing Power Management")
     return {
         "max_macos": max_macos,
         "smbios": smbios,

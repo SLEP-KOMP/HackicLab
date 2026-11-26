@@ -73,7 +73,6 @@ class ReviewTests(unittest.TestCase):
         self.assertTrue(ok)
 
     def test_smbios_override_forces_model_and_warns_on_range(self):
-        # AMD desktop: авто даёт iMacPro1,1 под Sequoia, override меняет модель.
         profile = manual_hw.build_profile(manual_hw.ManualSelection(
             cpu="amd-zen2d", gpu="amd"))
         auto = manual_hw.review(profile, "Sequoia")
@@ -84,6 +83,17 @@ class ReviewTests(unittest.TestCase):
         bad = manual_hw.review(profile, "High Sierra", smbios_override="MacPro7,1")
         keys = [i["key"] for i in bad["issues"]]
         self.assertIn("smbios_range", keys)
+
+    def test_smbios_options_follow_platform(self):
+        laptop = manual_hw.build_profile(manual_hw.ManualSelection(
+            cpu="intel-8kr", laptop=True))
+        self.assertIn("MacBookPro15,2", manual_hw.smbios_options(laptop))
+        self.assertNotIn("MacPro7,1", manual_hw.smbios_options(laptop))
+        amd = manual_hw.build_profile(manual_hw.ManualSelection(
+            cpu="amd-zen2d", gpu="amd"))
+        self.assertEqual(manual_hw.smbios_options(amd), ("iMacPro1,1", "MacPro7,1"))
+        intel = manual_hw.build_profile(manual_hw.ManualSelection(cpu="intel-9d"))
+        self.assertIn("iMac19,1", manual_hw.smbios_options(intel))
 
 
 class PageTests(unittest.TestCase):
@@ -120,6 +130,13 @@ class PageTests(unittest.TestCase):
         self.assertEqual(profile.platform, "laptop")
         self.assertEqual(profile.cpu.codename, "Whiskey Lake")
         self.assertGreater(self.win.manual_macos.count(), 0)
+
+    def test_smbios_combo_is_platform_specific(self):
+        self.win._manual_refresh()
+        models = [self.win.manual_smbios.itemData(i)
+                  for i in range(self.win.manual_smbios.count())]
+        self.assertNotIn("MacBookPro16,1", models)
+        self.assertIn("iMac19,1", models)
 
 class FillFromScanTests(unittest.TestCase):
     """Кнопка «Взять из сканирования» переносит железо в ручную форму."""

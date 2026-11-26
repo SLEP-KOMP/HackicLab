@@ -185,9 +185,6 @@ class ManualBuildMixin:
 
         self.manual_smbios = QComboBox()
         self._make_searchable(self.manual_smbios)
-        self.manual_smbios.addItem(tr.t("manual.smbios_auto"), "")
-        for _model in ("iMacPro1,1", "MacPro7,1", "iMac20,1", "iMac19,1", "MacBookPro16,1"):
-            self.manual_smbios.addItem(_model, _model)
         self.manual_smbios.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.smbios", self.manual_smbios)
 
@@ -230,12 +227,28 @@ class ManualBuildMixin:
             thunderbolt=self.manual_tb.isChecked(),
             touchpad=str(self.manual_touchpad.currentData() or "ps2"),
         )
+    def _manual_fill_smbios(self, profile):
+        """Список моделей SMBIOS под платформу: ноутбук/AMD/Intel различаются."""
+        combo = getattr(self, "manual_smbios", None)
+        if combo is None:
+            return
+        current = str(combo.currentData() or "")
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr.t("manual.smbios_auto"), "")
+        for model in manual_hw.smbios_options(profile):
+            combo.addItem(model, model)
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
     def _manual_refresh(self, *_args):
         if not hasattr(self, "manual_review_box"):
             return
         profile = manual_hw.build_profile(self._manual_selection())
         self.manual_profile = profile
         self._manual_fill_macos(profile)
+        self._manual_fill_smbios(profile)
         target = str(self.manual_macos.currentData() or "")
         override = str(self.manual_smbios.currentData() or "")
         self._manual_render(profile, manual_hw.review(

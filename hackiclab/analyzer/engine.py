@@ -170,7 +170,13 @@ class Analyzer:
         if not g or (g.vendor or "").lower() != "amd":
             return
         did = (g.device_id or "").lower().replace("0x", "")
-        if did != "6fdf" and "2048sp" not in (g.name or "").lower():
+        # Имя «RX 580 2048SP» бывает и у обычной 67DF: если device-id известен,
+        # верим только ему, иначе карта 67DF ложно попадёт в неподдерживаемые.
+        if did:
+            unsupported = did.endswith("6fdf")
+        else:
+            unsupported = "2048sp" in (g.name or "").lower()
+        if not unsupported:
             return
         self.issues.append(AnalysisIssue(
             Severity.ERROR, "gpu_rx580_2048sp",

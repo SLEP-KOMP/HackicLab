@@ -8,10 +8,12 @@ itlwm без меню Wi-Fi (режим itlwm + HeliPort) подключаетс
 from __future__ import annotations
 
 import plistlib
-import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from subprocess import SubprocessError
+
+from .. import proc
 
 #: Сколько профилей максимум выгружаем (защита от огромного списка).
 MAX_PROFILES = 20
@@ -48,10 +50,10 @@ def export_windows_profiles(timeout: int = 20) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            subprocess.run(
+            proc.run(
                 ["netsh", "wlan", "export", "profile", "key", "clear", f"folder={tmp}"],
                 capture_output=True, timeout=timeout, check=False)
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, SubprocessError):
             return out
         for path in sorted(Path(tmp).glob("*.xml"))[:MAX_PROFILES]:
             try:

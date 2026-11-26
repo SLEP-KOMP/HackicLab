@@ -74,6 +74,10 @@ def best_match(profile):
     cpu = getattr(profile, "cpu", None)
     vendor = str(getattr(cpu, "vendor", "") or "").lower()
     generation = int(getattr(cpu, "generation", 0) or 0)
+    # Поколение 0 — «не определили». Иначе такое железо ложно совпадёт с
+    # любой записью каталога, у которой поколение тоже 0 (например Core 2 Duo).
+    if generation <= 0:
+        return None
     for cfg in similar_configs(profile, limit=12):
         same_vendor = str(getattr(cfg, "vendor", "")).lower() == vendor
         same_gen = int(getattr(cfg, "generation", 0) or 0) == generation

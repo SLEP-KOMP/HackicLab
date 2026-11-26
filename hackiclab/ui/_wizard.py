@@ -320,14 +320,10 @@ class WizardMixin:
 
         srow = QHBoxLayout()
         self.wiz_smbios = QComboBox()
-        self.wiz_smbios.addItem(tr.t("manual.smbios_auto"), "")
-        for _model in ("iMacPro1,1", "MacPro7,1", "iMac20,1", "iMac19,1", "MacBookPro16,1"):
-            self.wiz_smbios.addItem(_model, _model)
-        self.wiz_smbios.setCurrentIndex(max(0, self.wiz_smbios.findData(
-            self._wiz_state().get("smbios_model", ""))))
         self.wiz_smbios.currentIndexChanged.connect(
             lambda _i: self._wiz_state().__setitem__(
                 "smbios_model", str(self.wiz_smbios.currentData() or "")))
+        self._wiz_fill_smbios()
         smb_label = QLabel(tr.t("manual.smbios"), page)
         smb_label.setObjectName("kv")
         smb_label.setMinimumWidth(150)
@@ -454,6 +450,25 @@ class WizardMixin:
         lay.addLayout(row)
         lay.addStretch()
         return widget
+    def _wiz_fill_smbios(self):
+        """Модели SMBIOS в мастере — под платформу выбранного железа."""
+        combo = getattr(self, "wiz_smbios", None)
+        if combo is None:
+            return
+        from ..knowledge import manual_hw
+        state = self._wiz_state()
+        profile = state.get("profile")
+        current = str(state.get("smbios_model") or "")
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr.t("manual.smbios_auto"), "")
+        if profile is not None:
+            for model in manual_hw.smbios_options(profile):
+                combo.addItem(model, model)
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
     def _wiz_show(self, step: int):
         state = self._wiz_state()
         step = max(0, min(step, self.wiz_stack.count() - 1))
@@ -661,6 +676,7 @@ class WizardMixin:
         self.wiz_scan_btn.setEnabled(True)
         self.wiz_scan_bar.setVisible(False)
         self._wiz_state()["profile"] = profile
+        self._wiz_fill_smbios()
         self._scan_done(profile)
         self._wiz_fill_hw()
         self._wiz_update_hint()

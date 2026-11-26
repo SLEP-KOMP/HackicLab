@@ -338,6 +338,8 @@ class CoreMixin:
             "opt_sip": self.opt_sip.isChecked(),
             "opt_gui": self.opt_gui.isChecked(),
             "macos": self.macos_combo.currentData(),
+            "smbios_model": (str(self.manual_smbios.currentData() or "")
+                             if hasattr(self, "manual_smbios") else ""),
             # Автоматическая сборка: без этого смена языка теряла журнал,
             # готовый отчёт и кнопки «Открыть папку»/«Отправить в базу».
             "wiz_log": self.wiz_log.toPlainText() if hasattr(self, "wiz_log") else "",
@@ -373,6 +375,11 @@ class CoreMixin:
             i = self.macos_combo.findData(st["macos"])
             if i >= 0:
                 self.macos_combo.setCurrentIndex(i)
+        saved_smbios = str(st.get("smbios_model") or "")
+        if saved_smbios and hasattr(self, "manual_smbios"):
+            i = self.manual_smbios.findData(saved_smbios)
+            if i >= 0:
+                self.manual_smbios.setCurrentIndex(i)
         self.build_log.setPlainText(st["build_log"])
         self.build_rationale.setPlainText(st["rationale"])
         if st["rationale"].strip():

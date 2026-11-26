@@ -176,6 +176,15 @@ def _profile_digest_from(record: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def _blocker_word(count: int) -> str:
+    """Русское согласование: 1 замечание, 2 замечания, 5 замечаний."""
+    if count % 10 == 1 and count % 100 != 11:
+        return "блокирующее замечание"
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return "блокирующих замечания"
+    return "блокирующих замечаний"
+
+
 def issue_url(record: dict, repo: str = REPO) -> str:
     """Ссылка на новую задачу GitHub с заполненным отчётом."""
     hw = record.get("hardware", {})
@@ -189,8 +198,9 @@ def issue_url(record: dict, repo: str = REPO) -> str:
     blockers = [n for n in notes if n.get("severity") == "error"]
     verdict_line = "сборка прошла" if record.get("ok") else "сборка не удалась"
     if record.get("ok") and blockers:
+        count = len(blockers)
         verdict_line += (f", но железо не заработает: "
-                         f"{len(blockers)} блокирующих замечания")
+                         f"{count} {_blocker_word(count)}")
     marks = {"error": "✖", "warning": "⚠", "info": "·"}
     note_lines = [f"- {marks.get(n.get('severity'), '·')} {n.get('title', '')}"
                   for n in notes]
