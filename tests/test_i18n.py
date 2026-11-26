@@ -209,6 +209,9 @@ class TranslationContentTests(unittest.TestCase):
     SAME_ON_PURPOSE = {
         "build.wifi_itlwm", "file.json", "file.markdown", "file.plist",
         "settings.premium", "settings.theme_bigsur",
+        # флаги загрузчика — синтаксис, а не текст: не переводятся
+        "build.boot_args_preset_npci", "build.boot_args_preset_gva",
+        "build.boot_args_hint",
     }
 
     def test_english_text_not_copied_into_russian(self):

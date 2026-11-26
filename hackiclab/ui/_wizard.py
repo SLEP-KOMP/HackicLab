@@ -342,7 +342,7 @@ class WizardMixin:
         ba_label.setMinimumWidth(150)
         ba_row.addWidget(ba_label)
         self.wiz_bootargs = QLineEdit()
-        self.wiz_bootargs.setPlaceholderText("npci=0x2000 unfairgva=1")
+        self.wiz_bootargs.setPlaceholderText(tr.t("build.boot_args_hint"))
         self.wiz_bootargs.setText(str(self._wiz_state().get("boot_args") or ""))
         self.wiz_bootargs.textChanged.connect(
             lambda text: self._wiz_state().__setitem__("boot_args", text))

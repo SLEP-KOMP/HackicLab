@@ -82,12 +82,14 @@ class BuildPageMixin:
         ba_row = QHBoxLayout()
         ba_row.addWidget(_val(page, tr.t("build.boot_args")))
         self.build_boot_args = QLineEdit()
-        self.build_boot_args.setPlaceholderText("npci=0x2000 unfairgva=1")
+        self.build_boot_args.setPlaceholderText(tr.t("build.boot_args_hint"))
         self.build_boot_args.setText(str(uistate.get("build_boot_args", "") or ""))
         ba_row.addWidget(self.build_boot_args, 1)
-        for label, flag in (("npci=0x2000", "npci=0x2000"),
-                            ("unfairgva=1", "unfairgva=1")):
-            preset = QPushButton(label)
+        for label_key, flag in (
+                ("build.boot_args_preset_npci", "npci=0x2000"),
+                ("build.boot_args_preset_gva", "unfairgva=1"),
+        ):
+            preset = QPushButton(tr.t(label_key))
             preset.setObjectName("ghost")
             preset.clicked.connect(
                 lambda _=False, f=flag: self._add_boot_arg(f))
