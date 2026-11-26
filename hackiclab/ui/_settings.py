@@ -20,7 +20,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QLineEdit,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -120,6 +122,42 @@ class SettingsMixin:
         v.addWidget(gb_theme)
         self._sync_theme_tiles()
 
+        # Сетевой кэш: общая папка на NAS/сетевом диске, чтобы не тянуть
+        # кексты и OpenCore с GitHub на каждой машине.
+        gb_cache = QGroupBox(tr.t("settings.cache_title"))
+        cv = QVBoxLayout(gb_cache)
+        cache_hint = _muted(page, tr.t("settings.cache_hint"))
+        cache_hint.setWordWrap(True)
+        cv.addWidget(cache_hint)
+        cache_row = QHBoxLayout()
+        self.cache_path = QLineEdit(str(uistate.get("cache_root", "") or ""))
+        self.cache_path.setPlaceholderText(
+            tr.t("settings.cache_placeholder"))
+        cache_row.addWidget(self.cache_path, 1)
+        cache_check = QPushButton(tr.t("settings.cache_check"))
+        cache_check.setObjectName("ghost")
+        cache_check.clicked.connect(self._cache_check)
+        cache_row.addWidget(cache_check)
+        cache_save = QPushButton(tr.t("settings.cache_save"))
+        cache_save.setObjectName("ghost")
+        cache_save.clicked.connect(self._cache_save)
+        cache_row.addWidget(cache_save)
+        cv.addLayout(cache_row)
+        self.cache_status = _muted(page, "")
+        self.cache_status.setWordWrap(True)
+        cv.addWidget(self.cache_status)
+        warm_row = QHBoxLayout()
+        self.cache_warm_btn = QPushButton(tr.t("settings.cache_warm"))
+        self.cache_warm_btn.setToolTip(tr.t("settings.cache_warm_hint"))
+        self.cache_warm_btn.clicked.connect(self._cache_warm)
+        warm_row.addWidget(self.cache_warm_btn)
+        self.cache_warm_bar = QProgressBar()
+        self.cache_warm_bar.setVisible(False)
+        warm_row.addWidget(self.cache_warm_bar, 1)
+        cv.addLayout(warm_row)
+        v.addWidget(gb_cache)
+        self._cache_refresh_status()
+
         # Всё бесплатно: вместо фейковой активации — честное объяснение модели.
         gb_free = QGroupBox(tr.t("settings.free_title"))
         fv = QVBoxLayout(gb_free)
@@ -192,6 +230,73 @@ class SettingsMixin:
         scroll.setWidget(inner)
         outer.addWidget(scroll)
         return root
+    def _cache_refresh_status(self):
+        """Показывает, какой кэш сейчас реально используется."""
+        from ..builder.cache_manager import cache_dir, is_network_cache
+
+        path = cache_dir()
+        key = ("settings.cache_status_net" if is_network_cache()
+               else "settings.cache_status_local")
+        self.cache_status.setText(tr.t(key).format(path=path))
+
+    def _cache_check(self):
+        from ..builder.cache_manager import check_cache_path
+
+        ok, detail = check_cache_path(self.cache_path.text())
+        key = "settings.cache_ok" if ok else "settings.cache_fail"
+        self.cache_status.setText(tr.t(key).format(detail=detail))
+
+    def _cache_save(self):
+        from ..builder.cache_manager import check_cache_path
+
+        raw = self.cache_path.text().strip()
+        if raw:
+            ok, detail = check_cache_path(raw)
+            if not ok:
+                self.cache_status.setText(
+                    tr.t("settings.cache_fail").format(detail=detail))
+                return
+        uistate.save(cache_root=raw)
+        self._cache_refresh_status()
+
+    def _cache_warm(self):
+        from ._workers import CacheWarmWorker
+
+        worker = getattr(self, "_worker_cache_warm", None)
+        if worker is not None and worker.isRunning():
+            return
+        self.cache_warm_btn.setEnabled(False)
+        self.cache_warm_bar.setVisible(True)
+        self.cache_warm_bar.setRange(0, 100)
+        self.cache_warm_bar.setValue(0)
+        self.cache_status.setText(tr.t("settings.cache_warm_running"))
+        self._worker_cache_warm = CacheWarmWorker()
+        self._worker_cache_warm.progress.connect(self._cache_warm_progress)
+        self._worker_cache_warm.done.connect(self._cache_warm_done)
+        self._worker_cache_warm.failed.connect(self._cache_warm_failed)
+        self._worker_cache_warm.start()
+
+    def _cache_warm_progress(self, percent: int, message: str):
+        self.cache_warm_bar.setValue(int(percent))
+        self.cache_status.setText(message)
+
+    def _cache_warm_done(self, result):
+        self.cache_warm_btn.setEnabled(True)
+        self.cache_warm_bar.setVisible(False)
+        failed = getattr(result, "failed", []) or []
+        text = tr.t("settings.cache_warm_done").format(
+            ok=getattr(result, "ok", 0), failed=len(failed))
+        if failed:
+            text += "\n" + tr.t("settings.cache_warm_failed_list").format(
+                list=", ".join(failed[:12]))
+        self.cache_status.setText(text)
+
+    def _cache_warm_failed(self, error):
+        self.cache_warm_btn.setEnabled(True)
+        self.cache_warm_bar.setVisible(False)
+        self.cache_status.setText(
+            tr.t("settings.cache_fail").format(detail=error))
+
     def _check_updates(self, silent: bool = False):
         """Запускает проверку релиза на GitHub в фоновом потоке."""
         if getattr(self, "_upd_worker", None) and self._upd_worker.isRunning():

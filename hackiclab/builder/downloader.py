@@ -20,6 +20,15 @@ from .fetcher import GitHubFetcher, download_bytes
 _VERSIONED_BUNDLE = re.compile(r"^(?P<base>.+?)-\d+(?:\.\d+)*$")
 
 
+def _valid_cached_zip(path: Path) -> bool:
+    """Готовый архив в кэше: не обрезан и действительно zip."""
+    try:
+        return (path.is_file() and path.stat().st_size > 512
+                and zipfile.is_zipfile(str(path)))
+    except OSError:
+        return False
+
+
 def canonical_kext_name(name: str) -> str:
     """Имя бандла без версии: ``AppleIGB-5.11.8.kext`` → ``AppleIGB.kext``.
 
@@ -172,7 +181,9 @@ class Downloader:
         pat = re.compile(r'/releases/download/[^"/\s>]+/([^"<>&\s]+)')
         names = {m.group(1) for m in pat.finditer(html)}
         if pattern:
-            names = {n for n in names if pattern in n}
+            # Имена ассетов бывают в верхнем регистре (1.2.6.RELEASE.zip),
+            # поэтому сравнение без учёта регистра — иначе кекст «не находится».
+            names = {n for n in names if pattern.lower() in n.lower()}
         return sorted(names)
 
     def download_kext(self, entry: KextEntry, dest_dir: Path,
@@ -200,20 +211,24 @@ class Downloader:
         # архив и распаковка — в кэше; в EFI/OC/Kexts попадают только .kext
         work = cache_dir() / "kexts" / entry.name
         work.mkdir(parents=True, exist_ok=True)
-        try:
-            data = download_bytes(url, headers={"User-Agent": self.client}, timeout=120)
-        except Exception as e:
-            self._log(f"{entry.name}: не скачалось ({e})")
-            return None
-        # Проверяем архив до записи: страница ошибки вместо zip и обрезанный
-        # файл не должны попадать в кэш как «скачанный кекст».
-        if len(data) < 512 or not zipfile.is_zipfile(io.BytesIO(data)):
-            self._log(f"{entry.name}: {asset_name} повреждён или это не архив "
-                      f"({len(data)} байт) — пропуск")
-            return None
         zpath = work / asset_name
-        zpath.write_bytes(data)
-        self._log(f"{entry.name}: скачано {asset_name}")
+        if _valid_cached_zip(zpath):
+            # Уже скачанный архив (возможно, с сетевого кэша) — не тратим лимит GitHub.
+            self._log(f"{entry.name}: из кэша {asset_name}")
+        else:
+            try:
+                data = download_bytes(url, headers={"User-Agent": self.client}, timeout=120)
+            except Exception as e:
+                self._log(f"{entry.name}: не скачалось ({e})")
+                return None
+            # Проверяем архив до записи: страница ошибки вместо zip и обрезанный
+            # файл не должны попадать в кэш как «скачанный кекст».
+            if len(data) < 512 or not zipfile.is_zipfile(io.BytesIO(data)):
+                self._log(f"{entry.name}: {asset_name} повреждён или это не архив "
+                          f"({len(data)} байт) — пропуск")
+                return None
+            zpath.write_bytes(data)
+            self._log(f"{entry.name}: скачано {asset_name}")
 
         # распаковка
         extract_dir = work / "unzip"

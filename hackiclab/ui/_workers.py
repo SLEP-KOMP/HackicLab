@@ -52,6 +52,22 @@ class BuildWorker(QThread):
         self.progress.emit(int(percent), str(message))
 
 
+class CacheWarmWorker(QThread):
+    """Наполнение кэша (в т.ч. сетевого) всеми кекстами и OpenCore."""
+
+    done = Signal(object)
+    failed = Signal(str)
+    progress = Signal(int, str)
+
+    def run(self):
+        try:
+            from ..builder.cache_warmup import warm_cache
+
+            self.done.emit(warm_cache(on_progress=self.progress.emit))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class KextUpdateWorker(QThread):
     """Проверка обновлений кекстов в собранном EFI (сеть, поэтому в фоне)."""
 
