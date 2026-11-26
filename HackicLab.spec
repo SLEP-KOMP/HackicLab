@@ -42,6 +42,8 @@ a = Analysis(
         'hackiclab.analyzer.oc_log',
         'hackiclab.analyzer.efi_health',
         'hackiclab.knowledge.rationale',
+        'hackiclab.builder.integrity_manifest',
+        'hackiclab.builder.kext_updates',
     ],
     hookspath=[],
     hooksconfig={},
