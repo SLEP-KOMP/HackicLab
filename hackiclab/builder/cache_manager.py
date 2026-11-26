@@ -38,50 +38,7 @@ def app_home() -> Path:
     return home
 
 
-def _configured_cache_root() -> str:
-    """Путь к сетевой папке кэша: переменная окружения, затем настройка."""
-    env = os.environ.get("HACKICLAB_CACHE", "").strip()
-    if env:
-        return env
-    try:
-        from .. import uistate
-
-        return str(uistate.get("cache_root", "") or "").strip()
-    except Exception:
-        return ""
-
-
-def is_network_cache() -> bool:
-    return bool(_configured_cache_root()) and cache_dir() == Path(_configured_cache_root())
-
-
-def check_cache_path(path: str) -> tuple[bool, str]:
-    """Проверяет, что в папку можно писать (для сетевого пути — доступность шары)."""
-    raw = (path or "").strip()
-    if not raw:
-        return False, "empty"
-    try:
-        folder = Path(raw)
-        folder.mkdir(parents=True, exist_ok=True)
-        probe = folder / ".hackiclab-write-test"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
-        return True, str(folder)
-    except OSError as exc:
-        return False, str(exc)
-
-
 def cache_dir() -> Path:
-    override = _configured_cache_root()
-    if override:
-        try:
-            folder = Path(override)
-            folder.mkdir(parents=True, exist_ok=True)
-            return folder
-        except OSError:
-            # Шара недоступна — молча работаем на локальном кэше, чтобы сборка
-            # не падала из-за выключенного ПК или пропавшей сети.
-            pass
     d = app_home() / "cache"
     d.mkdir(parents=True, exist_ok=True)
     return d

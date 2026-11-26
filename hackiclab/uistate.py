@@ -26,7 +26,6 @@ DEFAULTS: dict[str, Any] = {
     "usb_mode": "full",
     "usb_recovery": True,
     "usb_map": True,
-    "cache_root": "",
     "ui_schema": 2,
 }
 

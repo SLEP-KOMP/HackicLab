@@ -44,7 +44,6 @@ a = Analysis(
         'hackiclab.knowledge.rationale',
         'hackiclab.builder.integrity_manifest',
         'hackiclab.builder.kext_updates',
-        'hackiclab.builder.cache_warmup',
     ],
     hookspath=[],
     hooksconfig={},
