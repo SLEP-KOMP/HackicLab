@@ -95,9 +95,16 @@ class UsbMixin:
         src_btn = QPushButton(tr.t("usb.browse_source"))
         src_btn.clicked.connect(self._pick_efi_source)
         srow.addWidget(src_btn)
+        last_btn = QPushButton(tr.t("usb.source_last"))
+        last_btn.setObjectName("ghost")
+        last_btn.setToolTip(tr.t("usb.source_last_hint"))
+        last_btn.clicked.connect(self._usb_source_last)
+        srow.addWidget(last_btn)
         sv.addLayout(srow)
         src_hint = _muted(page, tr.t("usb.source_hint")); src_hint.setWordWrap(True)
         sv.addWidget(src_hint)
+        self.usb_storage_warn = _muted(page, ""); self.usb_storage_warn.setWordWrap(True)
+        sv.addWidget(self.usb_storage_warn)
         v.addWidget(src_card)
 
         # --- 3.5. macOS Recovery (полноценный установщик) ---
@@ -194,13 +201,32 @@ class UsbMixin:
 
         v.addStretch()
 
+        # Что именно кладём в EFI на флешке: карту портов собираем здесь,
+        # потому что она привязана к носителю и к моменту записи.
+        map_row = QHBoxLayout()
+        self.usb_map_chk = QCheckBox(tr.t("usb.map_chk"))
+        self.usb_map_chk.setChecked(True)
+        self.usb_map_chk.setToolTip(tr.t("usb.map_chk_hint"))
+        map_row.addWidget(self.usb_map_chk)
+        map_row.addStretch()
+        v.addLayout(map_row)
+
         # --- Кнопки ---
         btn_row = QHBoxLayout()
         self.usb_write_btn = QPushButton(tr.t("usb.start"))
         self.usb_write_btn.clicked.connect(self._usb_start)
         btn_row.addWidget(self.usb_write_btn)
+        self.usb_verify_btn = QPushButton(tr.t("usb.verify"))
+        self.usb_verify_btn.setObjectName("ghost")
+        self.usb_verify_btn.setToolTip(tr.t("usb.verify_hint"))
+        self.usb_verify_btn.clicked.connect(self._usb_verify)
+        btn_row.addWidget(self.usb_verify_btn)
         btn_row.addStretch()
         v.addLayout(btn_row)
+
+        self.usb_verify_status = _muted(page, "")
+        self.usb_verify_status.setWordWrap(True)
+        v.addWidget(self.usb_verify_status)
 
         self.usb_progress = AppleProgressBar(); self.usb_progress.setMaximum(0); self.usb_progress.setVisible(False)
         v.addWidget(self.usb_progress)
@@ -447,6 +473,7 @@ class UsbMixin:
                 d.letter if d.letter else "RAW"]
         self.usb_selected_desc.setText(
             f"{tr.t('usb.selected')}: " + " · ".join(x for x in bits if x))
+        self._usb_refresh_storage_warn()
     def _usb_mode_change(self):
         mode = self.usb_mode.currentData() or "full"
         key = {
@@ -543,6 +570,32 @@ class UsbMixin:
         self._usb_mismatch = _muted(dlg, "")
         dlgv.addWidget(self._usb_mismatch)
 
+        # Проверки перед записью: объём флешки и версия установщика.
+        notes = []
+        try:
+            import re as _re
+            match = _re.search(r"([\d.,]+)", getattr(dev, "size", "") or "")
+            gb = float(match.group(1).replace(",", ".")) if match else 0.0
+        except (TypeError, ValueError):
+            gb = 0.0
+        recovery_on = bool(self.usb_recovery_chk.isChecked())
+        if recovery_on and 0 < gb < 8:
+            notes.append(tr.t("usb.warn_small_stick").format(
+                size=getattr(dev, "size", "") or "?"))
+        build_target = (self.macos_combo.currentData() or "") if hasattr(
+            self, "macos_combo") else ""
+        recovery_ver = (self.usb_recovery_ver.currentData() or "") if hasattr(
+            self, "usb_recovery_ver") else ""
+        if recovery_on and build_target and recovery_ver and \
+                build_target not in recovery_ver and recovery_ver not in build_target:
+            notes.append(tr.t("usb.warn_recovery_mismatch").format(
+                build=build_target, recovery=recovery_ver))
+        if notes:
+            warn_box = _val(dlg, "\n".join("⚠  " + n for n in notes))
+            warn_box.setObjectName("warn")
+            warn_box.setWordWrap(True)
+            dlgv.addWidget(warn_box)
+
         btns = QDialogButtonBox()
         ok_btn = QPushButton(tr.t("usb.proceed"))
         cancel_btn = QPushButton(tr.t("usb.cancel"))
@@ -561,7 +614,65 @@ class UsbMixin:
         cancel_btn.clicked.connect(dlg.reject)
 
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._usb_run(device, mode, planned)
+            self._usb_run(device, mode, planned,
+                          make_usb_map=self.usb_map_chk.isChecked())
+
+    def _usb_source_last(self):
+        """Берёт папку последней сборки как источник EFI."""
+        last = getattr(self, "last_build_dir", None)
+        if not last:
+            self.usb_verify_status.setText(tr.t("usb.source_last_none"))
+            return
+        self.usb_source.setText(str(last))
+        uistate.save(usb_source=str(last))
+        self._usb_refresh_storage_warn()
+
+    def _usb_refresh_storage_warn(self):
+        """Предупреждения о накопителе — в одном месте, на записи."""
+        label = getattr(self, "usb_storage_warn", None)
+        if label is None:
+            return
+        profile = getattr(self, "profile", None) or getattr(self, "manual_profile", None)
+        storage = getattr(profile, "storage", None) if profile is not None else None
+        if storage is None:
+            label.setText("")
+            return
+        from ..knowledge.storage_support import warnings as storage_warnings
+
+        lines = storage_warnings(storage, tr.current)
+        label.setText("\n".join(f"⚠ {line}" for line in lines))
+
+    def _usb_selected_device(self):
+        """Объект выбранной флешки из последнего списка устройств."""
+        data = self.usb_combo.currentData() if hasattr(self, "usb_combo") else None
+        if not data:
+            return None
+        return next((x for x in getattr(self, "usb_devices", [])
+                     if x.device == data), None)
+
+    def _usb_verify(self):
+        """Сверяет записанную флешку с манифестом сборки."""
+        from ..builder.integrity_manifest import verify_manifest
+
+        dev = self._usb_selected_device()
+        if dev is None:
+            self.usb_verify_status.setText(tr.t("usb.verify_need_device"))
+            return
+        letter = getattr(dev, "planned_letter", "") or getattr(dev, "letter", "")
+        root = Path(f"{letter}:\\EFI") if letter and letter != "RAW" else None
+        if root is None or not (root / "OC" / "config.plist").is_file():
+            self.usb_verify_status.setText(tr.t("usb.verify_no_efi"))
+            return
+        report = verify_manifest(root)
+        if report is None:
+            self.usb_verify_status.setText(tr.t("usb.verify_no_manifest"))
+        elif report.ok:
+            self.usb_verify_status.setText(
+                tr.t("usb.verify_ok").format(count=report.checked))
+        else:
+            self.usb_verify_status.setText(
+                tr.t("usb.verify_bad").format(count=report.drift))
+
     def _usb_run(self, device: str, mode: str, planned_letter: str = "",
                  make_usb_map: bool = False):
         """Запуск записи EFI на флешку в фоновом потоке."""

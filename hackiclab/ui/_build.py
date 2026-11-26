@@ -31,7 +31,6 @@ from ..knowledge import manual_hw
 from ._common import _efi_root_for, _h2, _muted, _val
 from ._workers import BuildWorker, KextUpdateWorker
 from .apple_progress import AppleProgressBar
-from .usb_picker import UsbPortPicker
 from .theme_cards import ThemeCards
 
 
@@ -64,13 +63,11 @@ class BuildPageMixin:
         usb_desc = _muted(page, tr.t("build.usb_toolbox_desc")); usb_desc.setWordWrap(True)
         opts.addWidget(self.opt_usb)
         opts.addWidget(usb_desc)
-        # Накопитель проверяем сразу в сборке: проблемный диск не даст загрузиться.
-        self.build_storage = _muted(page, ""); self.build_storage.setWordWrap(True)
-        opts.addWidget(self.build_storage)
-        # Выбор портов прямо в ручной сборке: те же чекбоксы, что в мастере.
-        self.build_usb_picker = UsbPortPicker(page)
-        self.build_usb_picker.changed.connect(self._on_build_usb_changed)
-        opts.addWidget(self.build_usb_picker)
+        # Накопитель и порты проверяются на вкладках диагностики и записи —
+        # чтобы не было двух разных списков предупреждений.
+        ports_note = _muted(page, tr.t("build.ports_hint"))
+        ports_note.setWordWrap(True)
+        opts.addWidget(ports_note)
         opts.addSpacing(8)
         self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
         self.opt_sip.setChecked(True)
@@ -303,22 +300,6 @@ class BuildPageMixin:
             highest=label(rng.highest)))
         pick = 0 if tr.current == "ru" else 1
         self.macos_range.setToolTip("\n".join(r[pick] for r in rng.reasons))
-        self._refresh_build_storage(profile)
-
-    def _refresh_build_storage(self, profile):
-        """Предупреждения о накопителе прямо на странице сборки."""
-        if not hasattr(self, "build_storage"):
-            return
-        from ..knowledge.storage_support import warnings as storage_warnings
-        storage = getattr(profile, "storage", None) if profile is not None else None
-        lines = storage_warnings(storage, tr.current) if storage is not None else []
-        self.build_storage.setText("\n".join(f"⚠ {line}" for line in lines))
-
-    def _on_build_usb_changed(self):
-        """Выбор портов в ручной сборке → набор для фильтрации карты."""
-        picker = getattr(self, "build_usb_picker", None)
-        selection = picker.selection() if picker is not None else set()
-        self._build_usb_ports = {tuple(item) for item in selection} or None
 
     def _refresh_patches(self):
         """Пересобирает список патчей и отчёт под железо/язык/режим."""
@@ -378,7 +359,6 @@ class BuildPageMixin:
             self, "build_themes") else []
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
-            usb_ports=getattr(self, "_build_usb_ports", None),
             themes=set(theme_sel) or None,
             picker_variant=theme_sel[0] if theme_sel else "",
             custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),

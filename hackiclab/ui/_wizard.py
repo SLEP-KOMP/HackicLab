@@ -296,11 +296,11 @@ class WizardMixin:
         usb_note.setWordWrap(True)
         lay.addWidget(usb_note)
 
-        # Полноценный выбор портов прямо в мастере: карта строится до сборки.
-        from .usb_picker import UsbPortPicker
-        self.wiz_usb_picker = UsbPortPicker(widget)
-        self.wiz_usb_picker.changed.connect(self._wiz_usb_changed)
-        lay.addWidget(self.wiz_usb_picker)
+        # Порты выбираются на вкладке записи на USB: там же, где карта
+        # реально попадает в EFI. В мастере дублировать пикер незачем.
+        ports_note = _muted(page, tr.t("wizard.options.ports_hint"))
+        ports_note.setWordWrap(True)
+        lay.addWidget(ports_note)
 
         # Тема графического меню: те же карточки, что в ручной сборке.
         from .theme_cards import ThemeCards
@@ -362,13 +362,6 @@ class WizardMixin:
         lay.addWidget(share_note)
         lay.addStretch()
         return widget
-    def _wiz_usb_changed(self):
-        """Выбор портов в пикере → состояние мастера (пусто = карта как есть)."""
-        state = self._wiz_state()
-        picker = getattr(self, "wiz_usb_picker", None)
-        selection = picker.selection() if picker is not None else set()
-        state["usb_ports"] = {tuple(item) for item in selection} or None
-
     def _wiz_themes_changed(self):
         """Выбранные темы меню → состояние мастера (первая — по умолчанию)."""
         state = self._wiz_state()
@@ -737,7 +730,6 @@ class WizardMixin:
             return
         opts = BuildOptions(
             usb_toolbox=bool(state.get("usb_toolbox", True)),
-            usb_ports=state.get("usb_ports"),
             themes=state.get("themes"),
             picker_variant=str(state.get("picker_variant") or ""),
             custom_themes=dict(getattr(getattr(self, "wiz_themes", None),

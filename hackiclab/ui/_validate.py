@@ -83,6 +83,8 @@ class ValidateMixin:
         self.quick_card = quick
         qv = QVBoxLayout(quick)
         qv.addWidget(_h2(page, tr.t("validate.quick_title")))
+        _scope = _muted(page, tr.t("validate.quick_scope")); _scope.setWordWrap(True)
+        qv.addWidget(_scope)
 
         qargs = QHBoxLayout()
         qargs.addWidget(_val(page, tr.t("validate.quick_bootargs")))

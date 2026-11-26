@@ -1,4 +1,4 @@
-"""Тесты UI: USB-карта в сборках и блок накопителей на вкладке «USB и накопители»."""
+"""Тесты UI: где живут карта портов, накопители и проверка флешки."""
 from __future__ import annotations
 
 import unittest
@@ -20,12 +20,28 @@ class PortsStorageUiTests(unittest.TestCase):
 
         window = MainWindow()
         try:
-            # USB-карта доступна и в автосборке, и в ручной
+            # USBToolBox-кекст включается в обеих сборках
             self.assertTrue(window.wiz_usb_chk.isChecked())
             self.assertTrue(window.opt_usb.isChecked())
-            # накопители: подпись в сборке и карточка на отдельной вкладке
-            self.assertTrue(hasattr(window, "build_storage"))
+            # карта портов при записи и проверка флешки
+            self.assertTrue(window.usb_map_chk.isChecked())
+            self.assertTrue(hasattr(window, "usb_verify_btn"))
+            # диагностика портов и накопителей — отдельная вкладка
+            self.assertTrue(hasattr(window, "ports_picker"))
             self.assertTrue(hasattr(window, "storage_warn"))
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_pickers_removed_from_build_and_wizard(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            # дубли убраны: карта выбирается только на записи/диагностике
+            self.assertFalse(hasattr(window, "build_usb_picker"))
+            self.assertFalse(hasattr(window, "build_storage"))
+            self.assertFalse(hasattr(window, "wiz_usb_picker"))
         finally:
             window.close()
             window.deleteLater()
@@ -39,18 +55,6 @@ class PortsStorageUiTests(unittest.TestCase):
             self.assertFalse(window._wiz_state()["usb_toolbox"])
             window.wiz_usb_chk.setChecked(True)
             self.assertTrue(window._wiz_state()["usb_toolbox"])
-        finally:
-            window.close()
-            window.deleteLater()
-
-    def test_manual_builder_has_picker(self):
-        from hackiclab.ui.main_window import MainWindow
-
-        window = MainWindow()
-        try:
-            self.assertTrue(hasattr(window, "build_usb_picker"))
-            window._on_build_usb_changed()
-            self.assertIsNone(window._build_usb_ports)
         finally:
             window.close()
             window.deleteLater()
@@ -69,7 +73,7 @@ class PortsStorageUiTests(unittest.TestCase):
             window.close()
             window.deleteLater()
 
-    def test_storage_notes_render_for_profile(self):
+    def test_storage_notes_render_on_usb_tab(self):
         from hackiclab.scanner.models import CPUInfo, HardwareProfile, StorageInfo
         from hackiclab.ui.main_window import MainWindow
 
@@ -78,11 +82,24 @@ class PortsStorageUiTests(unittest.TestCase):
             profile = HardwareProfile(platform="desktop")
             profile.cpu = CPUInfo(name="Intel Core i5", vendor="intel", generation=9)
             profile.storage = StorageInfo(controllers=["Samsung PM981"])
-            window._refresh_build_storage(profile)
-            self.assertIn("PM981", window.build_storage.text())
             window.profile = profile
+            window._usb_refresh_storage_warn()
+            self.assertIn("PM981", window.usb_storage_warn.text())
             window._refresh_storage_notes()
             self.assertIn("PM981", window.storage_warn.text())
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_verify_requires_device(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            window.usb_devices = []
+            window.usb_combo.clear()
+            window._usb_verify()
+            self.assertTrue(window.usb_verify_status.text())
         finally:
             window.close()
             window.deleteLater()
