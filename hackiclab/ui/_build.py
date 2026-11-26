@@ -29,7 +29,7 @@ from ..builder import BuildOptions, BuildPlan
 from ..i18n import tr
 from ..knowledge import manual_hw
 from ._common import _efi_root_for, _h2, _muted, _val
-from ._workers import BuildWorker
+from ._workers import BuildWorker, KextUpdateWorker
 from .apple_progress import AppleProgressBar
 from .usb_picker import UsbPortPicker
 from .theme_cards import ThemeCards
@@ -201,6 +201,11 @@ class BuildPageMixin:
         self.manual_open_btn.setVisible(False)
         self.manual_open_btn.clicked.connect(self._manual_open)
         build_row.addWidget(self.manual_open_btn)
+        self.kext_upd_btn = QPushButton(tr.t("build.kext_updates"))
+        self.kext_upd_btn.setObjectName("ghost")
+        self.kext_upd_btn.setToolTip(tr.t("build.kext_updates_desc"))
+        self.kext_upd_btn.clicked.connect(self._check_kext_updates)
+        build_row.addWidget(self.kext_upd_btn)
         build_row.addStretch()
         main.addLayout(build_row)
 
@@ -503,6 +508,48 @@ class BuildPageMixin:
         # Кнопка живая всегда, когда есть профиль: текст досчитается по клику,
         # иначе после перезапуска с сохранённым состоянием она оставалась серой.
         self.rationale_save_btn.setEnabled(bool(text.strip()) or bool(self.profile))
+    def _check_kext_updates(self):
+        """Сверяет кексты собранного EFI с последними релизами GitHub."""
+        worker = getattr(self, "_worker_kext_upd", None)
+        if worker is not None and worker.isRunning():
+            return
+        root = getattr(self, "last_build_dir", None)
+        if not root:
+            self.statusBar().showMessage(tr.t("build.ku_need_efi"), 6000)
+            return
+        self.kext_upd_btn.setEnabled(False)
+        self.statusBar().showMessage(tr.t("build.ku_running"), 0)
+        self._worker_kext_upd = KextUpdateWorker(Path(root))
+        self._worker_kext_upd.done.connect(self._kext_updates_done)
+        self._worker_kext_upd.failed.connect(self._kext_updates_failed)
+        self._worker_kext_upd.start()
+
+    def _kext_updates_done(self, states):
+        self.kext_upd_btn.setEnabled(True)
+        updates = [s for s in states if s.status == "update"]
+        message = (tr.t("build.ku_done").format(updates=len(updates),
+                                               total=len(states))
+                   if updates else tr.t("build.ku_none").format(total=len(states)))
+        lines = [message]
+        for state in states:
+            if state.status == "update":
+                lines.append("  ↑ " + tr.t("build.ku_line").format(
+                    name=state.name, installed=state.installed,
+                    latest=state.latest))
+            elif state.status == "ok":
+                lines.append("  ✓ " + tr.t("build.ku_ok").format(
+                    name=state.name, version=state.installed))
+            else:
+                lines.append("  ? " + tr.t("build.ku_unknown").format(
+                    name=state.name))
+        self.build_log.appendPlainText("\n" + "\n".join(lines))
+        self.statusBar().showMessage(message, 8000)
+
+    def _kext_updates_failed(self, error):
+        self.kext_upd_btn.setEnabled(True)
+        self.statusBar().showMessage(
+            tr.t("build.ku_failed").format(err=error), 8000)
+
     def _save_rationale(self):
         """Сохраняет объяснение решений в выбранное пользователем место."""
         text = getattr(self, "_rationale_text", "") or ""

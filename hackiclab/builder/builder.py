@@ -523,6 +523,12 @@ class EFIBuilder:
         shutil.rmtree(str(tmp), ignore_errors=True)
         shutil.rmtree(str(target / ".ssdt"), ignore_errors=True)
 
+        # манифест целостности: позже аудит покажет, изменили ли EFI после сборки
+        from .integrity_manifest import write_manifest
+        manifest = write_manifest(target)
+        if manifest is not None:
+            self._step(99, "Записан манифест целостности EFI")
+
         res.stats = {
             "kexts": self.plan.kext_names,
             "kexts_downloaded": downloaded,
@@ -536,6 +542,7 @@ class EFIBuilder:
             "ocvalidate_ok": ocv.ok,
             "ocvalidate_errors": ocv.errors,
             "ocvalidate_warnings": ocv.warnings,
+            "manifest": str(manifest) if manifest is not None else "",
             "dir": str(target),
         }
         res.warnings = list(layout.warnings) + list(dl.log)

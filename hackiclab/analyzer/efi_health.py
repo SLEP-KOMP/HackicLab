@@ -543,7 +543,43 @@ def audit(efi_root: Path) -> list[AnalysisIssue]:
     _check_sip(cfg, issues)
     _check_boot_args(cfg, issues)
     _check_quirks(cfg, issues)
+    _check_integrity(oc.parent, issues)
     return issues
+
+
+def _check_integrity(efi_root: Path, issues: list[AnalysisIssue]) -> None:
+    """Сверка с манифестом сборки: изменился ли EFI после сборки."""
+    from ..builder.integrity_manifest import verify_manifest
+
+    report = verify_manifest(efi_root)
+    if report is None:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "efi_no_manifest",
+            "Нет манифеста целостности",
+            "EFI собран не в HackicLab или манифест удалён — сверять не с чем.",
+            suggestion="Пересоберите EFI в HackicLab, чтобы включить проверку."))
+        return
+    if report.ok:
+        extra = (f" После сборки добавлено файлов: {len(report.added)}."
+                 if report.added else "")
+        issues.append(AnalysisIssue(
+            Severity.INFO, "efi_integrity_ok",
+            f"Целостность EFI подтверждена: {report.checked} файлов",
+            "sha256 совпадают с манифестом сборки." + extra))
+        return
+    details = []
+    if report.changed:
+        details.append("изменены: " + ", ".join(report.changed[:8]))
+    if report.missing:
+        details.append("удалены: " + ", ".join(report.missing[:8]))
+    if report.added:
+        details.append("добавлены: " + ", ".join(report.added[:8]))
+    issues.append(AnalysisIssue(
+        Severity.WARNING, "efi_integrity_changed",
+        f"EFI изменён после сборки: {report.drift} файлов",
+        "; ".join(details),
+        suggestion="Если правили сами — пересоберите EFI; иначе проверьте, "
+                   "кто и зачем менял файлы."))
 
 
 def summarise(issues: list[AnalysisIssue]) -> dict[str, int]:

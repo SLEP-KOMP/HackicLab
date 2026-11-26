@@ -52,6 +52,28 @@ class BuildWorker(QThread):
         self.progress.emit(int(percent), str(message))
 
 
+class KextUpdateWorker(QThread):
+    """Проверка обновлений кекстов в собранном EFI (сеть, поэтому в фоне)."""
+
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, efi_root: Path):
+        super().__init__()
+        self.efi_root = efi_root
+
+    def run(self):
+        try:
+            from ..builder.kext_updates import check_updates
+
+            kexts_dir = self.efi_root / "OC" / "Kexts"
+            if not kexts_dir.is_dir():
+                kexts_dir = self.efi_root / "EFI" / "OC" / "Kexts"
+            self.done.emit(check_updates(kexts_dir))
+        except Exception as exc:  # сеть, файлы — сообщаем в интерфейс
+            self.failed.emit(str(exc))
+
+
 class USBWriteWorker(QThread):
     """Запись EFI на флешку в фоне."""
     done = Signal(object)
