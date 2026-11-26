@@ -75,6 +75,15 @@ class BuildPageMixin:
         sip_desc = _muted(page, tr.t("build.sip_desc")); sip_desc.setWordWrap(True)
         opts.addWidget(self.opt_sip)
         opts.addWidget(sip_desc)
+        sbm_row = QHBoxLayout()
+        sbm_row.addWidget(_val(page, tr.t("build.secure_boot_model")))
+        self.build_sbm = QComboBox()
+        self.build_sbm.addItem(tr.t("build.sbm_disabled"), "Disabled")
+        self.build_sbm.addItem(tr.t("build.sbm_default"), "Default")
+        sbm_row.addWidget(self.build_sbm, 1)
+        opts.addLayout(sbm_row)
+        sbm_desc = _muted(page, tr.t("build.sbm_desc")); sbm_desc.setWordWrap(True)
+        opts.addWidget(sbm_desc)
         opts.addSpacing(8)
 
         # Свои boot-args: часть плат AMD без npci=0x2000 не стартует,
@@ -131,7 +140,6 @@ class BuildPageMixin:
         opts.addLayout(wmode_row)
         wifi_desc = _muted(page, tr.t("build.wifi_mode_desc")); wifi_desc.setWordWrap(True)
         opts.addWidget(wifi_desc)
-        main.addWidget(gb)
 
         # macOS version selection
         mb = QGroupBox(tr.t("build.macos"))
@@ -159,7 +167,10 @@ class BuildPageMixin:
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
         self.macos_combo.currentIndexChanged.connect(
             lambda _i: self._refresh_patches())
+        # macOS — до опций: от версии зависят SMBIOS, патчи и кексты,
+        # поэтому её логично выбрать первой.
         main.addWidget(mb)
+        main.addWidget(gb)
 
         # Патчи: что применить к EFI и что — уже на macOS (root-патчи)
         pb = QGroupBox(tr.t("patches.title"))
@@ -405,6 +416,7 @@ class BuildPageMixin:
             smbios_model=getattr(getattr(self, "manual_smbios", None),
                                  "currentData", lambda: "")() or "",
             boot_args=self.build_boot_args.text().strip(),
+            secure_boot_model=self.build_sbm.currentData() or "Disabled",
             patches=self._patch_ids(),
         )
         plan = BuildPlan(profile=profile, options=opts)

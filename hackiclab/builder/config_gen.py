@@ -68,6 +68,8 @@ class BuildOptions:
     smbios_model: str = ""
     # Дополнительные boot-args (npci=0x2000, unfairgva=1 и т.п.)
     boot_args: str = ""
+    # SecureBootModel: Disabled (безопасно) или Default (как у Apple)
+    secure_boot_model: str = "Disabled"
     verbose: bool = False
     # Отключить дискретную видеокарту (WhateverGreen: -wegnoegpu)
     disable_dgpu: bool = False
@@ -302,7 +304,8 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             aud["AudioDevice"] = pci
 
     # --- macOS-версия влияет на SecureBootModel и boot-args ---
-    _apply_macos_model(cfg, options.target_macos, profile)
+    _apply_macos_model(cfg, options.target_macos, profile,
+                       getattr(options, "secure_boot_model", "Disabled"))
 
     # --- NVRAM ---
     nv = cfg["NVRAM"]["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]
@@ -401,15 +404,17 @@ def _macos_major(target: str) -> int:
     return 26  # по умолчанию актуальная
 
 
-def _apply_macos_model(cfg: dict, target: str, profile: HardwareProfile):
+def _apply_macos_model(cfg: dict, target: str, profile: HardwareProfile,
+                       secure_boot_model: str = "Disabled"):
     """Проставляет SecureBootModel и версионные квирки под macOS-версию.
 
-    На не-Apple железе (в т.ч. Ryzen) SecureBootModel=Default ломает загрузку
-    recovery/подписанных образов, поэтому всегда Disabled.
+    Disabled — безопасный вариант для патченных кекстов и OCLP (при нём
+    добавляется revpatch=sbvmm для OTA). Default — как в эталонных сборках
+    Ryzen: Secure Boot Apple проверяется, но с iMacPro1,1 загрузка проходит.
     """
     major = _macos_major(target)
     sb = cfg["Misc"]["Security"]
-    sb["SecureBootModel"] = "Disabled"
+    sb["SecureBootModel"] = secure_boot_model or "Disabled"
     # XhciPortLimit нужен только на macOS < 11.3; на новых — USB map.
     if major < 11:
         cfg["Kernel"]["Quirks"]["XhciPortLimit"] = True

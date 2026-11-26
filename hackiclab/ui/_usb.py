@@ -78,7 +78,6 @@ class UsbMixin:
         mv.addWidget(self.usb_mode_desc)
         self.usb_mode.currentIndexChanged.connect(self._usb_mode_change)
         self._usb_mode_change()
-        v.addWidget(mode_card)
 
         # --- 3. Источник EFI ---
         src_card = self._card(page)
@@ -100,12 +99,18 @@ class UsbMixin:
         last_btn.setToolTip(tr.t("usb.source_last_hint"))
         last_btn.clicked.connect(self._usb_source_last)
         srow.addWidget(last_btn)
+        man_btn = QPushButton(tr.t("usb.make_manifest"))
+        man_btn.setObjectName("ghost")
+        man_btn.setToolTip(tr.t("usb.make_manifest_hint"))
+        man_btn.clicked.connect(self._usb_make_manifest)
+        srow.addWidget(man_btn)
         sv.addLayout(srow)
         src_hint = _muted(page, tr.t("usb.source_hint")); src_hint.setWordWrap(True)
         sv.addWidget(src_hint)
         self.usb_storage_warn = _muted(page, ""); self.usb_storage_warn.setWordWrap(True)
         sv.addWidget(self.usb_storage_warn)
         v.addWidget(src_card)
+        v.addWidget(mode_card)
 
         # --- 3.5. macOS Recovery (полноценный установщик) ---
         rec_card = self._card(page)
@@ -626,6 +631,25 @@ class UsbMixin:
         self.usb_source.setText(str(last))
         uistate.save(usb_source=str(last))
         self._usb_refresh_storage_warn()
+
+    def _usb_make_manifest(self):
+        """Пишет манифест целостности в чужой EFI, чтобы работала проверка."""
+        from ..builder.integrity_manifest import write_manifest
+
+        src = Path(self.usb_source.text())
+        root = None
+        if src.is_dir():
+            if (src / "OC").is_dir():
+                root = src
+            elif (src / "EFI" / "OC").is_dir():
+                root = src / "EFI"
+        if root is None:
+            self.usb_verify_status.setText(tr.t("usb.make_manifest_no_efi"))
+            return
+        path = write_manifest(root)
+        self.usb_verify_status.setText(
+            tr.t("usb.make_manifest_ok").format(path=path) if path
+            else tr.t("usb.make_manifest_fail"))
 
     def _usb_refresh_storage_warn(self):
         """Предупреждения о накопителе — в одном месте, на записи."""

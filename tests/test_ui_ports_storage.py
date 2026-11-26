@@ -109,6 +109,19 @@ class PortsStorageUiTests(unittest.TestCase):
             window.close()
             window.deleteLater()
 
+    def test_secure_boot_model_choice_exists(self):
+        from hackiclab.ui.main_window import MainWindow
+
+        window = MainWindow()
+        try:
+            options = [window.build_sbm.itemData(i)
+                       for i in range(window.build_sbm.count())]
+            self.assertIn("Disabled", options)
+            self.assertIn("Default", options)
+        finally:
+            window.close()
+            window.deleteLater()
+
     def test_verify_requires_device(self):
         from hackiclab.ui.main_window import MainWindow
 

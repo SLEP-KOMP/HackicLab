@@ -456,6 +456,14 @@ class EFIBuilder:
                 res.errors.append(
                     "AMD kernel patches недоступны: EFI не загрузится на Ryzen")
                 res.ok = False
+            else:
+                # Перекрытие вариантов одной функции ломает загрузку молча,
+                # поэтому сообщаем о нём до записи config.plist.
+                from .patch_check import find_conflicts
+
+                for conflict in find_conflicts(amd_patches):
+                    res.warnings.append("patches_overlap: " + conflict.describe())
+                    self._log("  ! " + conflict.describe())
         # config.plist пишется всегда: иначе на Intel остаются пустые Kernel/Add
         # и ACPI/Add — EFI без кекстов и таблиц.
         layout.write_plist_with_kexts(data, kexts_placed,
