@@ -51,6 +51,26 @@ _VIRTUAL_GPU = ("microsoft", "virtual", "remote", "parsec", "displaylink",
 _VM_MARKERS = ("vmware", "virtualbox", "innotek", "qemu", "kvm", "xen",
                "hyper-v", "virtual machine", "bochs", "parallels")
 
+#: Вендоры в SMBIOS, которые выставляют загрузчики хакинтоша.
+_SPOOF_VENDORS = ("acidanthera", "opencore", "clover")
+
+#: Product у подменённой платы — Apple board-id вида Mac-27AD2F918AE68F61.
+_SPOOF_BOARD_ID = re.compile(r"mac-[0-9a-f]{8,}", re.IGNORECASE)
+
+
+def is_spoofed_smbios(vendor: str, product: str) -> bool:
+    """Windows, загруженный через OpenCore/Clover, показывает чужой SMBIOS.
+
+    Загрузчик подменяет SMBIOS для любой системы, поэтому в Windows плата
+    числится как «Acidanthera Mac-27AD2F918AE68F61» или «MacPro7,1» —
+    реальную модель так не узнать.
+    """
+    v = (vendor or "").strip().lower()
+    p = (product or "").strip()
+    if any(marker in v for marker in _SPOOF_VENDORS):
+        return True
+    return bool(_SPOOF_BOARD_ID.fullmatch(p))
+
 
 class WindowsScanner:
     """Собирает HardwareProfile текущего Windows-хоста."""
@@ -142,8 +162,16 @@ class WindowsScanner:
             '| ConvertTo-Json -Compress'
         )
         if isinstance(board, dict):
-            p.board_vendor = str(board.get("Manufacturer") or "")
-            p.board_name = str(board.get("Product") or "")
+            vendor = str(board.get("Manufacturer") or "")
+            name = str(board.get("Product") or "")
+            if is_spoofed_smbios(vendor, name):
+                # Плату не показываем: это SMBIOS от загрузчика, а не железо.
+                p.board_vendor = ""
+                p.board_name = ""
+                p.board_spoofed = True
+            else:
+                p.board_vendor = vendor
+                p.board_name = name
         bios = ps.run_json(
             '(Get-CimInstance Win32_BIOS | Select-Object SMBIOSBIOSVersion | Select-Object -First 1) '
             '| ConvertTo-Json -Compress'

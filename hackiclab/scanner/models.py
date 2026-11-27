@@ -162,6 +162,7 @@ class HardwareProfile:
     platform: str = "desktop"    # laptop / desktop
     board_vendor: str = ""
     board_name: str = ""
+    board_spoofed: bool = False   # SMBIOS подменён загрузчиком (OpenCore/Clover)
     chipset: str = ""
     bios_version: str = ""
     smbios_model: str = ""
@@ -189,6 +190,7 @@ class HardwareProfile:
             "platform": self.platform,
             "board_vendor": self.board_vendor,
             "board_name": self.board_name,
+            "board_spoofed": self.board_spoofed,
             "chipset": self.chipset,
             "bios_version": self.bios_version,
             "smbios_model": self.smbios_model,

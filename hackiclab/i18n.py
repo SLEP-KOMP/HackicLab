@@ -144,6 +144,9 @@ T = {
         "hw.storage": "Накопители",
         "hw.platform": "Платформа",
         "hw.board": "Материнская плата",
+        "hw.board.unknown": "не определена",
+        "hw.board.spoofed": "Windows загружен через загрузчик (OpenCore) — SMBIOS "
+                            "подменён, реальную модель так не узнать",
         "hw.smbios": "SMBIOS (цель)",
         "hw.platform.laptop": "Ноутбук",
         "hw.platform.desktop": "Настольный ПК",
@@ -879,6 +882,9 @@ T = {
         "hw.storage": "Storage",
         "hw.platform": "Platform",
         "hw.board": "Motherboard",
+        "hw.board.unknown": "not detected",
+        "hw.board.spoofed": "Windows was booted through OpenCore — SMBIOS is spoofed, "
+                            "so the real board model cannot be read",
         "hw.smbios": "SMBIOS target",
         "hw.platform.laptop": "Laptop",
         "hw.platform.desktop": "Desktop",

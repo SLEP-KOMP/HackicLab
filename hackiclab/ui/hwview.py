@@ -153,7 +153,10 @@ def hardware_rows(profile: Optional[HardwareProfile],
     if platform_key:
         add("hw.platform", tr_key(platform_key))
     board = f"{profile.board_vendor} {profile.board_name}".strip()
-    add("hw.board", board or "—")
+    if getattr(profile, "board_spoofed", False):
+        add("hw.board", tr_key("hw.board.unknown"), tr_key("hw.board.spoofed"))
+    else:
+        add("hw.board", board or "—")
     try:
         from ..knowledge.kexts import smbios_model_for
         model = smbios_model_for(profile, macos_target)
