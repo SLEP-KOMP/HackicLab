@@ -20,10 +20,30 @@ def gpu_note(vendor: str, device_id: str = "", name: str = "") -> dict[str, str]
     """Заметка о поддержке GPU: {'ru': ..., 'en': ...} или пусто."""
     vend = (vendor or "").lower()
     dev = (device_id or "").lower().replace("0x", "")
+    low = (name or "").lower()
     if vend == "nvidia":
+        if any(key in low for key in ("rtx 50", "gtx 50", "blackwell", "b100", "b200")):
+            return {
+                "ru": "Blackwell (RTX 50): драйверов нет ни в одной macOS — ускорения "
+                      "не будет. Карту лучше вынуть или отключить: без драйвера она "
+                      "работает через VESA и ломает сон.",
+                "en": "Blackwell (RTX 50): no driver in any macOS, so there is no "
+                      "acceleration. Better remove or disable the card: without a "
+                      "driver it runs on VESA and breaks sleep.",
+            }
+        if any(key in low for key in ("rtx 40", "rtx 30", "rtx 20", "gtx 16", "ada",
+                                      "ampere", "turing")):
+            return {
+                "ru": "NVIDIA Turing/Ampere/Ada: драйверов для macOS нет вообще "
+                      "(даже для High Sierra), нужна дискретная AMD.",
+                "en": "NVIDIA Turing/Ampere/Ada: no macOS drivers at all (not even "
+                      "High Sierra); use an AMD dGPU.",
+            }
         return {
-            "ru": "NVIDIA не поддерживается macOS 11+: нужен OCLP или старая система.",
-            "en": "NVIDIA is unsupported on macOS 11+: use OCLP or an older macOS.",
+            "ru": "NVIDIA: нативно поддерживаются только Kepler/Maxwell/Pascal до "
+                  "macOS 10.13–11. Для новых систем нужна AMD.",
+            "en": "NVIDIA: only Kepler/Maxwell/Pascal are native up to macOS "
+                  "10.13–11. Newer systems need AMD.",
         }
     if vend == "amd":
         for prefix, family, ok, ru, en in AMD_PREFIXES:
@@ -32,6 +52,14 @@ def gpu_note(vendor: str, device_id: str = "", name: str = "") -> dict[str, str]
         return {"ru": "AMD: семейство не распознано, сверьтесь с гайдом.",
                 "en": "AMD: family not recognised, check the guide."}
     if vend == "intel":
+        if any(key in low for key in ("uhd graphics 7", "uhd 7", "iris xe", "xe graphics",
+                                      "uhd graphics for", "graphics 7")):
+            return {
+                "ru": "iGPU Xe (11-е поколение и новее, UHD 770/750): драйвера в macOS "
+                      "нет. Нужна дискретная AMD — встроенная графика не спасёт.",
+                "en": "Xe iGPU (11th gen and newer, UHD 770/750): there is no macOS "
+                      "driver. An AMD dGPU is required — the iGPU cannot render.",
+            }
         return {"ru": "Intel iGPU: поддержка зависит от поколения (до Comet Lake).",
                 "en": "Intel iGPU: support depends on generation (up to Comet Lake)."}
     return {}

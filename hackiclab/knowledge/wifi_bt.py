@@ -4,6 +4,15 @@ from __future__ import annotations
 
 #: (подстрока в названии, Wi-Fi, Bluetooth, заметка RU, заметка EN)
 CHIPSETS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("ax211", "itlwm / AirportItlwm", "IntelBluetoothFirmware",
+     "AX211 (CNVi): Wi-Fi через itlwm; AirportItlwm на Sequoia и Tahoe — сборка "
+     "с OCLP-патчем. BT (USB 8087:0033) через IntelBluetoothFirmware + "
+     "IntelBTPatcher + BlueToolFixup. AirDrop не будет; в тот же слот M.2 "
+     "встаёт BCM94360NG, если нужен нативный Wi-Fi.",
+     "AX211 (CNVi): Wi-Fi via itlwm; AirportItlwm on Sequoia and Tahoe needs an "
+     "OCLP-patched build. BT (USB 8087:0033) via IntelBluetoothFirmware + "
+     "IntelBTPatcher + BlueToolFixup. No AirDrop; BCM94360NG fits the same M.2 "
+     "slot if you want native Wi-Fi."),
     ("ax210", "itlwm / AirportItlwm", "IntelBluetoothFirmware",
      "AX210 работает через itlwm (или нативный AirportItlwm), BT — IntelBluetoothFirmware.",
      "AX210 works via itlwm (or native AirportItlwm), BT via IntelBluetoothFirmware."),

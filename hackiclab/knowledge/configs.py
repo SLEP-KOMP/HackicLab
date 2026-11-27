@@ -446,6 +446,43 @@ CONFIGS = (*CONFIGS, HwConfig("intel_sandy_desktop", CAT_DESKTOP_INTEL, "Intel S
 # Pentium/Celeron и APU Cezanne: то, чего не хватало по итогам сообщество.
 CONFIGS = (*CONFIGS,
     HwConfig(
+        "intel_z790_14600k",
+        CAT_DESKTOP_INTEL,
+        "Intel Z790 · i5-14600K + RX 6600/6800",
+        "Intel Z790 · i5-14600K + RX 6600/6800",
+        cpu="Intel Core i5-14600K (6P+8E, Raptor Lake Refresh)",
+        gpu="Radeon RX 6600 / RX 6800 (RTX 5060 Ti и UHD 770 не поддерживаются)",
+        macos="Sequoia 15 – Tahoe 26",
+        status=STATUS_PATCHED,
+        kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "RealtekRTL8125",
+               "CpuTopologyRebuild", "RestrictEvents", "itlwm"),
+        ssdts=("SSDT-PLUG", "SSDT-EC-USBX"),
+        quirks=("Kernel: ProvideCurrentCpuInfo", "Booter: ResizeAppleGpuBars=0"),
+        note="Своей видеокарты у платформы нет: RTX 5060 Ti (Blackwell) не имеет "
+             "драйверов ни в одной macOS, а UHD 770 — Xe без драйвера, поэтому нужна "
+             "дискретная AMD (RX 6600 для 1080p или RX 6800/6900 XT). Wi-Fi AX211 "
+             "(CNVi) работает через itlwm, на Sequoia и Tahoe — только с OCLP-патчем, "
+             "AirDrop не будет. Звук ALC1200 — AppleALC, layout-id из набора "
+             "1,2,3,4,5,7,11,27,28,29 (начните с alcid=11); в macOS 26 AppleHDA "
+             "вырезан, аналоговый звук не заведётся. Сеть — Realtek 2.5G через "
+             "LucyRTL8125Ethernet. Нужны CpuTopologyRebuild + ProvideCurrentCpuInfo, "
+             "SMBIOS MacPro7,1 (на Tahoe — iMac20,1 или MacPro7,1).",
+        note_en="The platform has no usable GPU of its own: the RTX 5060 Ti (Blackwell) "
+                "has no driver in any macOS, and the UHD 770 is Xe-based with no driver, "
+                "so a discrete AMD card is required (RX 6600 for 1080p or RX 6800/6900 "
+                "XT). AX211 (CNVi) Wi-Fi works via itlwm, on Sequoia and Tahoe only "
+                "with an OCLP patch, and AirDrop is unavailable. ALC1200 audio uses "
+                "AppleALC layouts 1,2,3,4,5,7,11,27,28,29 (start with alcid=11); macOS "
+                "26 dropped AppleHDA, so analog audio will not work there. Networking "
+                "is Realtek 2.5G via LucyRTL8125Ethernet. CpuTopologyRebuild plus "
+                "ProvideCurrentCpuInfo are required; SMBIOS MacPro7,1 (iMac20,1 or "
+                "MacPro7,1 on Tahoe).",
+        sources=("oc_guide", "gpu_guide", "itlwm_compat", "applealc_codecs"),
+        url="https://dortania.github.io/OpenCore-Install-Guide/config.plist/comet-lake.html",
+        vendor="intel", generation=14, platform="desktop", dgpu="73FF",
+        macos_min="Sequoia", macos_max="Tahoe",
+    ),
+    HwConfig(
         "intel_pentium_g5400",
         CAT_DESKTOP_INTEL,
         "Intel Pentium Gold G5400 / Celeron + RX 580",
