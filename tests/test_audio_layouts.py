@@ -6,7 +6,12 @@ import unittest
 
 import _bootstrap  # noqa: F401
 
-from hackiclab.knowledge.audio_layouts import LAYOUTS, layouts_for, recommended
+from hackiclab.knowledge.audio_layouts import (
+    LAYOUTS,
+    is_usb_audio,
+    layouts_for,
+    recommended,
+)
 
 
 class LayoutTableTests(unittest.TestCase):
@@ -36,6 +41,17 @@ class LayoutTableTests(unittest.TestCase):
 
     def test_lookup_is_case_insensitive(self):
         self.assertEqual(layouts_for("alc1220"), layouts_for("ALC1220"))
+
+    def test_usb_codec_has_no_layout(self):
+        """ALC4080/ALC4082 висят на USB: AppleALC их не патчит, alcid бесполезен."""
+        for codec in ("ALC4080", "ALC4082", "alc4082"):
+            self.assertTrue(is_usb_audio(codec), codec)
+            self.assertEqual(layouts_for(codec), (), codec)
+            self.assertEqual(recommended(codec), 0, codec)
+
+    def test_hda_codec_is_not_usb(self):
+        for codec in ("ALC1220", "ALC295", "ALC1200", "ALC897"):
+            self.assertFalse(is_usb_audio(codec), codec)
 
 
 if __name__ == "__main__":

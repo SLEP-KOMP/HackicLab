@@ -127,8 +127,24 @@ LAYOUTS: dict[str, tuple[int, ...]] = {
 }
 
 
+USB_CODECS: tuple[str, ...] = ("ALC4080", "ALC4082")
+
+
+def is_usb_audio(codec: str) -> bool:
+    """Кодек висит на USB, а не на HDA: AppleALC и layout-id для него не нужны.
+
+    Realtek ALC4080/4082 — однокристальные USB-кодеки со встроенным
+    контроллером USB 2.0 (см. datasheet ALC4080). На платах ASUS Z590/Z690/Z790
+    они подключены именно так, поэтому macOS видит их как обычное USB-аудио
+    без каких-либо кекстов, а в AppleALC этих кодов нет вовсе.
+    """
+    return (codec or "").strip().upper() in USB_CODECS
+
+
 def layouts_for(codec: str) -> tuple[int, ...]:
     """Все поддерживаемые layout-id для кодека (пусто, если не знаем)."""
+    if is_usb_audio(codec):
+        return ()
     return LAYOUTS.get((codec or "").strip().upper(), ())
 
 
