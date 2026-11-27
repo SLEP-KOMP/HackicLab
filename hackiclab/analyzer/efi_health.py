@@ -236,13 +236,23 @@ def _check_acpi(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
         target = replace.decode("ascii", "ignore")
         if not re.fullmatch(r"[A-Z_][A-Z0-9_]{3}", target or ""):
             continue
-        if target not in defined:
-            issues.append(AnalysisIssue(
-                Severity.WARNING, "acpi_orphan_rename",
-                f"Осиротевший ACPI-ренейм: {target}",
-                f"Патч «{_as_text(patch.get('Comment')) or target}» заменяет имя на "
-                f"{target}, но такого имени нет ни в одной таблице OC/ACPI.",
-                suggestion="Добавьте SSDT с этим именем или отключите патч."))
+        if target in defined:
+            continue
+        # Сам по себе отсутствующий target — норма: ренейм освобождает имя,
+        # чтобы SSDT объявил исходное (_CRS → XCRS + SSDT-HPET с новым _CRS,
+        # _OSI → XOSI + SSDT-XOSI, _PRW → XPRW + SSDT-GPRW). Предупреждаем
+        # только если ни одна таблица в OC/ACPI не объявляет исходное имя —
+        # тогда патч действительно ни на что не влияет.
+        original = find.decode("ascii", "ignore")
+        if re.fullmatch(r"[A-Z_][A-Z0-9_]{3}", original or "") and original in defined:
+            continue
+        issues.append(AnalysisIssue(
+            Severity.WARNING, "acpi_orphan_rename",
+            f"Осиротевший ACPI-ренейм: {target}",
+            f"Патч «{_as_text(patch.get('Comment')) or target}» заменяет "
+            f"{original or 'имя'} на {target}, но ни одна таблица OC/ACPI "
+            f"не объявляет ни {original}, ни {target}.",
+            suggestion="Добавьте SSDT с этим именем или отключите патч."))
 
 
 def _check_kexts(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
@@ -334,8 +344,11 @@ def _check_kexts(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
     # Кексты вне нашей базы: они могут быть нужны (VoodooRMI, Sinetek-rtsx
     # для картридера), поэтому это не ошибка — просто совет на будущее, чтобы
     # при пересборке в HackicLab не потерять то, что автор подобрал руками.
+    # UTBMap/USBMap — наша же карта портов, её в базе кекстов нет намеренно.
     outside = sorted(stem for stem in names
-                     if stem not in _known_kexts() and not stem.startswith("."))
+                     if stem not in _known_kexts()
+                     and stem not in USB_MAP_BUNDLES
+                     and not stem.startswith("."))
     if outside:
         issues.append(AnalysisIssue(
             Severity.INFO, "kexts_outside_db",
@@ -603,7 +616,13 @@ def _check_integrity(efi_root: Path, issues: list[AnalysisIssue]) -> None:
     """Сверка с манифестом сборки: изменился ли EFI после сборки."""
     from ..builder.integrity_manifest import verify_manifest
 
-    report = verify_manifest(efi_root)
+    # Манифест лежит в корне сборки, а аудит получает EFI/OC. Пробуем оба
+    # уровня, иначе собственная сборка сообщала «нет манифеста».
+    report = None
+    for candidate in (Path(efi_root), Path(efi_root).parent):
+        report = verify_manifest(candidate)
+        if report is not None:
+            break
     if report is None:
         issues.append(AnalysisIssue(
             Severity.INFO, "efi_no_manifest",
