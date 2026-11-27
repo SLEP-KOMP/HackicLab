@@ -167,6 +167,9 @@ class BuildPageMixin:
         self.macos_combo.currentIndexChanged.connect(self._on_macos_change)
         self.macos_combo.currentIndexChanged.connect(
             lambda _i: self._refresh_patches())
+        # обзор шага 1 считает совместимость по той же версии, что пойдёт в сборку
+        self.macos_combo.currentIndexChanged.connect(
+            lambda _i: self._manual_refresh())
         # macOS — до опций: от версии зависят SMBIOS, патчи и кексты,
         # поэтому её логично выбрать первой.
         main.addWidget(mb)

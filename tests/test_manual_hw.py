@@ -129,7 +129,7 @@ class PageTests(unittest.TestCase):
         profile = self.win.manual_profile
         self.assertEqual(profile.platform, "laptop")
         self.assertEqual(profile.cpu.codename, "Whiskey Lake")
-        self.assertGreater(self.win.manual_macos.count(), 0)
+        self.assertGreater(self.win.macos_combo.count(), 1)
 
     def test_smbios_combo_is_platform_specific(self):
         self.win._manual_refresh()
@@ -188,7 +188,12 @@ class FillFromScanTests(unittest.TestCase):
             self.assertTrue(window._patch_checks)
             self.assertIn("gpu_rx580_spoof", window._patch_checks)
             # регресс: в подписях macOS виден номер версии
-            self.assertIn("(15)", window.manual_macos.currentText())
+            labels = [window.macos_combo.itemText(i)
+                      for i in range(window.macos_combo.count())]
+            self.assertTrue(any("(15)" in text for text in labels))
+            # регресс: на странице один селектор macOS, а не два
+            self.assertFalse(hasattr(window, "manual_macos"))
+
         finally:
             window.close()
             window.deleteLater()

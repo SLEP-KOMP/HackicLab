@@ -32,6 +32,29 @@ STATUS_LIMITED = "limited"     # работает частично (нет Wi-Fi
 
 STATUSES: tuple[str, ...] = (STATUS_NATIVE, STATUS_PATCHED, STATUS_LIMITED)
 
+# Русские пометки внутри технических полей конфигураций. Поля общие для
+# обоих языков, поэтому в английском интерфейсе эти фрагменты переводятся
+# на месте — иначе в EN-версии карточек остаётся русский текст.
+_EN_PHRASES = (
+    ("SSDT-PNLF не нужен", "SSDT-PNLF not needed"),
+    ("iGPU отключена", "iGPU disabled"),
+    ("iGPU не поддерживается", "iGPU not supported"),
+    ("Radeon Vega 8 (интегрированная)", "Radeon Vega 8 (integrated)"),
+    ("16 ядер", "16 cores"),
+    ("только для Catalina", "Catalina only"),
+    ("не рекомендуется", "not recommended"),
+)
+
+
+def localize(value, lang: str = "ru") -> str:
+    """Переводит служебные фрагменты полей конфигурации для английского UI."""
+    text = str(value)
+    if lang != "en":
+        return text
+    for ru, en in _EN_PHRASES:
+        text = text.replace(ru, en)
+    return text
+
 
 @dataclass(frozen=True)
 class HwConfig:

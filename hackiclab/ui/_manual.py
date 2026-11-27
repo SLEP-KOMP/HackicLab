@@ -113,7 +113,7 @@ class ManualBuildMixin:
 
         self.manual_cpu = QComboBox()
         for option in manual_hw.CPU_OPTIONS:
-            self.manual_cpu.addItem(option.title, option.key)
+            self.manual_cpu.addItem(manual_hw.ui_title(option.title, tr.current), option.key)
         default_index = self.manual_cpu.findData("intel-8d")
         if default_index >= 0:
             self.manual_cpu.setCurrentIndex(default_index)
@@ -137,7 +137,7 @@ class ManualBuildMixin:
 
         self.manual_gpu = QComboBox()
         for option in manual_hw.GPU_OPTIONS:
-            self.manual_gpu.addItem(option.title, option.key)
+            self.manual_gpu.addItem(manual_hw.ui_title(option.title, tr.current), option.key)
         self._make_searchable(self.manual_gpu)
         self.manual_gpu.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.gpu", self.manual_gpu)
@@ -149,21 +149,21 @@ class ManualBuildMixin:
 
         self.manual_eth = QComboBox()
         for value, title in manual_hw.ETHERNET_OPTIONS:
-            self.manual_eth.addItem(title, value)
+            self.manual_eth.addItem(manual_hw.ui_title(title, tr.current), value)
         self._make_searchable(self.manual_eth)
         self.manual_eth.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.eth", self.manual_eth)
 
         self.manual_wifi = QComboBox()
         for value, title in manual_hw.WIFI_OPTIONS:
-            self.manual_wifi.addItem(title, value)
+            self.manual_wifi.addItem(manual_hw.ui_title(title, tr.current), value)
         self._make_searchable(self.manual_wifi)
         self.manual_wifi.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.wifi", self.manual_wifi)
 
         self.manual_touchpad = QComboBox()
         for value, title in manual_hw.TOUCHPAD_OPTIONS:
-            self.manual_touchpad.addItem(title, value)
+            self.manual_touchpad.addItem(manual_hw.ui_title(title, tr.current), value)
         self._make_searchable(self.manual_touchpad)
         self.manual_touchpad.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.touchpad", self.manual_touchpad)
@@ -178,11 +178,6 @@ class ManualBuildMixin:
         other.addWidget(self.manual_tb)
         other.addStretch()
         form.addLayout(other)
-
-        self.manual_macos = QComboBox()
-        self._make_searchable(self.manual_macos)
-        self.manual_macos.currentIndexChanged.connect(self._manual_refresh)
-        self._manual_field(page, form, "manual.macos", self.manual_macos)
 
         self.manual_smbios = QComboBox()
         self._make_searchable(self.manual_smbios)
@@ -248,41 +243,23 @@ class ManualBuildMixin:
             return
         profile = manual_hw.build_profile(self._manual_selection())
         self.manual_profile = profile
-        self._manual_fill_macos(profile)
         self._manual_fill_smbios(profile)
-        target = str(self.manual_macos.currentData() or "")
+        target = self._manual_target()
         override = str(self.manual_smbios.currentData() or "")
         self._manual_render(profile, manual_hw.review(
             profile, target, "itlwm", smbios_override=override))
         # патчи зависят от железа и macOS — пересчитываем сразу после правки формы
         if hasattr(self, "_refresh_patches"):
             self._refresh_patches()
-    def _manual_fill_macos(self, profile):
-        from ..knowledge.oc_platforms import MACOS_VERSIONS, MAX_MACOS_BY_GEN
-        ceiling = MAX_MACOS_BY_GEN.get(profile.cpu.generation, "Sonoma")
-        order = ["High Sierra", "Mojave", "Catalina", "Big Sur", "Monterey",
-                 "Ventura", "Sonoma", "Sequoia", "Tahoe", "Golden Gate"]
+    def _manual_target(self) -> str:
+        """Целевая macOS ручной сборки: единый селектор шага 2.
 
-        def rank(name: str) -> int:
-            low = (name or "").lower()
-            return next((i for i, item in enumerate(order) if item.lower() in low), -1)
+        Отдельного списка версий в шаге 1 нет: раньше их было два, и обзор
+        с патчами считались по одному, а сборка шла по другому.
+        """
+        combo = getattr(self, "macos_combo", None)
+        return str(combo.currentData() or "") if combo is not None else ""
 
-        current = str(self.manual_macos.currentData() or "")
-        limit = rank(ceiling)
-        self.manual_macos.blockSignals(True)
-        self.manual_macos.clear()
-        for entry in MACOS_VERSIONS:
-            name = str(entry.get("name") or "")
-            if limit >= 0 and rank(name) > limit:
-                continue
-            ver = str(entry.get("version") or "")
-            self.manual_macos.addItem(f"{name} ({ver})" if ver else name, name)
-        index = self.manual_macos.findData(current)
-        if index < 0 and self.manual_macos.count():
-            index = 0
-        if index >= 0:
-            self.manual_macos.setCurrentIndex(index)
-        self.manual_macos.blockSignals(False)
     def _manual_render(self, profile, data):
         self._clear_layout(self.manual_review_box)
         platform_key = f"hw.platform.{data['platform']}"
@@ -311,7 +288,8 @@ class ManualBuildMixin:
             self.manual_review_box.addWidget(row)
         for issue in data["issues"]:
             prefix = {"ok": "✔", "warn": "⚠", "err": "✖"}.get(issue["level"], "•")
-            label = QLabel(f"{prefix} {issue['text']}", self.manual_review_box.parentWidget())
+            label = QLabel(f"{prefix} {manual_hw.ui_issue(issue['text'], tr.current)}",
+                           self.manual_review_box.parentWidget())
             label.setWordWrap(True)
             label.setObjectName(issue["level"] if issue["level"] in ("ok", "warn", "err") else "muted")
             self.manual_review_box.addWidget(label)

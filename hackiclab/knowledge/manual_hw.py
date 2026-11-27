@@ -201,6 +201,85 @@ WIFI_NOTES = {
 
 TOUCHPAD_OPTIONS = (("ps2", "PS/2"), ("i2c", "I2C (VoodooI2C)"), ("none", "Нет"))
 
+# Подписи вариантов показываются в списках ручной сборки, поэтому в английском
+# интерфейсе русские пометки нужно переводить. Большая часть названий — модели
+# и кодовые имена, они одинаковы на обоих языках; здесь только отличия.
+_EN_TITLES = {
+    "Авто / как iGPU процессора": "Auto / as CPU iGPU",
+    "AMD Radeon (iGPU или дискретная)": "AMD Radeon (iGPU or discrete)",
+    "NVIDIA (macOS не поддерживает)": "NVIDIA (not supported by macOS)",
+    "MediaTek (MT7925 и др.) — только USB-замена":
+        "MediaTek (MT7925 etc.) — USB adapter only",
+    "Realtek — в macOS драйвера нет": "Realtek — no macOS driver",
+    "Нет": "None",
+    "Нет / неизвестно": "None / unknown",
+}
+
+_EN_SNIPPETS = (
+    ("(ноутбук)", "(laptop)"),
+    ("(Kaby Lake, ноутбук)", "(Kaby Lake, laptop)"),
+    ("(iGPU без драйвера)", "(iGPU without driver)"),
+)
+
+# Замечания обзора ручной сборки: те же тексты для английского интерфейса.
+_EN_ISSUES = {
+    "iGPU 11-го поколения и новее не имеет драйвера macOS":
+        "11th-gen and newer iGPU has no macOS driver",
+    "NVIDIA не поддерживается macOS — отключите dGPU":
+        "NVIDIA is not supported by macOS — disable the dGPU",
+    "Для этого Wi-Fi нет драйвера: USB-адаптер или замена модуля":
+        "No driver for this Wi-Fi: use a USB adapter or replace the module",
+    "Поддержка Atheros ограничена старыми картами":
+        "Atheros support is limited to older cards",
+    "AirportItlwm не существует для этой macOS — будет itlwm":
+        "AirportItlwm does not exist for this macOS — itlwm will be used",
+    "Тачпад отключён в выборе": "Touchpad is disabled in the selection",
+    "Нужны VoodooI2C + сателлит по модели тачпада":
+        "VoodooI2C plus a model-specific satellite kext is required",
+    "Будут SSDT-PNLF (яркость) и SSDT-EC-USBX (батарея/питание)":
+        "SSDT-PNLF (brightness) and SSDT-EC-USBX (battery/power) will be added",
+    "NVMeFix добавлен": "NVMeFix added",
+    "Thunderbolt: проверьте BIOS и IOMMU": "Thunderbolt: check BIOS and IOMMU",
+    "Кодек не в таблице layout — подберите alcid вручную":
+        "Codec is not in the layout table — pick alcid manually",
+    "Dortania: iMacPro1,1/MacPro7,1 на не-Mac железе могут потребовать "
+    "правки питания — при проблемах со сном смотрите Fixing Power Management":
+        "Dortania: iMacPro1,1/MacPro7,1 on non-Mac hardware may need power "
+        "management tweaks — see Fixing Power Management if sleep misbehaves",
+}
+
+
+def ui_issue(text: str, lang: str = "ru") -> str:
+    """Замечание обзора для текущего языка интерфейса."""
+    if lang != "en":
+        return text
+    exact = _EN_ISSUES.get(text)
+    if exact is not None:
+        return exact
+    out = str(text)
+    if out.startswith("Модель ") and " не поддерживает " in out:
+        out = (out.replace("Модель ", "Model ", 1)
+                  .replace(" не поддерживает ", " does not support ", 1)
+                  .replace(" — она не появится в этой системе",
+                           " — it will not appear in this macOS"))
+        return out
+    for ru, en in _EN_SNIPPETS:
+        out = out.replace(ru, en)
+    return out
+
+
+def ui_title(text: str, lang: str = "ru") -> str:
+    """Подпись варианта для текущего языка интерфейса."""
+    if lang != "en":
+        return text
+    exact = _EN_TITLES.get(text)
+    if exact is not None:
+        return exact
+    out = str(text)
+    for ru, en in _EN_SNIPPETS:
+        out = out.replace(ru, en)
+    return out
+
 
 @dataclass
 class ManualSelection:

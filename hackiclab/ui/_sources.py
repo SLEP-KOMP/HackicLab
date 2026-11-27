@@ -28,6 +28,7 @@ from ..knowledge.configs import (
     STATUS_PATCHED,
     by_category,
     categories_of,
+    localize,
     search_configs,
     similar_configs,
 )
@@ -188,8 +189,8 @@ class SourcesMixin:
 
         meta = _muted(
             card,
-            f"{tr.t('sources.cat.' + cfg.category)} · {cfg.cpu} · {cfg.gpu} · "
-            f"macOS: {cfg.macos}",
+            f"{tr.t('sources.cat.' + cfg.category)} · {localize(cfg.cpu, tr.current)} · "
+            f"{localize(cfg.gpu, tr.current)} · macOS: {localize(cfg.macos, tr.current)}",
         )
         meta.setWordWrap(True)
         cv.addWidget(meta)
@@ -198,7 +199,8 @@ class SourcesMixin:
                                (tr.t("sources.ssdt"), cfg.ssdts),
                                (tr.t("sources.quirks"), cfg.quirks)):
             if values:
-                line = _muted(card, f"{prefix}: " + ", ".join(values))
+                line = _muted(card, f"{prefix}: " + ", ".join(
+                    localize(v, tr.current) for v in values))
                 line.setWordWrap(True)
                 cv.addWidget(line)
 
@@ -287,7 +289,7 @@ class SourcesMixin:
             row.addWidget(title, 1)
             row.addWidget(self._status_badge(page, cfg.status))
             lay.addLayout(row)
-            meta = _muted(page, f"{cfg.cpu} · {cfg.gpu} · macOS: {cfg.macos}")
+            meta = _muted(page, f"{localize(cfg.cpu, tr.current)} · {localize(cfg.gpu, tr.current)} · macOS: {localize(cfg.macos, tr.current)}")
             meta.setWordWrap(True)
             lay.addWidget(meta)
         if not sim:

@@ -26,14 +26,35 @@ class KextState:
     repo: str = ""
 
     @property
+    def comparable(self) -> bool:
+        """Обе версии — числа: только такие можно честно сравнить.
+
+        У части кекстов тег релиза — не версия кекса (у OCLP тег вида 2.1.3
+        при AMFIPass 1.4.1, у SMCAMDProcessor — 0.7.2 при 1.0.1 в плагине).
+        Такие пары помечаем как несравнимые, иначе программа советует
+        «обновить» кекс на более старую версию.
+        """
+        inst = tuple(int(p) for p in self.installed.split(".") if p.isdigit())
+        late = tuple(int(p) for p in self.latest.split(".") if p.isdigit())
+        return bool(inst) and bool(late)
+
+    @property
     def has_update(self) -> bool:
-        return bool(self.installed and self.latest) and self.latest != self.installed
+        if not (self.installed and self.latest):
+            return False
+        if self.comparable:
+            inst = tuple(int(p) for p in self.installed.split(".") if p.isdigit())
+            late = tuple(int(p) for p in self.latest.split(".") if p.isdigit())
+            return late > inst
+        return self.latest != self.installed
 
     @property
     def status(self) -> str:
         if not self.latest:
             return "unknown"
         if not self.installed:
+            return "unknown"
+        if not self.comparable:
             return "unknown"
         return "update" if self.has_update else "ok"
 

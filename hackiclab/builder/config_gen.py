@@ -174,6 +174,11 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         cfg["ACPI"]["Add"].append(
             {"Enabled": True, "Path": "SSDT-USBX.aml", "Comment": "USB power"})
     cfg["ACPI"]["Patch"] = []
+    # Патчи по DSDT идут первыми: сначала переименования (XOSI, XCRS под
+    # SSDT-HPET), потом перенос _PRW у ноутбука. Проверка аудита «осиротевший
+    # ренейм» смотрит, есть ли Find в DSDT, поэтому порядок на неё не влияет,
+    # но так список читается сверху вниз как «что меняем в таблицах».
+    cfg["ACPI"]["Patch"].extend(getattr(options, "extra_acpi_patches", []) or [])
     if profile.platform == "laptop":
         # SSDT-GPRW работает только вместе с переименованием _PRW в DSDT:
         # без этого macOS читает исходный _PRW и просыпается сразу после сна.
@@ -193,8 +198,6 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             "TableLength": 0,
             "TableSignature": b"DSDT",
         })
-    # Патчи по DSDT (переименование _CRS под SSDT-HPET) идут следом
-    cfg["ACPI"]["Patch"].extend(getattr(options, "extra_acpi_patches", []) or [])
 
     # --- DeviceProperties ---
     dp = cfg["DeviceProperties"]

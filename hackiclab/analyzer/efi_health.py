@@ -19,6 +19,20 @@ from typing import Any, Optional
 
 from .models import KEXT_CONFLICTS, AnalysisIssue, Severity
 
+_KNOWN_KEXTS: frozenset | None = None
+
+
+def _known_kexts() -> frozenset:
+    """Имена кекстов из базы HackicLab; импорт ленивый — модуль автономен."""
+    global _KNOWN_KEXTS
+    if _KNOWN_KEXTS is None:
+        try:
+            from ..knowledge.kexts import KEXT_DB
+            _KNOWN_KEXTS = frozenset(KEXT_DB)
+        except Exception:
+            _KNOWN_KEXTS = frozenset()
+    return _KNOWN_KEXTS
+
 # --- Справочники -----------------------------------------------------------
 
 #: Kexts, которые не работают без Lilu и должны грузиться после него.
@@ -317,6 +331,19 @@ def _check_kexts(oc: Path, cfg: dict, issues: list[AnalysisIssue]) -> None:
             kext="IOSkywalkFamily",
             suggestion="Добавьте блок IOSkywalkFamily и примените root patch OCLP."))
 
+    # Кексты вне нашей базы: они могут быть нужны (VoodooRMI, Sinetek-rtsx
+    # для картридера), поэтому это не ошибка — просто совет на будущее, чтобы
+    # при пересборке в HackicLab не потерять то, что автор подобрал руками.
+    outside = sorted(stem for stem in names
+                     if stem not in _known_kexts() and not stem.startswith("."))
+    if outside:
+        issues.append(AnalysisIssue(
+            Severity.INFO, "kexts_outside_db",
+            f"Кексты вне базы HackicLab: {len(outside)}",
+            ", ".join(outside[:8]) + ("…" if len(outside) > 8 else ""),
+            suggestion="При пересборке они не добавятся автоматически: "
+                       "перенесите их в свой EFI вручную."))
+
 
 def _check_usb_map(oc: Path, issues: list[AnalysisIssue]) -> None:
     kext_dir = oc / "Kexts"
@@ -361,7 +388,10 @@ def _check_usb_map(oc: Path, issues: list[AnalysisIssue]) -> None:
 
 
 def _check_platform_info(cfg: dict, issues: list[AnalysisIssue]) -> None:
-    generic = cfg.get("PlatformInfo", {}).get("Generic", {}) or {}
+    info = cfg.get("PlatformInfo", {}) or {}
+    if not isinstance(info, dict):
+        return
+    generic = info.get("Generic", {}) or {}
     if not isinstance(generic, dict):
         return
     required = {
@@ -372,12 +402,34 @@ def _check_platform_info(cfg: dict, issues: list[AnalysisIssue]) -> None:
     }
     empty = [label for key, label in required.items()
              if not _as_text(generic.get(key)).strip()]
-    if empty:
+    if not empty:
+        return
+    # OpenCore c Automatic=true и UpdateSMBIOSMode Create/Minimal сам
+    # сгенерирует серийник и UUID: в конфиге их держат пустыми нарочно,
+    # чтобы не переносить чужие серийники. Это не ошибка сборки.
+    automatic = bool(info.get("Automatic"))
+    mode = _as_text(info.get("UpdateSMBIOSMode")).strip()
+    if automatic and mode.lower() != "custom" and not _as_text(
+            generic.get("SystemProductName")).strip():
         issues.append(AnalysisIssue(
             Severity.WARNING, "platforminfo_incomplete",
             "PlatformInfo заполнен не полностью",
-            "Пусто: " + ", ".join(empty),
-            suggestion="Сгенерируйте SMBIOS заново (кнопка сборки или GenSMBIOS)."))
+            "Не указана SMBIOS-модель (SystemProductName).",
+            suggestion="Выберите модель: iMac19,1 для Intel, MacPro7,1 для AMD."))
+        return
+    if automatic and mode.lower() != "custom":
+        issues.append(AnalysisIssue(
+            Severity.INFO, "platforminfo_generated",
+            "Серийник и UUID генерирует OpenCore",
+            f"Automatic=true, UpdateSMBIOSMode={mode or 'Create'}: пусто "
+            f"({', '.join(empty)}). Так делают, чтобы не брать чужие серийники.",
+            suggestion="Сгенерируйте свои через GenSMBIOS, если нужен iMessage."))
+        return
+    issues.append(AnalysisIssue(
+        Severity.WARNING, "platforminfo_incomplete",
+        "PlatformInfo заполнен не полностью",
+        "Пусто: " + ", ".join(empty),
+        suggestion="Сгенерируйте SMBIOS заново (кнопка сборки или GenSMBIOS)."))
 
 
 def _check_sip(cfg: dict, issues: list[AnalysisIssue]) -> None:
