@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -78,6 +79,32 @@ def macos_version_by_name(name: str) -> Optional[MacOSVersion]:
     for v in MACOS_VERSIONS:
         if name.lower() in v.name.lower() or name == v.version:
             return v
+    return None
+
+
+def recovery_version_for_target(target: str) -> Optional[MacOSVersion]:
+    """Версия recovery для цели сборки в наших подписях: «Tahoe 26», «Sequoia 15».
+
+    Цель сборки и имя версии recovery записаны по-разному («Tahoe 26» против
+    «macOS Tahoe (26)»), поэтому одной подстроки мало: ищем точное имя, название
+    системы, затем номер версии.
+    """
+    target = (target or "").strip()
+    if not target:
+        return None
+    exact = macos_version_by_name(target)
+    if exact is not None:
+        return exact
+    low = target.lower()
+    for v in MACOS_VERSIONS:
+        word = re.sub(r"\s*\(.*?\)\s*", " ", v.name).split()
+        if any(w.lower() in low for w in word[1:]):
+            return v
+    m = re.search(r"\d+(?:\.\d+)?", target)
+    if m:
+        for v in MACOS_VERSIONS:
+            if v.version == m.group(0):
+                return v
     return None
 
 
@@ -170,6 +197,22 @@ def cached_recovery_files(version: MacOSVersion) -> list:
     return [f for f in files if f.is_file()]
 
 
+_TB_NOISE = (
+    re.compile(r"^Traceback \(most recent call last\):$"),
+    re.compile(r"^\s+File \".*\", line \d+"),
+    re.compile(r"^[\s~^`|]+$"),
+)
+
+
+def _noisy_traceback(line: str) -> bool:
+    """Служебные строки traceback из macrecovery: в журнал они ничего не дают.
+
+    Оставляем только текст самой ошибки («ConnectionResetError: …»), чтобы при
+    обрыве сети пользователь видел причину, а не дамп трассировки.
+    """
+    return any(p.match(line) for p in _TB_NOISE)
+
+
 class _LineWriter:
     """Пишет вывод macrecovery построчно в callback (без второго окна)."""
 
@@ -182,13 +225,13 @@ class _LineWriter:
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
             line = line.strip()
-            if line and self.cb:
+            if line and not _noisy_traceback(line) and self.cb:
                 self.cb(line)
 
     def flush(self):
         line = self.buf.strip()
         self.buf = ""
-        if line and self.cb:
+        if line and not _noisy_traceback(line) and self.cb:
             self.cb(line)
 
 
@@ -311,7 +354,7 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
                     last_msg = line
                     last_lines.append(line)
                     del last_lines[:-5]
-                    if progress_cb:
+                    if progress_cb and not _noisy_traceback(line):
                         progress_cb(line)
             proc.wait()
             if proc.returncode != 0:

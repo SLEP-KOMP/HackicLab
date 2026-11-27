@@ -21,11 +21,11 @@ class CeilingTests(unittest.TestCase):
     def test_intel_ceiling_matches_apple_support(self):
         self.assertEqual(max_macos_for(self._profile("intel", 7)), "Ventura")
         self.assertEqual(max_macos_for(self._profile("intel", 9)), "Sequoia")
-        self.assertEqual(max_macos_for(self._profile("intel", 10)), "Sequoia")
+        self.assertEqual(max_macos_for(self._profile("intel", 10)), "Tahoe")
         self.assertEqual(max_macos_for(self._profile("intel", 6)), "Monterey")
 
     def test_amd_uses_its_own_ceiling(self):
-        self.assertEqual(max_macos_for(self._profile("amd", 12)), "Sequoia")
+        self.assertEqual(max_macos_for(self._profile("amd", 12)), "Tahoe")
 
     def test_skylake_x_is_not_limited_by_consumer_skylake(self):
         profile = self._profile("intel", 6, "Intel Core i9-7900X (Skylake-X)")

@@ -34,6 +34,17 @@ def desktop_profile() -> HardwareProfile:
     return profile
 
 
+def macos_labels(win) -> list[str]:
+    from PySide6.QtWidgets import QPushButton
+    labels: list[str] = []
+    for index in range(win.wiz_macos_box.count()):
+        item = win.wiz_macos_box.itemAt(index)
+        widget = item.widget() if item is not None else None
+        if isinstance(widget, QPushButton):
+            labels.append(widget.text())
+    return labels
+
+
 class HardwareRowsTests(unittest.TestCase):
     def test_wifi_model_is_extracted(self):
         self.assertEqual(
@@ -123,13 +134,16 @@ class WindowTests(unittest.TestCase):
     def test_macos_list_respects_generation(self):
         self.win._wiz_state()["profile"] = desktop_profile()
         self.win._wiz_show(1)
-        from PySide6.QtWidgets import QPushButton
-        labels: list[str] = []
-        for index in range(self.win.wiz_macos_box.count()):
-            item = self.win.wiz_macos_box.itemAt(index)
-            widget = item.widget() if item is not None else None
-            if isinstance(widget, QPushButton):
-                labels.append(widget.text())
+        labels = macos_labels(self.win)
+        self.assertTrue(labels)
+        self.assertTrue(any("Tahoe" in label for label in labels))
+
+        old_intel = desktop_profile()
+        old_intel.cpu.vendor = "intel"
+        old_intel.cpu.generation = 9
+        self.win._wiz_state()["profile"] = old_intel
+        self.win._wiz_show(1)
+        labels = macos_labels(self.win)
         self.assertTrue(labels)
         self.assertFalse(any("Tahoe" in label for label in labels))
 

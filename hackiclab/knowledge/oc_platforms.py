@@ -36,6 +36,8 @@ def oc_platform_for(profile: HardwareProfile) -> str:
 
 # Максимальная macOS, до которой поколение доживает нативно.
 # Сверено с официальным списком поддерживаемых Mac:
+#   Tahoe 26 — последняя система с Intel-маками: MacBook Pro 16" 2019,
+#              MacBook Pro 13" 2020 (4 Thunderbolt), iMac 2020, Mac Pro 2019;
 #   Sequoia 15 — iMac 2019+, MacBook Pro 2018+, Mac mini 2018+, iMac Pro 2017;
 #   Sonoma 14 — модели 2018+; Ventura 13 — модели 2017+ (Kaby Lake);
 #   Monterey 12 — модели 2015+ (Broadwell/Skylake); Big Sur 11 — 2013+.
@@ -50,18 +52,19 @@ MAX_MACOS_BY_GEN: dict[int, str] = {
     5: "Monterey",      # Broadwell
     6: "Monterey",      # Skylake (кроме Skylake-X в iMac Pro)
     7: "Ventura",       # Kaby Lake: 2017 Mac, Sonoma их уже не поддерживает
-    8: "Sequoia",       # Coffee Lake: MacBook Pro 2018 / mini 2018
-    9: "Sequoia",       # Coffee Lake Refresh: iMac 2019
-    10: "Sequoia",      # Comet Lake: iMac 2020
+    8: "Sequoia",       # Coffee Lake: MacBook Pro 2018 / mini 2018 — не в Tahoe
+    9: "Sequoia",       # Coffee Lake Refresh: iMac 2019 — не в Tahoe
+    10: "Tahoe",        # Comet Lake: iMac 2020 — последний Intel-мак в Tahoe
     11: "Sequoia",  # Tiger Lake: iGPU без драйвера, нужен dGPU (как и у 12–15)
     12: "Sequoia",  # Alder Lake: только с dGPU и патчами ядра
     13: "Sequoia",  # Raptor Lake
     14: "Sequoia",  # Raptor Lake Refresh
-    15: "Sequoia",  # Arrow Lake: Tahoe 26 уже только Apple Silicon
+    15: "Sequoia",  # Arrow Lake: в Tahoe таких Mac нет, только патчами
 }
 
 # AMD не имеет Apple-платформы: потолок задаётся патчами AMD Vanilla и GPU.
-MAX_MACOS_AMD = "Sequoia"
+# Патчи ядра для 26.x (Tahoe) в базе есть, поэтому потолок — Tahoe.
+MAX_MACOS_AMD = "Tahoe"
 
 
 def max_macos_for(profile: HardwareProfile) -> str:

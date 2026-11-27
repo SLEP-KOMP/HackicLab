@@ -17,12 +17,12 @@ def _profile(gen: int = 9, vendor: str = "intel"):
 
 
 class MacRangeTests(unittest.TestCase):
-    def test_amd_ceiling_is_sequoia_without_core2_label(self):
+    def test_amd_ceiling_is_tahoe_without_core2_label(self):
         p = _profile(0, "amd")
         p.dgpu = GPUInfo(name="RX 580", vendor="amd", device_id="6FDF")
         r = mac_range(p)
-        self.assertEqual(r.highest, "Sequoia")
-        self.assertEqual(r.recommended, "Sequoia")
+        self.assertEqual(r.highest, "Tahoe")
+        self.assertEqual(r.recommended, "Tahoe")
         self.assertFalse(any("Core 2" in ru for ru, _ in r.reasons))
 
     def test_haswell_ceiling_monterey_and_preference_clamped(self):

@@ -246,7 +246,7 @@ class SmbiosDefaultTargetTests(unittest.TestCase):
         p.net = NetInfo(eth_chipset="i211", wifi_chipset="broadcom")
         self.assertEqual(
             smbios_model_for(p, ""),
-            smbios_model_for(p, "macOS Sequoia"),
+            smbios_model_for(p, "macOS Tahoe"),
         )
 
 

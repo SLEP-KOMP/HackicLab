@@ -131,16 +131,16 @@ class UsbMixin:
         ver_row = QHBoxLayout()
         ver_row.addWidget(_h2(page, tr.t("usb.recovery_version")))
         self.usb_recovery_ver = QComboBox()
-        from ..builder.recovery import MACOS_VERSIONS
+        from ..builder.recovery import MACOS_VERSIONS, recovery_version_for_target
         for ver in MACOS_VERSIONS:
             self.usb_recovery_ver.addItem(ver.name, ver.name)
         # по умолчанию выделим версию из сборки, если выбрана
         target = self.macos_combo.currentData() or ""
-        if target:
-            for i in range(self.usb_recovery_ver.count()):
-                if target in self.usb_recovery_ver.itemText(i):
-                    self.usb_recovery_ver.setCurrentIndex(i)
-                    break
+        pref = recovery_version_for_target(target) if target else None
+        if pref is not None:
+            idx = self.usb_recovery_ver.findText(pref.name)
+            if idx >= 0:
+                self.usb_recovery_ver.setCurrentIndex(idx)
         ver_row.addWidget(self.usb_recovery_ver, 1)
         rcv.addLayout(ver_row)
         self.usb_recovery_chk.toggled.connect(self._usb_recovery_toggle)

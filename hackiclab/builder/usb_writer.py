@@ -810,16 +810,15 @@ def install_recovery_to(dst_root: Path, macos_name: str, log=None) -> str:
             last_pct[0] = pct
         log(msg)
 
-    from .recovery import download_recovery, macos_version_by_name
+    from .recovery import download_recovery, recovery_version_for_target
 
     if macos_name is None or not str(macos_name).strip():
-        macos_name = "macOS Sonoma"
-    version = macos_version_by_name(str(macos_name))
+        macos_name = "macOS Sequoia (15)"
+    version = recovery_version_for_target(str(macos_name))
     if version is None:
-        # иначе берём последнюю поддерживаемую
-        version = macos_version_by_name("macOS Sonoma")
-    if version is None:
-        raise RuntimeError("Не удалось определить версию macOS для recovery.")
+        raise RuntimeError(
+            f"Не удалось определить версию macOS для recovery по названию «{macos_name}»."
+        )
 
     dst_root = Path(dst_root)
     if not dst_root.exists():
