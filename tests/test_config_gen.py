@@ -181,3 +181,10 @@ class DevicePropertiesTests(unittest.TestCase):
         cfg = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
         keys = [k for k in cfg["DeviceProperties"]["Add"] if k != "PciRoot(0x0)/Pci(0x2,0x0)"]
         self.assertEqual(keys, [])
+
+    def test_thunderbolt_enables_apple_vtd(self):
+        default = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
+        self.assertTrue(default["Kernel"]["Quirks"]["DisableIoMapper"])
+        tb = plistlib.loads(generate_config_plist(
+            desktop_profile(), BuildOptions(thunderbolt=True)))
+        self.assertFalse(tb["Kernel"]["Quirks"]["DisableIoMapper"])

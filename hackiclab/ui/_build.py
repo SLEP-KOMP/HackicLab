@@ -128,6 +128,12 @@ class BuildPageMixin:
         opts.addWidget(self.opt_legacy)
         opts.addWidget(legacy_desc)
         opts.addSpacing(8)
+        # Thunderbolt: включаем AppleVTD, иначе устройства на шине не видны
+        self.opt_tb = QCheckBox(tr.t("build.thunderbolt"))
+        tb_desc = _muted(page, tr.t("build.thunderbolt_desc")); tb_desc.setWordWrap(True)
+        opts.addWidget(self.opt_tb)
+        opts.addWidget(tb_desc)
+        opts.addSpacing(8)
         wmode_row = QHBoxLayout()
         wmode_row.addWidget(_h2(page, tr.t("build.wifi_mode")))
         self.wifi_mode = QComboBox()
@@ -413,6 +419,7 @@ class BuildPageMixin:
             audio_dxe=self.opt_audio.isChecked(),
             network_boot=self.opt_netboot.isChecked(),
             legacy_boot=self.opt_legacy.isChecked(),
+            thunderbolt=self.opt_tb.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
             target_macos=self.macos_combo.currentData() or "",
             smbios_model=getattr(getattr(self, "manual_smbios", None),

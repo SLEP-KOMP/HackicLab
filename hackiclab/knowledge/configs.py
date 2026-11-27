@@ -483,6 +483,45 @@ CONFIGS = (*CONFIGS,
         macos_min="Sequoia", macos_max="Tahoe",
     ),
     HwConfig(
+        "intel_z790_hero_14700k",
+        CAT_DESKTOP_INTEL,
+        "ASUS ROG Maximus Z790 Hero · i7-14700K + RX 6900 XT",
+        "ASUS ROG Maximus Z790 Hero · i7-14700K + RX 6900 XT",
+        cpu="Intel Core i7-14700K (8P+12E, Raptor Lake Refresh)",
+        gpu="Radeon RX 6900 XT (Navi 21) + Thunderbolt 4 на плате",
+        macos="Sequoia 15 – Tahoe 26",
+        status=STATUS_PATCHED,
+        kexts=("Lilu", "VirtualSMC", "WhateverGreen", "AppleALC", "AppleIGC",
+               "CpuTopologyRebuild", "RestrictEvents", "itlwm"),
+        ssdts=("SSDT-PLUG", "SSDT-EC-USBX", "SSDT-USB-Reset"),
+        quirks=("Kernel: ProvideCurrentCpuInfo",
+                "Kernel: DisableIoMapper=false (AppleVTD для Thunderbolt 4)",
+                "Booter: ResizeAppleGpuBars=0"),
+        note="Плата с распаянным Thunderbolt 4 (Intel JHL8540 Maple Ridge): для TB "
+             "нужен VT-d в BIOS и AppleVTD в OpenCore (DisableIoMapper=false). Без "
+             "SSDT-DTBT устройства видны только после холодной загрузки, а сон и TB "
+             "обычно конфликтуют — это ограничение macOS, а не сборки. Звук ALC4082 — "
+             "AppleALC, layout подбирается перебором, начните с alcid=11. Сеть I226-V "
+             "заводится AppleIGC (IntelMausi её не поддерживает). Wi-Fi AX211 — через "
+             "itlwm, на Sequoia — с OCLP-патчем. RX 6900 XT: agdpmod=pikera, версии "
+             "XTXH (0x73AF) требуют спуфа на 6900 XT. Нужны CpuTopologyRebuild и "
+             "ProvideCurrentCpuInfo, SMBIOS MacPro7,1.",
+        note_en="This board has Thunderbolt 4 soldered on (Intel JHL8540 Maple Ridge): "
+                "TB needs VT-d in BIOS and AppleVTD in OpenCore (DisableIoMapper=false). "
+                "Without SSDT-DTBT devices only appear after a cold boot, and sleep plus "
+                "TB usually conflict — that is a macOS limitation, not a build error. "
+                "ALC4082 audio uses AppleALC with an empirically chosen layout, start "
+                "with alcid=11. I226-V networking uses AppleIGC (IntelMausi does not "
+                "support it). AX211 Wi-Fi goes through itlwm, with an OCLP patch on "
+                "Sequoia. RX 6900 XT needs agdpmod=pikera; XTXH variants (0x73AF) must "
+                "be spoofed to 6900 XT. CpuTopologyRebuild and ProvideCurrentCpuInfo are "
+                "required; SMBIOS MacPro7,1.",
+        sources=("oc_guide", "gpu_amd", "itlwm_compat", "applealc_codecs"),
+        url="https://dortania.github.io/OpenCore-Install-Guide/macos-limits.html",
+        vendor="intel", generation=14, platform="desktop", dgpu="73BF",
+        macos_min="Sequoia", macos_max="Tahoe",
+    ),
+    HwConfig(
         "intel_pentium_g5400",
         CAT_DESKTOP_INTEL,
         "Intel Pentium Gold G5400 / Celeron + RX 580",

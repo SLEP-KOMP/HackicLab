@@ -322,13 +322,16 @@ def asset_variant(entry: KextEntry, target_macos: str = "") -> str:
 
 
 def _is_navi2x(gpu) -> bool:
-    """NootRX нужен только Navi 2x (RX 6600–6950), не Polaris/Navi 1x."""
+    """NootRX нужен только Navi 22 (RX 6700/6750), не Navi 21 и не Polaris.
+
+    Navi 21 (RX 6800/6900) в macOS нативная: ей хватает WhateverGreen и
+    agdpmod=pikera, а NootRX на 21-й серии только мешает.
+    """
     name = (getattr(gpu, "name", "") or "").lower()
     dev = (getattr(gpu, "device_id", "") or "").lower().replace("0x", "")
-    if dev in {"73bf", "73e3", "73ef", "73ff", "7420", "73a5"}:
+    if dev in {"73df", "73ef"}:
         return True
-    return any(x in name for x in
-               ("6600", "6650", "6700", "6750", "6800", "6900", "6950"))
+    return any(x in name for x in ("6600", "6650", "6700", "6750"))
 
 
 #: Device-id Navi 10/14/21/22/23 — Dortania: agdpmod=pikera нужен всем Navi.

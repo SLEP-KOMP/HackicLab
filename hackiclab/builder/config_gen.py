@@ -52,6 +52,8 @@ class BuildOptions:
     usb_toolbox: bool = True
     # Порты, выбранные в мастере: None — все (как видит macOS, до 15 на контроллер)
     usb_ports: Optional[set] = None
+    # Thunderbolt: нужен AppleVTD (VT-d в BIOS, DisableIoMapper=false)
+    thunderbolt: bool = False
     # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
     themes: Optional[set] = None
     picker_variant: str = ""
@@ -246,6 +248,10 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
     # --- Kernel ---
     k = cfg["Kernel"]
     k["Add"] = []   # заполняется сборщиком по выбранным kext
+    if getattr(options, "thunderbolt", False):
+        # Thunderbolt по AppleVTD: VT-d включён в BIOS, обход VT-d выключен,
+        # иначе контроллер не видит PCIe-устройства на шине.
+        k["Quirks"]["DisableIoMapper"] = False
     if profile.cpu.vendor == "amd":
         k["Quirks"]["ProvideCurrentCpuInfo"] = True
         k["Emulate"]["DummyPowerManagement"] = True

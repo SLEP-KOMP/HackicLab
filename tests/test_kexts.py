@@ -391,11 +391,12 @@ class AmdNaviKextTests(unittest.TestCase):
         profile.dgpu = GPUInfo(name=name, vendor="amd", device_id=device_id)
         return profile
 
-    def test_navi21_takes_nootrx_instead_of_whatevergreen(self):
+    def test_navi21_takes_whatevergreen_not_nootrx(self):
+        # Navi 21 (RX 6800/6900) нативная: NootRX нужен только Navi 22
         names = [e.name for e in select_kexts(
             self._profile("AMD Radeon RX 6800 XT", "73BF"), target_macos="Sonoma")]
-        self.assertIn("NootRX", names)
-        self.assertNotIn("WhateverGreen", names)
+        self.assertIn("WhateverGreen", names)
+        self.assertNotIn("NootRX", names)
 
     def test_navi23_takes_nootrx_on_tahoe(self):
         names = [e.name for e in select_kexts(
