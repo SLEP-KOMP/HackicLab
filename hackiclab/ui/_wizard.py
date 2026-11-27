@@ -42,7 +42,8 @@ class WizardMixin:
             state = {
                 "step": 0, "profile": None, "macos": "", "kind": "usb",
                 "device": "", "folder": "", "mode": "full", "wifi": "itlwm",
-"usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
+                "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
+                "usb_mode": "auto", "usb_ports": None,
                 "gui_picker": False,
                 "audio_dxe": False, "network_boot": False, "legacy_boot": False,
                 "share_log": False, "smbios_model": "",
@@ -289,20 +290,14 @@ class WizardMixin:
             btn.setChecked(value == "")
         lay.addLayout(self.wiz_dual_box)
 
-        self.wiz_usb_chk = QCheckBox(tr.t("wizard.options.usb"))
-        self.wiz_usb_chk.setChecked(True)
-        self.wiz_usb_chk.toggled.connect(
-            lambda on: self._wiz_state().__setitem__("usb_toolbox", bool(on)))
-        lay.addWidget(self.wiz_usb_chk)
-        usb_note = _muted(page, tr.t("build.usb_toolbox_desc"))
-        usb_note.setWordWrap(True)
-        lay.addWidget(usb_note)
-
-        # Порты выбираются на вкладке записи на USB: там же, где карта
-        # реально попадает в EFI. В мастере дублировать пикер незачем.
-        ports_note = _muted(page, tr.t("wizard.options.ports_hint"))
-        ports_note.setWordWrap(True)
-        lay.addWidget(ports_note)
+        # Карта USB-портов: по умолчанию автоматически (обычный пользователь
+        # ничего не трогает), продвинутый сам отмечает порты в том же пикере,
+        # что и на вкладке для своих EFI.
+        from .usb_picker import UsbMapPanel
+        self.wiz_usb_map = UsbMapPanel(widget)
+        self.wiz_usb_map.changed.connect(self._wiz_usb_changed)
+        self.wiz_usb_chk = self.wiz_usb_map.enable_chk  # совместимость с тестами
+        lay.addWidget(self.wiz_usb_map)
 
         # Тема графического меню: те же карточки, что в ручной сборке.
         from .theme_cards import ThemeCards
@@ -402,13 +397,26 @@ class WizardMixin:
             self.wiz_dgpu_chk.setChecked(True)
             state["disable_dgpu"] = True
         self.wiz_share_chk.setChecked(bool(state.get("share_log", False)))
-        self.wiz_usb_chk.setChecked(bool(state.get("usb_toolbox", True)))
+        self.wiz_usb_map.set_state(bool(state.get("usb_toolbox", True)),
+                                   str(state.get("usb_mode") or "auto"),
+                                   state.get("usb_ports"))
         for index in range(self.wiz_dual_box.count()):
             item = self.wiz_dual_box.itemAt(index)
             widget = item.widget() if item is not None else None
             if isinstance(widget, QPushButton):
                 widget.setChecked(str(widget.property("value") or "") ==
                                   str(state.get("dual_boot") or ""))
+
+    def _wiz_usb_changed(self):
+        """Панель карты портов: запоминаем режим и выбранные порты."""
+        panel = getattr(self, "wiz_usb_map", None)
+        if panel is None:
+            return
+        state = self._wiz_state()
+        state["usb_toolbox"] = panel.enabled()
+        state["usb_mode"] = panel.mode()
+        state["usb_ports"] = panel.ports()
+
     def _wiz_step_summary(self, page) -> QWidget:
         widget = QWidget()
         lay = QVBoxLayout(widget)
@@ -748,6 +756,7 @@ class WizardMixin:
             return
         opts = BuildOptions(
             usb_toolbox=bool(state.get("usb_toolbox", True)),
+            usb_ports=state.get("usb_ports") or None,
             themes=state.get("themes"),
             picker_variant=str(state.get("picker_variant") or ""),
             custom_themes=dict(getattr(getattr(self, "wiz_themes", None),

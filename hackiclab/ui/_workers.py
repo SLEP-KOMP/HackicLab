@@ -82,7 +82,7 @@ class USBWriteWorker(QThread):
 
     def __init__(self, source_efi: Path, device: str, skip_format: bool,
                  recovery_macos: str = "", drive_letter: str = "",
-                 make_usb_map: bool = True):
+                 make_usb_map: bool = False):
         super().__init__()
         self.source_efi = source_efi
         self.device = device

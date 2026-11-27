@@ -60,15 +60,12 @@ class BuildPageMixin:
         # options with description cards
         gb = QGroupBox(tr.t("build.options"))
         opts = QVBoxLayout(gb)
-        self.opt_usb = QCheckBox(tr.t("build.usb_toolbox")); self.opt_usb.setChecked(True)
-        usb_desc = _muted(page, tr.t("build.usb_toolbox_desc")); usb_desc.setWordWrap(True)
-        opts.addWidget(self.opt_usb)
-        opts.addWidget(usb_desc)
-        # Накопитель и порты проверяются на вкладках диагностики и записи —
-        # чтобы не было двух разных списков предупреждений.
-        ports_note = _muted(page, tr.t("build.ports_hint"))
-        ports_note.setWordWrap(True)
-        opts.addWidget(ports_note)
+        # Карта USB-портов: как в мастере — по умолчанию автоматически,
+        # продвинутый пользователь отмечает порты сам.
+        from .usb_picker import UsbMapPanel
+        self.build_usb_map = UsbMapPanel(gb)
+        self.opt_usb = self.build_usb_map.enable_chk  # совместимость с тестами
+        opts.addWidget(self.build_usb_map)
         opts.addSpacing(8)
         self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
         self.opt_sip.setChecked(True)
@@ -404,6 +401,8 @@ class BuildPageMixin:
             self, "build_themes") else []
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
+            usb_ports=getattr(self, "build_usb_map", None)
+            and self.build_usb_map.ports() or None,
             themes=set(theme_sel) or None,
             picker_variant=theme_sel[0] if theme_sel else "",
             custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),

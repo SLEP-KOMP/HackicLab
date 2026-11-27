@@ -1,8 +1,10 @@
-"""UsbPortPicker: интерактивный выбор USB-портов с подсветкой лимита macOS.
+"""Выбор USB-портов: UsbPortPicker, панель сборки UsbMapPanel и подписи.
 
-Один и тот же виджет используется в мастере автосборки, в ручной сборке и на
-отдельной вкладке «USB и накопители»: строит карту из DSDT/usbdump, показывает
-порты по контроллерам, разъёмы и счётчик «N/15», красным — превышение.
+UsbPortPicker — интерактивный выбор портов с подсветкой лимита macOS.
+UsbMapPanel — «Карта USB-портов» для мастера и ручной сборки: обычный
+пользователь оставляет «Автоматически», продвинутый сам отмечает порты.
+Отдельная вкладка «USB-карта для своей EFI» даёт тот же выбор тем, кто
+собирает EFI без нашего сборщика и хочет только UTBMap.kext.
 """
 
 from __future__ import annotations
@@ -10,6 +12,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -37,6 +41,7 @@ class UsbPortPicker(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._plist = None
+        self._pending = None
         self._worker = None
         self._busy = False
 
@@ -99,6 +104,20 @@ class UsbPortPicker(QWidget):
     def set_plist(self, plist, selected=None):
         """Показывает карту; ``selected`` — ранее выбранные порты."""
         self._plist = plist
+        if selected is None and self._pending is not None:
+            selected = self._pending
+        self._pending = None
+        self._build_tree(selected)
+        self.changed.emit()
+
+    def set_plist_selection(self, selected):
+        """Переприменяет выбор портов к уже построенной карте."""
+        selected = set(selected or ())
+        if not self._plist:
+            # карта ещё не построена — применим выбор, когда она появится
+            self._pending = selected
+            return
+        self._pending = None
         self._build_tree(selected)
         self.changed.emit()
 
@@ -217,3 +236,88 @@ class UsbPortPicker(QWidget):
     def _on_finished(self):
         self._busy = False
         self.run_btn.setEnabled(True)
+
+
+class UsbMapPanel(QWidget):
+    """«Карта USB-портов» для сборки: авто по умолчанию, ручной выбор — по желанию.
+
+    Обычный пользователь оставляет «Автоматически»: карту сборщик строит сам из
+    DSDT/usbdump. Продвинутый переключает режим на «Выбрать порты» и отмечает
+    нужные — в UTBMap.kext попадут только они.
+    """
+
+    changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._sync_guard = False
+
+        v = QVBoxLayout(self); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(6)
+        self.enable_chk = QCheckBox(tr.t("usbmap.build_enable"))
+        self.enable_chk.setChecked(True)
+        self.enable_chk.setToolTip(tr.t("usbmap.build_enable_hint"))
+        v.addWidget(self.enable_chk)
+
+        row = QHBoxLayout()
+        self.mode_label = QLabel(tr.t("usbmap.mode"))
+        row.addWidget(self.mode_label)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem(tr.t("usbmap.mode_auto"), "auto")
+        self.mode_combo.addItem(tr.t("usbmap.mode_manual"), "manual")
+        row.addWidget(self.mode_combo, 1)
+        v.addLayout(row)
+
+        self.mode_note = QLabel(tr.t("usbmap.mode_auto_hint"))
+        self.mode_note.setWordWrap(True)
+        v.addWidget(self.mode_note)
+
+        self.picker = UsbPortPicker(self)
+        self.picker.setVisible(False)
+        v.addWidget(self.picker)
+
+        self.enable_chk.toggled.connect(self._sync)
+        self.mode_combo.currentIndexChanged.connect(self._sync)
+        self.picker.changed.connect(self.changed.emit)
+        self._sync()
+
+    # --- состояние ---
+
+    def enabled(self) -> bool:
+        """Собирать ли карту портов в EFI."""
+        return self.enable_chk.isChecked()
+
+    def mode(self) -> str:
+        return self.mode_combo.currentData() or "auto"
+
+    def manual(self) -> bool:
+        return self.enabled() and self.mode() == "manual"
+
+    def ports(self):
+        """Выбранные порты или None (авто)."""
+        if not self.manual():
+            return None
+        selected = self.picker.selection()
+        return set(selected) if selected else None
+
+    def set_state(self, enabled: bool = True, mode: str = "auto", ports=None):
+        """Восстанавливает выбор (мастер держит его в своём состоянии)."""
+        self._sync_guard = True
+        self.enable_chk.setChecked(bool(enabled))
+        index = self.mode_combo.findData(mode if mode in ("auto", "manual") else "auto")
+        self.mode_combo.setCurrentIndex(max(0, index))
+        self._sync_guard = False
+        if ports and hasattr(self.picker, "set_plist_selection"):
+            self.picker.set_plist_selection(set(ports))
+        self._sync()
+
+    # --- реакции ---
+
+    def _sync(self, *_args):
+        manual = self.manual()
+        self.mode_combo.setEnabled(self.enabled())
+        self.mode_label.setEnabled(self.enabled())
+        self.mode_note.setText(tr.t("usbmap.mode_manual_hint") if manual
+                               else tr.t("usbmap.mode_auto_hint"))
+        self.picker.setVisible(manual)
+        if not self._sync_guard:
+            self.changed.emit()

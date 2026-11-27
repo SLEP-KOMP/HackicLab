@@ -206,15 +206,9 @@ class UsbMixin:
 
         v.addStretch()
 
-        # Что именно кладём в EFI на флешке: карту портов собираем здесь,
-        # потому что она привязана к носителю и к моменту записи.
-        map_row = QHBoxLayout()
-        self.usb_map_chk = QCheckBox(tr.t("usb.map_chk"))
-        self.usb_map_chk.setChecked(True)
-        self.usb_map_chk.setToolTip(tr.t("usb.map_chk_hint"))
-        map_row.addWidget(self.usb_map_chk)
-        map_row.addStretch()
-        v.addLayout(map_row)
+        # Карту USB-портов здесь не собираем: она делается при сборке EFI
+        # (мастер или ручная сборка) либо на вкладке для своих EFI.
+        # Запись только копирует готовую EFI на носитель.
 
         # --- Кнопки ---
         btn_row = QHBoxLayout()
@@ -619,8 +613,7 @@ class UsbMixin:
         cancel_btn.clicked.connect(dlg.reject)
 
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._usb_run(device, mode, planned,
-                          make_usb_map=self.usb_map_chk.isChecked())
+            self._usb_run(device, mode, planned)
 
     def _usb_source_last(self):
         """Берёт папку последней сборки как источник EFI."""

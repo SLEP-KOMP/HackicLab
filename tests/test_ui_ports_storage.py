@@ -20,28 +20,37 @@ class PortsStorageUiTests(unittest.TestCase):
 
         window = MainWindow()
         try:
-            # USBToolBox-кекст включается в обеих сборках
+            # USBToolBox-кекст и карта портов включаются в обеих сборках
             self.assertTrue(window.wiz_usb_chk.isChecked())
             self.assertTrue(window.opt_usb.isChecked())
-            # карта портов при записи и проверка флешки
-            self.assertTrue(window.usb_map_chk.isChecked())
+            self.assertTrue(hasattr(window, "wiz_usb_map"))
+            self.assertTrue(hasattr(window, "build_usb_map"))
+            # на записи карты больше нет — только проверка флешки
+            self.assertFalse(hasattr(window, "usb_map_chk"))
             self.assertTrue(hasattr(window, "usb_verify_btn"))
-            # диагностика портов и накопителей — отдельная вкладка
+            # своя EFI: карта портов, диски и загрузчики
             self.assertTrue(hasattr(window, "ports_picker"))
             self.assertTrue(hasattr(window, "storage_warn"))
         finally:
             window.close()
             window.deleteLater()
 
-    def test_pickers_removed_from_build_and_wizard(self):
+    def test_panels_default_to_auto(self):
         from hackiclab.ui.main_window import MainWindow
 
         window = MainWindow()
         try:
-            # дубли убраны: карта выбирается только на записи/диагностике
-            self.assertFalse(hasattr(window, "build_usb_picker"))
-            self.assertFalse(hasattr(window, "build_storage"))
-            self.assertFalse(hasattr(window, "wiz_usb_picker"))
+            # обычный пользователь ничего не выбирает: режим «Автоматически»
+            for panel in (window.wiz_usb_map, window.build_usb_map):
+                self.assertTrue(panel.enabled())
+                self.assertEqual(panel.mode(), "auto")
+                self.assertIsNone(panel.ports())
+                self.assertFalse(panel.picker.isVisibleTo(panel))
+            # ручной режим показывает пикер портов
+            window.wiz_usb_map.mode_combo.setCurrentIndex(1)
+            self.assertEqual(window.wiz_usb_map.mode(), "manual")
+            self.assertTrue(window.wiz_usb_map.picker.isVisibleTo(window.wiz_usb_map))
+            self.assertEqual(window._wiz_state()["usb_mode"], "manual")
         finally:
             window.close()
             window.deleteLater()

@@ -172,7 +172,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                      backup: bool = True,
                      backup_root: Optional[Path] = None,
                      drive_letter: str = "",
-                     make_usb_map: bool = True) -> USBWriteResult:
+                     make_usb_map: bool = False) -> USBWriteResult:
     """Полный цикл на macOS: (опц.) форматирование, затем запись EFI."""
     res = USBWriteResult(ok=False, log=[])
     log_fn = log or res.log.append

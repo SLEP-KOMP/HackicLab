@@ -689,7 +689,7 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                      backup: bool = True,
                      backup_root: Optional[Path] = None,
                      drive_letter: str = "",
-                     make_usb_map: bool = True) -> USBWriteResult:
+                     make_usb_map: bool = False) -> USBWriteResult:
     """Полный цикл: (опц.) форматирование + запись EFI + возврат буквы.
 
     Если задан recovery_macos (напр. "macOS Sonoma") — дополнительно скачивает
@@ -741,9 +741,8 @@ def write_efi_to_usb(source_efi: Path, device: str, skip_format: bool = False,
                 if log:
                     log(f"USB map: ошибка ({e})")
 
-        # Манифест целостности уже на флешке после записи, чтобы аудит не
-        # сообщал «Нет манифеста» на нашей же сборке: карта портов правит
-        # config.plist и добавляет UTBMap, поэтому пишем манифест заново.
+        # Манифест целостности переписываем после записи: если карту портов
+        # всё же внедрили, config.plist изменился.
         try:
             from .integrity_manifest import write_manifest
             manifest = write_manifest(Path(f"{target_letter.rstrip(':')}:\\EFI"))

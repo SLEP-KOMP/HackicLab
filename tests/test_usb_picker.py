@@ -167,5 +167,63 @@ class SpeedClassTests(unittest.TestCase):
         self.assertEqual(_port_speed_class({}), "Unknown")
 
 
+class UsbMapPanelTests(unittest.TestCase):
+    """Панель сборки: авто по умолчанию, ручной выбор — только по просьбе."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"PySide6 недоступен: {exc}") from None
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self):
+        from hackiclab.ui.usb_picker import UsbMapPanel
+
+        panel = UsbMapPanel()
+        plist = build_map_plist([_controller(20, 20)], limit=None)
+        assert plist is not None
+        panel.picker.set_plist(plist)
+        return panel
+
+    def test_auto_mode_returns_no_ports(self):
+        panel = self._panel()
+        self.assertTrue(panel.enabled())
+        self.assertEqual(panel.mode(), "auto")
+        self.assertIsNone(panel.ports())
+
+    def test_manual_mode_returns_selection(self):
+        panel = self._panel()
+        panel.mode_combo.setCurrentIndex(1)
+        ports = panel.ports()
+        self.assertIsInstance(ports, set)
+        self.assertEqual(len(ports), MAX_PORTS_PER_CONTROLLER)
+
+    def test_disabled_map_returns_none(self):
+        panel = self._panel()
+        panel.mode_combo.setCurrentIndex(1)
+        panel.enable_chk.setChecked(False)
+        self.assertIsNone(panel.ports())
+
+    def test_set_state_restores_mode_and_selection(self):
+        panel = self._panel()
+        first = sorted(panel.picker.selection())[0]
+        panel.set_state(True, "manual", {first})
+        self.assertEqual(panel.mode(), "manual")
+        self.assertEqual(panel.ports(), {first})
+
+    def test_selection_survives_until_map_appears(self):
+        from hackiclab.ui.usb_picker import UsbMapPanel
+
+        panel = UsbMapPanel()
+        panel.mode_combo.setCurrentIndex(1)
+        panel.set_state(True, "manual", {("0-20-0", "SS01")})
+        self.assertIsNone(panel.ports())  # карты ещё нет
+        plist = build_map_plist([_controller(20, 20)], limit=None)
+        panel.picker.set_plist(plist)
+        self.assertEqual(panel.ports(), {("0-20-0", "SS01")})
+
+
 if __name__ == "__main__":
     unittest.main()
