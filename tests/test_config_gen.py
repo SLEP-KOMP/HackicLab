@@ -188,3 +188,14 @@ class DevicePropertiesTests(unittest.TestCase):
         tb = plistlib.loads(generate_config_plist(
             desktop_profile(), BuildOptions(thunderbolt=True)))
         self.assertFalse(tb["Kernel"]["Quirks"]["DisableIoMapper"])
+
+    def test_smbios_spoof_is_macos_only_by_default(self):
+        cfg = plistlib.loads(generate_config_plist(desktop_profile(), BuildOptions()))
+        self.assertEqual(cfg["PlatformInfo"]["UpdateSMBIOSMode"], "Custom")
+        self.assertTrue(cfg["Kernel"]["Quirks"]["CustomSMBIOSGuid"])
+
+    def test_smbios_spoof_can_cover_windows(self):
+        cfg = plistlib.loads(generate_config_plist(
+            desktop_profile(), BuildOptions(macos_only_smbios=False)))
+        self.assertEqual(cfg["PlatformInfo"]["UpdateSMBIOSMode"], "Create")
+        self.assertFalse(cfg["Kernel"]["Quirks"]["CustomSMBIOSGuid"])

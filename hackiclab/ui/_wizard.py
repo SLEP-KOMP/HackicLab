@@ -368,6 +368,16 @@ class WizardMixin:
             note.setWordWrap(True)
             lay.addWidget(note)
 
+        self.wiz_smbios_macos_chk = QCheckBox(tr.t("build.smbios_macos_only"))
+        self.wiz_smbios_macos_chk.setChecked(
+            bool(self._wiz_state().get("macos_only_smbios", True)))
+        self.wiz_smbios_macos_chk.toggled.connect(
+            lambda on: self._wiz_state().__setitem__("macos_only_smbios", bool(on)))
+        lay.addWidget(self.wiz_smbios_macos_chk)
+        smbios_note = _muted(page, tr.t("build.smbios_macos_only_desc"))
+        smbios_note.setWordWrap(True)
+        lay.addWidget(smbios_note)
+
         self.wiz_share_chk = QCheckBox(tr.t("wizard.options.share"))
         self.wiz_share_chk.toggled.connect(
             lambda on: self._wiz_state().__setitem__("share_log", bool(on)))
@@ -775,6 +785,7 @@ class WizardMixin:
             network_boot=bool(state.get("network_boot")),
             legacy_boot=bool(state.get("legacy_boot")),
             thunderbolt=bool(state.get("thunderbolt")),
+            macos_only_smbios=bool(state.get("macos_only_smbios", True)),
             smbios_model=str(state.get("smbios_model") or ""),
             boot_args=str(state.get("boot_args") or ""),
         )

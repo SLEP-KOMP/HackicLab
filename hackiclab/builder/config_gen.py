@@ -54,6 +54,9 @@ class BuildOptions:
     usb_ports: Optional[set] = None
     # Thunderbolt: нужен AppleVTD (VT-d в BIOS, DisableIoMapper=false)
     thunderbolt: bool = False
+    # Подменённый SMBIOS отдаём только macOS: Windows видит настоящую плату
+    # (UpdateSMBIOSMode=Custom + CustomSMBIOSGuid). Ломает Boot Camp.
+    macos_only_smbios: bool = True
     # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
     themes: Optional[set] = None
     picker_variant: str = ""
@@ -379,6 +382,14 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         model = options.smbios_model or smbios_model_for(profile, options.target_macos)
         if model:
             cfg["PlatformInfo"]["Generic"]["SystemProductName"] = model
+
+    # --- Подмена SMBIOS только для macOS ---
+    # UpdateSMBIOSMode=Custom пишет подменённые таблицы в собственный GUID
+    # (gOcCustomSmbiosTableGuid), а CustomSMBIOSGuid учит AppleSmbios.kext читать
+    # их оттуда. macOS видит MacPro7,1, Windows — настоящую плату.
+    if getattr(options, "macos_only_smbios", True):
+        cfg["PlatformInfo"]["UpdateSMBIOSMode"] = "Custom"
+        cfg["Kernel"]["Quirks"]["CustomSMBIOSGuid"] = True
 
     return plistlib.dumps(cfg, fmt=plistlib.FMT_XML, sort_keys=False)
 
