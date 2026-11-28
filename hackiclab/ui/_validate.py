@@ -417,12 +417,18 @@ class ValidateMixin:
             if w is not None:
                 w.deleteLater()
         w = (p.net.wifi_chipset or "")
-        if w == "mediatek":
+        from ..knowledge.wifi_bt import is_unsupported
+        if w and is_unsupported(w, p.net.wifi_name or ""):
             self.val_hw_card.setVisible(True)
-            t = _h2(self.val_hw_card, "✖ " + tr.t("validate.wifi_mediatek_title"))
+            from .hwview import wifi_model
+            model = (wifi_model(p.net.wifi_name or "", w)
+                     or p.net.wifi_name or w)
+            t = _h2(self.val_hw_card, "✖ " + tr.t(
+                "validate.wifi_unsupported_title").format(model=model))
             t.setObjectName("err")
             self.val_hw_box.addWidget(t)
-            d = _val(self.val_hw_card, tr.t("validate.wifi_mediatek_desc")); d.setWordWrap(True)
+            d = _val(self.val_hw_card, tr.t("validate.wifi_unsupported_desc"))
+            d.setWordWrap(True)
             self.val_hw_box.addWidget(d)
             b = _val(self.val_hw_card, "⚠ " + tr.t("validate.bt_unsupported"))
             b.setObjectName("warn")

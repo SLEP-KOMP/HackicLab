@@ -67,43 +67,6 @@ class BuildPageMixin:
         self.opt_usb = self.build_usb_map.enable_chk  # совместимость с тестами
         opts.addWidget(self.build_usb_map)
         opts.addSpacing(8)
-        self.opt_sip = QCheckBox(tr.t("build.disable_sip"))
-        self.opt_sip.setChecked(True)
-        sip_desc = _muted(page, tr.t("build.sip_desc")); sip_desc.setWordWrap(True)
-        opts.addWidget(self.opt_sip)
-        opts.addWidget(sip_desc)
-        sbm_row = QHBoxLayout()
-        sbm_row.addWidget(_val(page, tr.t("build.secure_boot_model")))
-        self.build_sbm = QComboBox()
-        self.build_sbm.addItem(tr.t("build.sbm_disabled"), "Disabled")
-        self.build_sbm.addItem(tr.t("build.sbm_default"), "Default")
-        sbm_row.addWidget(self.build_sbm, 1)
-        opts.addLayout(sbm_row)
-        sbm_desc = _muted(page, tr.t("build.sbm_desc")); sbm_desc.setWordWrap(True)
-        opts.addWidget(sbm_desc)
-        opts.addSpacing(8)
-
-        # Свои boot-args: часть плат AMD без npci=0x2000 не стартует,
-        # а AMD GPU теряет ускорение без unfairgva=1.
-        ba_row = QHBoxLayout()
-        ba_row.addWidget(_val(page, tr.t("build.boot_args")))
-        self.build_boot_args = QLineEdit()
-        self.build_boot_args.setPlaceholderText(tr.t("build.boot_args_hint"))
-        self.build_boot_args.setText(str(uistate.get("build_boot_args", "") or ""))
-        ba_row.addWidget(self.build_boot_args, 1)
-        for label_key, flag in (
-                ("build.boot_args_preset_npci", "npci=0x2000"),
-                ("build.boot_args_preset_gva", "unfairgva=1"),
-        ):
-            preset = QPushButton(tr.t(label_key))
-            preset.setObjectName("ghost")
-            preset.clicked.connect(
-                lambda _=False, f=flag: self._add_boot_arg(f))
-            ba_row.addWidget(preset)
-        opts.addLayout(ba_row)
-        ba_desc = _muted(page, tr.t("build.boot_args_desc")); ba_desc.setWordWrap(True)
-        opts.addWidget(ba_desc)
-        opts.addSpacing(8)
         self.opt_gui = QCheckBox(tr.t("build.gui_picker"))
         gui_desc = _muted(page, tr.t("build.gui_picker_desc")); gui_desc.setWordWrap(True)
         opts.addWidget(self.opt_gui)
@@ -298,13 +261,6 @@ class BuildPageMixin:
         sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         v.addWidget(share)
         return page
-    def _add_boot_arg(self, flag: str):
-        """Добавляет флаг в поле boot-args без дублей."""
-        current = self.build_boot_args.text().split()
-        if flag not in current:
-            current.append(flag)
-        self.build_boot_args.setText(" ".join(current))
-
     def _resolved_profile(self):
         """Профиль сборки: ручной выбор + UEFI-пути из последнего сканирования."""
         from ..knowledge import patches as patch_kb
@@ -397,7 +353,6 @@ class BuildPageMixin:
     def _do_build(self):
         if getattr(self, "_worker_build", None) and self._worker_build.isRunning():
             return
-        uistate.save(build_boot_args=self.build_boot_args.text().strip())
         dest = (self.build_dest.text() or "").strip()
         if dest in ("", "—"):
             self._pick_build_dir()
@@ -417,7 +372,6 @@ class BuildPageMixin:
             custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),
             menu_font=(self.build_themes.menu_font()
                        if hasattr(self, "build_themes") else ""),
-            disable_sip=self.opt_sip.isChecked(),
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),
             network_boot=self.opt_netboot.isChecked(),
@@ -427,8 +381,6 @@ class BuildPageMixin:
             target_macos=self.macos_combo.currentData() or "",
             smbios_model=getattr(getattr(self, "manual_smbios", None),
                                  "currentData", lambda: "")() or "",
-            boot_args=self.build_boot_args.text().strip(),
-            secure_boot_model=self.build_sbm.currentData() or "Disabled",
             patches=self._patch_ids(),
         )
         plan = BuildPlan(profile=profile, options=opts)

@@ -48,7 +48,7 @@ class WizardMixin:
                 "audio_dxe": False, "network_boot": False,
                 "thunderbolt": False,
                 "share_log": False, "smbios_model": "",
-                "boot_args": "",
+
             }
             self._wiz = state
         return state
@@ -261,6 +261,10 @@ class WizardMixin:
         else:
             options = (("none", "wizard.wifi.none", "wizard.wifi.none_desc"),)
             state["wifi"] = "none"
+            if chipset:
+                hint = _muted(self, tr.t("validate.wifi_unsupported_desc"))
+                hint.setWordWrap(True)
+                layout.addWidget(hint)
         for value, title, desc in options:
             button = self._wiz_option(self, layout, "wifi", value,
                                       tr.t(title), tr.t(desc))
@@ -331,22 +335,6 @@ class WizardMixin:
         smb_note = _muted(page, tr.t("manual.smbios_desc"))
         smb_note.setWordWrap(True)
         lay.addWidget(smb_note)
-
-        ba_row = QHBoxLayout()
-        ba_label = QLabel(tr.t("build.boot_args"), page)
-        ba_label.setObjectName("kv")
-        ba_label.setMinimumWidth(150)
-        ba_row.addWidget(ba_label)
-        self.wiz_bootargs = QLineEdit()
-        self.wiz_bootargs.setPlaceholderText(tr.t("build.boot_args_hint"))
-        self.wiz_bootargs.setText(str(self._wiz_state().get("boot_args") or ""))
-        self.wiz_bootargs.textChanged.connect(
-            lambda text: self._wiz_state().__setitem__("boot_args", text))
-        ba_row.addWidget(self.wiz_bootargs, 1)
-        lay.addLayout(ba_row)
-        ba_note = _muted(page, tr.t("build.boot_args_desc"))
-        ba_note.setWordWrap(True)
-        lay.addWidget(ba_note)
 
         self.wiz_gui_chk = QCheckBox(tr.t("build.gui_picker"))
         self.wiz_gui_chk.toggled.connect(
@@ -785,7 +773,6 @@ class WizardMixin:
             thunderbolt=bool(state.get("thunderbolt")),
             macos_only_smbios=bool(state.get("macos_only_smbios", True)),
             smbios_model=str(state.get("smbios_model") or ""),
-            boot_args=str(state.get("boot_args") or ""),
         )
         target = self._wiz_target_dir()
         self._wiz_last_target = target

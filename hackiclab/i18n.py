@@ -154,6 +154,7 @@ T = {
         "hw.platform.workstation": "Рабочая станция",
         "hw.bt.native": "нативный модуль Apple",
         "hw.wifi.inactive": "неактивен и не учитывается",
+    "hw.wifi.unsupported": "нет драйвера macOS",
         "scan.save": "Сохранить профиль",
         "scan.saved": "Профиль сохранён",
         # wizard
@@ -673,9 +674,9 @@ T = {
         "validate.quick_revalidate": "Проверить config.plist после правок?",
         "validate.quick_loaded": "Загружены текущие значения config.plist.",
         # hardware network warnings (вкладка валидации)
-        "validate.wifi_ok": "Беспроводная сеть настроена",
-        "validate.wifi_mediatek_title": "MediaTek Wi-Fi (MT7925) — не поддерживается macOS",
-        "validate.wifi_mediatek_desc": "Под macOS нет драйверов для Wi-Fi/Bluetooth чипов MediaTek (в т.ч. MT7925). Работать будет только Ethernet (проводная сеть). Для Wi-Fi/AirDrop/Handoff замените адаптер на поддерживаемый: Intel AX200/AX210/AX211 (через AirportItlwm) или Broadcom BCM94360.",
+    "validate.wifi_ok": "Беспроводная сеть настроена",
+    "validate.wifi_unsupported_title": "Wi-Fi {model} — нет драйвера macOS",
+    "validate.wifi_unsupported_desc": "Для найденного адаптера в macOS нет драйвера. Wi-Fi и Bluetooth работать не будут — останется проводной Ethernet. Для Wi-Fi/AirDrop/Handoff нужен поддерживаемый адаптер: Intel (AX200/AX210/AX211) или Broadcom (BCM94360).",
         "validate.bt_unsupported": "Bluetooth тоже будет недоступен (идёт через тот же чип).",
         "validate.bt_ok": "Bluetooth поддерживается",
         "validate.bt_broadcom": "Bluetooth Broadcom: нужны BrcmPatchRAM3 и BrcmFirmwareData — проверьте, что они есть в сборке.",
@@ -892,6 +893,7 @@ T = {
         "hw.platform.workstation": "Workstation",
         "hw.bt.native": "native Apple module",
         "hw.wifi.inactive": "inactive, ignored",
+    "hw.wifi.unsupported": "no macOS driver",
         "scan.save": "Save profile",
         "scan.saved": "Profile saved",
         # wizard
@@ -1409,9 +1411,9 @@ T = {
         "validate.quick_revalidate": "Validate config.plist after editing?",
         "validate.quick_loaded": "Current config.plist values loaded.",
         # hardware network warnings (validation tab)
-        "validate.wifi_ok": "Wireless network configured",
-        "validate.wifi_mediatek_title": "MediaTek Wi-Fi (MT7925) — not supported by macOS",
-        "validate.wifi_mediatek_desc": "macOS has no drivers for MediaTek Wi-Fi/Bluetooth chips (incl. MT7925). Only Ethernet (wired) will work. For Wi-Fi/AirDrop/Handoff replace the adapter with a supported one: Intel AX200/AX210/AX211 (via AirportItlwm) or Broadcom BCM94360.",
+    "validate.wifi_ok": "Wireless network configured",
+    "validate.wifi_unsupported_title": "Wi-Fi {model} — no macOS driver",
+    "validate.wifi_unsupported_desc": "There is no macOS driver for the detected adapter. Wi-Fi and Bluetooth will not work, wired Ethernet only. For Wi-Fi/AirDrop/Handoff use a supported adapter: Intel (AX200/AX210/AX211) or Broadcom (BCM94360).",
         "validate.bt_unsupported": "Bluetooth will also be unavailable (it goes through the same chip).",
         "validate.bt_ok": "Bluetooth supported",
         "validate.bt_broadcom": "Broadcom Bluetooth needs BrcmPatchRAM3 and BrcmFirmwareData — make sure they are in the build.",

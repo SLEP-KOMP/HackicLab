@@ -43,6 +43,23 @@ CHIPSETS: tuple[tuple[str, str, str, str, str], ...] = (
 )
 
 
+#: Чипсеты, для которых в macOS нет драйвера ни в каком виде.
+UNSUPPORTED_CHIPSETS = frozenset({"mediatek", "realtek"})
+
+
+def has_driver(chipset: str, name: str = "") -> bool:
+    """Есть ли шанс завести этот Wi-Fi в macOS (по чипсету из сканера)."""
+    chip = (chipset or "").strip().lower()
+    if not chip:
+        return True
+    return chip not in UNSUPPORTED_CHIPSETS
+
+
+def is_unsupported(chipset: str, name: str = "") -> bool:
+    """Обратная проверка для интерфейса: «поддержки нет»."""
+    return not has_driver(chipset, name)
+
+
 def note_for(name: str) -> dict[str, str]:
     """Заметка по названию адаптера: {'ru': ..., 'en': ...} или пусто."""
     low = (name or "").lower()

@@ -332,7 +332,6 @@ class CoreMixin:
             "val_config_path": getattr(self, "val_config_path", None),
             "val_status": self.val_status.text(),
             "opt_usb": self.opt_usb.isChecked(),
-            "opt_sip": self.opt_sip.isChecked(),
             "opt_gui": self.opt_gui.isChecked(),
             "macos": self.macos_combo.currentData(),
             "smbios_model": (str(self.manual_smbios.currentData() or "")
@@ -366,7 +365,6 @@ class CoreMixin:
             if i >= 0:
                 self.usb_recovery_ver.setCurrentIndex(i)
         self.opt_usb.setChecked(st["opt_usb"])
-        self.opt_sip.setChecked(st["opt_sip"])
         self.opt_gui.setChecked(bool(st.get("opt_gui")))
         if st["macos"]:
             i = self.macos_combo.findData(st["macos"])

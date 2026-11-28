@@ -419,6 +419,27 @@ class WindowsScanner:
             p.net.has_bt = int(bt.strip() or 0) > 0
         except Exception:
             p.net.has_bt = False
+        # Вендор BT-модуля: строка обзора раньше оставалась пустой, хотя
+        # адаптер есть. Берём физическое устройство (USB/PCI), а не
+        # служебные перечислители Microsoft.
+        bt_name = ps.run("""
+            $c = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+                $_.Class -eq 'Bluetooth' -and $_.Status -eq 'OK' -and
+                $_.InstanceId -match '^(USB|PCI)\\\\'
+            } | Select-Object -First 1
+            $c.FriendlyName
+        """)
+        bt_low = (bt_name or "").strip().lower()
+        if p.net.bt_native_apple or "apple" in bt_low or "broadcom" in bt_low:
+            p.net.bt_chipset = "broadcom"
+        elif "intel" in bt_low:
+            p.net.bt_chipset = "intel"
+        elif "mediatek" in bt_low:
+            p.net.bt_chipset = "mediatek"
+        elif "realtek" in bt_low:
+            p.net.bt_chipset = "realtek"
+        elif "atheros" in bt_low or "qualcomm" in bt_low:
+            p.net.bt_chipset = "atheros"
 
     # --- storage ---
     def _detect_storage(self, p: HardwareProfile):

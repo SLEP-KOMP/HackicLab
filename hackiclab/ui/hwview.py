@@ -98,6 +98,12 @@ def _wifi_line(profile: HardwareProfile) -> tuple[str, str]:
         note = vendor
     if model and model.lower() not in (net.wifi_name or "").lower():
         note = f"{model} · {note}" if note else model
+    try:
+        from ..knowledge.wifi_bt import is_unsupported
+        if is_unsupported(net.wifi_chipset, net.wifi_name):
+            note = (note + " · " if note else "") + tr.t("hw.wifi.unsupported")
+    except Exception:
+        pass
     ignored = [item for item in (net.ignored_wifi or []) if item]
     if ignored:
         extra = tr.t("hw.wifi.inactive") + ": " + ", ".join(ignored[:2])
@@ -109,9 +115,17 @@ def _bt_line(profile: HardwareProfile) -> tuple[str, str]:
     net = profile.net
     if not net.has_bt and not net.bt_chipset:
         return "—", ""
+    chip = (net.bt_chipset or "").lower()
+    value = _VENDOR.get(chip, net.bt_chipset or ("Apple" if net.bt_native_apple else "—"))
     if net.bt_native_apple:
-        return net.bt_chipset or "Apple", "hw.bt.native"
-    return net.bt_chipset or "—", ""
+        return value, "hw.bt.native"
+    try:
+        from ..knowledge.wifi_bt import is_unsupported
+        if is_unsupported(chip):
+            return value, tr.t("hw.wifi.unsupported")
+    except Exception:
+        pass
+    return value, ""
 
 
 def _storage_line(profile: HardwareProfile) -> tuple[str, str]:

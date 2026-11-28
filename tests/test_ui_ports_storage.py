@@ -100,33 +100,16 @@ class PortsStorageUiTests(unittest.TestCase):
             window.close()
             window.deleteLater()
 
-    def test_boot_args_field_adds_presets_once(self):
+    def test_sip_secureboot_bootargs_are_automatic(self):
+        """SIP, SecureBootModel и boot-args не выбираются руками:
+        их считает сборщик по железу, macOS и набору патчей."""
         from hackiclab.ui.main_window import MainWindow
 
         window = MainWindow()
         try:
-            window.build_boot_args.setText("")
-            window._add_boot_arg("npci=0x2000")
-            window._add_boot_arg("npci=0x2000")
-            window._add_boot_arg("unfairgva=1")
-            text = window.build_boot_args.text().split()
-            self.assertEqual(text.count("npci=0x2000"), 1)
-            self.assertIn("unfairgva=1", text)
-            # тот же выбор есть в мастере
-            self.assertTrue(hasattr(window, "wiz_bootargs"))
-        finally:
-            window.close()
-            window.deleteLater()
-
-    def test_secure_boot_model_choice_exists(self):
-        from hackiclab.ui.main_window import MainWindow
-
-        window = MainWindow()
-        try:
-            options = [window.build_sbm.itemData(i)
-                       for i in range(window.build_sbm.count())]
-            self.assertIn("Disabled", options)
-            self.assertIn("Default", options)
+            for name in ("opt_sip", "build_sbm", "build_boot_args",
+                         "wiz_bootargs"):
+                self.assertFalse(hasattr(window, name), name)
         finally:
             window.close()
             window.deleteLater()
