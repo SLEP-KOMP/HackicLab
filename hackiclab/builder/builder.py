@@ -59,7 +59,7 @@ class BuildPlan:
     ssdt_names: list = field(default_factory=list)
     target_dir: Path = None                   # type: ignore[assignment]
 
-def __post_init__(self):
+    def __post_init__(self):
         if self.options is None:
             self.options = BuildOptions()
         if self.smbios is None:

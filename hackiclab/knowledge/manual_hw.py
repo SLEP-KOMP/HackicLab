@@ -61,6 +61,21 @@ CPU_OPTIONS: tuple[CpuOption, ...] = (
            "Intel Core i5/i7/i9-9xxx — Coffee Lake Refresh", "desktop", 8),
     _intel("intel-10d", "intel_desktop", 10, "Comet Lake",
            "Intel Core i3/i5/i7/i9-10xxx — Comet Lake", "desktop", 8),
+    _intel("intel-11d", "intel_desktop", 11, "Rocket Lake",
+           "Intel Core i5/i7/i9-11xxx — Rocket Lake (iGPU без драйвера)",
+           "desktop", 8, note="UHD 750 не поддерживается macOS — нужна dGPU AMD"),
+    _intel("intel-12d", "intel_desktop", 12, "Alder Lake",
+           "Intel Core i3/i5/i7/i9-12xxx — Alder Lake (iGPU без драйвера)",
+           "desktop", 8, note="UHD 770 не поддерживается — нужна dGPU AMD"),
+    _intel("intel-13d", "intel_desktop", 13, "Raptor Lake",
+           "Intel Core i5/i7/i9-13xxx — Raptor Lake (iGPU без драйвера)",
+           "desktop", 8, note="UHD 770 не поддерживается — нужна dGPU AMD"),
+    _intel("intel-14d", "intel_desktop", 14, "Raptor Lake Refresh",
+           "Intel Core i5/i7/i9-14xxx — Raptor Lake Refresh (iGPU без драйвера)",
+           "desktop", 8, note="UHD 770 не поддерживается — нужна dGPU AMD"),
+    _intel("intel-15d", "intel_desktop", 15, "Arrow Lake",
+           "Intel Core Ultra 200S — Arrow Lake (iGPU без драйвера)",
+           "desktop", 8, note="Xe2 без драйвера — нужна dGPU AMD; macOS 26 требует патчей"),
     # Intel Laptop
     _intel("intel-2m", "intel_laptop", 2, "Sandy Bridge",
            "Intel Core i5/i7-2xxx — Sandy Bridge (ноутбук)", "laptop", 2),
@@ -89,6 +104,18 @@ CPU_OPTIONS: tuple[CpuOption, ...] = (
     _intel("intel-11tl", "intel_laptop", 11, "Tiger Lake",
            "Intel Core i5/i7-11xxx — Tiger Lake (iGPU без драйвера)", "laptop", 4,
            note="iGPU Xe не поддерживается macOS — нужен dGPU или OCLP"),
+    _intel("intel-12m", "intel_laptop", 12, "Alder Lake",
+           "Intel Core i5/i7-12xxx — Alder Lake (iGPU без драйвера)", "laptop", 6,
+           note="iGPU Xe не поддерживается macOS — нужен dGPU или OCLP"),
+    _intel("intel-13m", "intel_laptop", 13, "Raptor Lake",
+           "Intel Core i5/i7/i9-13xxx — Raptor Lake (iGPU без драйвера)",
+           "laptop", 8, note="iGPU Xe не поддерживается macOS — нужен dGPU или OCLP"),
+    _intel("intel-14m", "intel_laptop", 14, "Raptor Lake Refresh",
+           "Intel Core i5/i7/i9-14xxx — Raptor Lake Refresh (iGPU без драйвера)",
+           "laptop", 8, note="iGPU Xe не поддерживается macOS — нужен dGPU или OCLP"),
+    _intel("intel-15m", "intel_laptop", 15, "Arrow Lake",
+           "Intel Core Ultra 200H — Arrow Lake (iGPU без драйвера)",
+           "laptop", 8, note="Xe2 без драйвера — нужен dGPU или OCLP"),
     # AMD Desktop
     _amd("amd-zen1d", "amd_desktop", 8, "Zen",
          "AMD Ryzen 3/5/7 1xxx — Zen", cores=6),
@@ -139,12 +166,14 @@ CPU_BY_KEY = {option.key: option for option in CPU_OPTIONS}
 _INTEL_DESKTOP_KEYS = {
     0: "intel-2", 1: "intel-2", 2: "intel-2", 3: "intel-3", 4: "intel-4",
     5: "intel-5d", 6: "intel-6d", 7: "intel-7d", 8: "intel-8d",
-    9: "intel-9d", 10: "intel-10d",
+    9: "intel-9d", 10: "intel-10d", 11: "intel-11d", 12: "intel-12d",
+    13: "intel-13d", 14: "intel-14d", 15: "intel-15d",
 }
 _INTEL_LAPTOP_KEYS = {
     0: "intel-2m", 1: "intel-2m", 2: "intel-2m", 3: "intel-3m", 4: "intel-4m",
     5: "intel-5m", 6: "intel-6m", 7: "intel-7m", 8: "intel-8kr",
-    9: "intel-9m", 10: "intel-10cm", 11: "intel-11tl",
+    9: "intel-9m", 10: "intel-10cm", 11: "intel-11tl", 12: "intel-12m",
+    13: "intel-13m", 14: "intel-14m", 15: "intel-15m",
 }
 
 
@@ -161,7 +190,7 @@ def intel_option_key(generation: int, laptop: bool = False) -> str:
     table = _INTEL_LAPTOP_KEYS if laptop else _INTEL_DESKTOP_KEYS
     if gen in table:
         return table[gen]
-    return "intel-11tl" if laptop else "intel-10d"
+    return "intel-15m" if laptop else "intel-15d"
 CPU_GROUPS = (
     ("intel_desktop", "CPU — Intel, настольный"),
     ("intel_laptop", "CPU — Intel, ноутбук"),
@@ -196,6 +225,18 @@ GPU_OPTIONS: tuple[GpuOption, ...] = (
     GpuOption("amd", "AMD Radeon (iGPU или дискретная)", "amd", "", False),
     GpuOption("6fdf", "AMD Radeon RX 580 2048SP", "amd", "6FDF", False,
               "Нет драйвера: патч device-id или правка VBIOS на RX 570"),
+    GpuOption("731f", "AMD Radeon RX 5700 XT (Navi 10)", "amd", "731F", False,
+              "Navi 10: нужен agdpmod=pikera"),
+    GpuOption("66af", "AMD Radeon VII (Vega 20)", "amd", "66AF", False,
+              "Vega 20: нативно, SMBIOS iMacPro1,1"),
+    GpuOption("7340", "AMD Radeon RX 5500 XT (Navi 14)", "amd", "7340", False,
+              "Navi 14: macOS 10.15.4+"),
+    GpuOption("73ff", "AMD Radeon RX 6400 / 6500 XT (Navi 24)", "amd", "73FF", False,
+              "Драйвера нет: macOS не поддерживает Navi 24"),
+    GpuOption("744c", "AMD Radeon RX 7900 XTX (Navi 31)", "amd", "744C", False,
+              "Драйвера нет: macOS не поддерживает Navi 31"),
+    GpuOption("7480", "AMD Radeon RX 7600 (Navi 33)", "amd", "7480", False,
+              "Драйвера нет: macOS не поддерживает Navi 33"),
     GpuOption("nvidia", "NVIDIA (macOS не поддерживает)", "nvidia", "", False,
               "Отключите в BIOS или выберите «отключить dGPU» в мастере"),
 )
@@ -249,6 +290,10 @@ _EN_SNIPPETS = (
     ("(ноутбук)", "(laptop)"),
     ("(Kaby Lake, ноутбук)", "(Kaby Lake, laptop)"),
     ("(iGPU без драйвера)", "(iGPU without driver)"),
+    ("Драйвера нет: macOS не поддерживает ", "No driver: macOS does not support "),
+    ("Нет драйвера: ", "No driver: "),
+    ("нужна dGPU AMD", "an AMD dGPU is required"),
+    ("нужен dGPU или OCLP", "a dGPU or OCLP is required"),
 )
 
 # Замечания обзора ручной сборки: те же тексты для английского интерфейса.
@@ -349,6 +394,11 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
     elif gpu.vendor in ("amd", "nvidia"):
         profile.dgpu = GPUInfo(name=gpu.title.split(" (")[0], vendor=gpu.vendor,
                                device_id=gpu.device_id)
+    elif option.vendor == "intel" and 2 <= option.generation <= 10:
+        # «Авто» на Intel означает встроенную графику: без этого профиль
+        # оставался без iGPU и config.plist не получал ig-platform-id.
+        profile.igpu = GPUInfo(name=f"Intel iGPU ({option.codename})",
+                               vendor="intel", is_integrated=True)
     audio_codec = (selection.audio_codec or "").strip().upper()
     profile.audio = AudioInfo(codec=audio_codec, name=audio_codec)
     if audio_codec:
@@ -356,9 +406,13 @@ def build_profile(selection: ManualSelection) -> HardwareProfile:
         candidates = layouts_for(audio_codec)
         profile.audio.layout_candidates = list(candidates)
         profile.audio.layout_id = recommended(audio_codec)
+    wifi = (selection.wifi or "").lower()
+    has_bt = wifi in ("intel", "broadcom")
     profile.net = NetInfo(eth_chipset=selection.ethernet,
                           eth_name=selection.ethernet.upper(),
-                          wifi_chipset=selection.wifi)
+                          wifi_chipset=wifi,
+                          bt_chipset=wifi if has_bt else "",
+                          has_bt=has_bt)
     profile.storage = StorageInfo(nvme_present=bool(selection.nvme),
                                   sata_present=True)
     profile.has_thunderbolt = bool(selection.thunderbolt)

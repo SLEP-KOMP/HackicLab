@@ -31,6 +31,9 @@ IG_PLATFORM_IDS = {
     # Haswell
     "hsw_mobile": bytes([0x06, 0x00, 0x26, 0x0A]),
     "hsw_desktop": bytes([0x03, 0x00, 0x22, 0x0D]),
+    # Broadwell
+    "bdw_mobile": bytes([0x06, 0x00, 0x26, 0x16]),
+    "bdw_desktop": bytes([0x07, 0x00, 0x22, 0x16]),
     # Skylake
     "skl_mobile": bytes([0x00, 0x00, 0x16, 0x19]),
     "skl_desktop": bytes([0x00, 0x00, 0x12, 0x19]),
@@ -128,6 +131,7 @@ _IGPU_RULES = {
     2: {"laptop": "snb_mobile", "desktop": "snb_desktop", "headless": "snb_headless"},
     3: {"laptop": "ivb_mobile", "desktop": "ivb_desktop"},
     4: {"laptop": "hsw_mobile", "desktop": "hsw_desktop"},
+    5: {"laptop": "bdw_mobile", "desktop": "bdw_desktop", "headless": "bdw_desktop"},
     6: {"laptop": "skl_mobile", "desktop": "skl_desktop", "headless": "skl_headless"},
     7: {"laptop": "hd630_mb", "desktop": "hd630_dt", "headless": "hd630_headless"},
     8: {"laptop": "uhd630_mb", "desktop": "uhd630_dt", "headless": "uhd630_dt"},

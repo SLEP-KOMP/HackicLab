@@ -66,12 +66,26 @@ def parse_intel_model(name: str) -> tuple[int, str]:
     """(generation, codename) из строки модели Intel CPU; (0, '') если неизвестно."""
     low = name.lower()
 
+    if "core ultra" in low:
+        # Meteor Lake (Core Ultra 1xx) и Arrow Lake (Core Ultra 2xx).
+        m = re.search(r"core ultra\s+[3579]\s+(\d{3,4})", low)
+        num = int(m.group(1)) if m else 0
+        if num >= 200:
+            return 15, "Arrow Lake"
+        return 12, "Meteor Lake"
+
     if "xeon" in low:
         m = re.search(r"\bv(\d)\b", low)
         if m:
             gen = {2: 3, 3: 4, 4: 5, 5: 6, 6: 7}.get(int(m.group(1)), 0)
         elif re.search(r"\be[357]-\d{4}\b", low):
             gen = 2
+        elif re.search(r"\bw[- ]?(21|22|24|31|32)\d{2}(?![0-9])", low):
+            gen = 6      # Skylake-X / Cascade Lake
+        elif re.search(r"\bw[- ]?(25|33|34|35)\d{2}(?![0-9])", low):
+            gen = 10     # Ice Lake / Sapphire Rapids
+        elif re.search(r"\bw[- ]?36\d{2}(?![0-9])", low):
+            gen = 15     # Granite Rapids — вне поддержки macOS
         else:
             gen = 0
         return gen, _CODENAMES.get(gen, "")

@@ -15,9 +15,14 @@ class ProfileTests(unittest.TestCase):
             (0, False, "intel-2"), (1, False, "intel-2"), (2, False, "intel-2"),
             (3, False, "intel-3"), (4, False, "intel-4"), (5, False, "intel-5d"),
             (6, False, "intel-6d"), (7, False, "intel-7d"), (8, False, "intel-8d"),
-            (9, False, "intel-9d"), (10, False, "intel-10d"), (12, False, "intel-10d"),
+            (9, False, "intel-9d"), (10, False, "intel-10d"),
+            (11, False, "intel-11d"), (12, False, "intel-12d"),
+            (13, False, "intel-13d"), (14, False, "intel-14d"),
+            (15, False, "intel-15d"),
             (2, True, "intel-2m"), (6, True, "intel-6m"), (8, True, "intel-8kr"),
-            (10, True, "intel-10cm"), (11, True, "intel-11tl"), (12, True, "intel-11tl"),
+            (10, True, "intel-10cm"), (11, True, "intel-11tl"),
+            (12, True, "intel-12m"), (13, True, "intel-13m"),
+            (14, True, "intel-14m"), (15, True, "intel-15m"),
         ]
         for generation, laptop, expected in cases:
             key = manual_hw.intel_option_key(generation, laptop)
