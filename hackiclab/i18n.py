@@ -155,6 +155,7 @@ T = {
         "hw.bt.native": "нативный модуль Apple",
         "hw.wifi.inactive": "неактивен и не учитывается",
     "hw.wifi.unsupported": "нет драйвера macOS",
+    "hw.wifi.enable_supported": "включите поддерживаемый адаптер: {name}",
         "scan.save": "Сохранить профиль",
         "scan.saved": "Профиль сохранён",
         # wizard
@@ -894,6 +895,7 @@ T = {
         "hw.bt.native": "native Apple module",
         "hw.wifi.inactive": "inactive, ignored",
     "hw.wifi.unsupported": "no macOS driver",
+    "hw.wifi.enable_supported": "enable a supported adapter: {name}",
         "scan.save": "Save profile",
         "scan.saved": "Profile saved",
         # wizard

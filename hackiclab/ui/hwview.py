@@ -86,6 +86,37 @@ def _ethernet_line(profile: HardwareProfile) -> tuple[str, str]:
     return name, note
 
 
+def _supported_disabled(net) -> str:
+    """Первый отключённый адаптер, для которого в macOS есть драйвер."""
+    from ..knowledge.wifi_bt import is_unsupported
+    for item in (getattr(net, "ignored_wifi", None) or []):
+        name = (item or "").strip()
+        if not name:
+            continue
+        low = name.lower()
+        if is_unsupported(_chipset_of(name), name):
+            continue
+        if any(key in low for key in ("intel", "broadcom", "bcm", "atheros",
+                                      "qualcomm")):
+            return name
+    return ""
+
+
+def _chipset_of(name: str) -> str:
+    low = (name or "").lower()
+    if "intel" in low:
+        return "intel"
+    if "broadcom" in low or "bcm" in low:
+        return "broadcom"
+    if "atheros" in low or "qualcomm" in low:
+        return "atheros"
+    if "realtek" in low:
+        return "realtek"
+    if "mediatek" in low:
+        return "mediatek"
+    return ""
+
+
 def _wifi_line(profile: HardwareProfile) -> tuple[str, str]:
     net = profile.net
     model = wifi_model(net.wifi_name, net.wifi_chipset)
@@ -102,12 +133,12 @@ def _wifi_line(profile: HardwareProfile) -> tuple[str, str]:
         from ..knowledge.wifi_bt import is_unsupported
         if is_unsupported(net.wifi_chipset, net.wifi_name):
             note = (note + " · " if note else "") + tr.t("hw.wifi.unsupported")
+            alt = _supported_disabled(net)
+            if alt:
+                hint = tr.t("hw.wifi.enable_supported").format(name=alt)
+                note = f"{note} · {hint}"
     except Exception:
         pass
-    ignored = [item for item in (net.ignored_wifi or []) if item]
-    if ignored:
-        extra = tr.t("hw.wifi.inactive") + ": " + ", ".join(ignored[:2])
-        note = f"{note} · {extra}" if note else extra
     return name, note
 
 

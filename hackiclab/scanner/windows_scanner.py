@@ -72,6 +72,42 @@ def is_spoofed_smbios(vendor: str, product: str) -> bool:
     return bool(_SPOOF_BOARD_ID.fullmatch(p))
 
 
+#: Wi-Fi-чипсеты, для которых в macOS нет драйвера ни в каком виде.
+_WIFI_UNSUPPORTED = ("mediatek", "realtek")
+
+
+def wifi_chipset_of(name: str) -> str:
+    """Вендор Wi-Fi по имени адаптера Windows."""
+    low = (name or "").lower()
+    if "intel" in low:
+        return "intel"
+    if "broadcom" in low or "bcm" in low:
+        return "broadcom"
+    if "atheros" in low or "qualcomm" in low:
+        return "atheros"
+    if "realtek" in low:
+        return "realtek"
+    if "mediatek" in low:
+        return "mediatek"
+    return ""
+
+
+def pick_wifi(enabled: list[str]) -> str:
+    """Адаптер для сборки: поддерживаемый важнее первого в списке.
+
+    Если включены два адаптера (например MediaTek и Broadcom), для macOS
+    годится только Broadcom, и брать надо его, а не тот, что первым отдал
+    Windows.
+    """
+    names = [n.strip() for n in (enabled or []) if n and n.strip()]
+    if not names:
+        return ""
+    for name in names:
+        if wifi_chipset_of(name) not in ("", *_WIFI_UNSUPPORTED):
+            return name
+    return names[0]
+
+
 class WindowsScanner:
     """Собирает HardwareProfile текущего Windows-хоста."""
 
@@ -355,17 +391,18 @@ class WindowsScanner:
         p.net.eth_name = eth
         p.net.eth_chipset = eth_chipset_from_name(eth)
 
-        # WiFi: берём ТОЛЬКО активный физический адаптер (Status = Up).
-        # Win32_NetworkAdapter перечисляет и отключённые, поэтому фильтр по статусу
-        # критичен — иначе можно взять неактивный MediaTek вместо активного Broadcom.
+        # Wi-Fi: среди включённых физических адаптеров берём поддерживаемый
+        # (Intel/Broadcom/Atheros), даже если рядом включён MediaTek/Realtek:
+        # для них в macOS драйвера нет, и сборка должна опираться на рабочий.
         wifi = ps.run("""
-            $nic = Get-CimInstance Win32_NetworkAdapter | Where-Object {
+            Get-CimInstance Win32_NetworkAdapter | Where-Object {
                 $_.NetEnabled -eq $true -and $_.PhysicalAdapter -eq $true -and
-                $_.Name -match 'Wi-Fi|Wireless|WiFi|802.11|WLAN|ac'
-            } | Select-Object -First 1
-            $nic.Name
+                $_.Name -match 'Wi-Fi|Wireless|WiFi|802.11|WLAN|ac' -and
+                $_.Name -notmatch 'Virtual|Wi-Fi Direct'
+            } | ForEach-Object { $_.Name }
         """)
-        w = wifi.strip()
+        enabled_names = [line.strip() for line in wifi.splitlines() if line.strip()]
+        w = pick_wifi(enabled_names)
         p.net.wifi_name = w
         # Windows видит и отключённые адаптеры (например, старый MediaTek рядом
         # с рабочим Broadcom). Их нельзя выбирать для подбора кекстов, но
@@ -377,10 +414,11 @@ class WindowsScanner:
                 $_.Name -notmatch 'Virtual|Wi-Fi Direct'
             } | ForEach-Object { $_.Name }
         """)
-        p.net.ignored_wifi = [
-            line.strip() for line in inactive.splitlines()
-            if line.strip() and line.strip() != w
-        ]
+        p.net.ignored_wifi = list(dict.fromkeys([
+            *[n for n in enabled_names if n != w],
+            *[line.strip() for line in inactive.splitlines()
+              if line.strip() and line.strip() != w],
+        ]))
         wl = w.lower()
         if "intel" in wl: p.net.wifi_chipset = "intel"
         elif "broadcom" in wl or "bcm" in wl: p.net.wifi_chipset = "broadcom"
