@@ -77,8 +77,27 @@ _WIFI_UNSUPPORTED = ("mediatek", "realtek")
 
 
 def wifi_chipset_of(name: str) -> str:
-    """Вендор Wi-Fi по имени адаптера Windows."""
+    """Вендор Wi-Fi по имени адаптера Windows (с учётом базы моделей).
+
+    База знает конкретные карты, поэтому «Killer 1650i» становится Intel,
+    а «MT7925» — MediaTek, даже если в имени нет слова «Intel».
+    """
+    from ..knowledge.wifi_bt import find_adapter
+    adapter = find_adapter(name)
+    family = (adapter.family if adapter is not None else "").strip().lower()
+    family_map = {
+        "broadcom": "broadcom",
+        "intel": "intel",
+        "atheros": "atheros",
+        "qualcomm atheros": "atheros",
+        "mediatek": "mediatek",
+        "realtek": "realtek",
+    }
+    if family in family_map:
+        return family_map[family]
     low = (name or "").lower()
+    if "killer" in low:
+        return "intel"
     if "intel" in low:
         return "intel"
     if "broadcom" in low or "bcm" in low:
@@ -87,7 +106,7 @@ def wifi_chipset_of(name: str) -> str:
         return "atheros"
     if "realtek" in low:
         return "realtek"
-    if "mediatek" in low:
+    if "mediatek" in low or "mt79" in low:
         return "mediatek"
     return ""
 
@@ -97,13 +116,15 @@ def pick_wifi(enabled: list[str]) -> str:
 
     Если включены два адаптера (например MediaTek и Broadcom), для macOS
     годится только Broadcom, и брать надо его, а не тот, что первым отдал
-    Windows.
+    Windows. Поддержка проверяется по базе wifi_bt: Intel BE200, QCA6174,
+    Realtek и прочие без штатного драйвера пропускаются.
     """
+    from ..knowledge.wifi_bt import is_unsupported
     names = [n.strip() for n in (enabled or []) if n and n.strip()]
     if not names:
         return ""
     for name in names:
-        if wifi_chipset_of(name) not in ("", *_WIFI_UNSUPPORTED):
+        if not is_unsupported(wifi_chipset_of(name), name):
             return name
     return names[0]
 

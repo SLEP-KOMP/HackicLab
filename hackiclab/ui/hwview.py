@@ -93,12 +93,9 @@ def _supported_disabled(net) -> str:
         name = (item or "").strip()
         if not name:
             continue
-        low = name.lower()
         if is_unsupported(_chipset_of(name), name):
             continue
-        if any(key in low for key in ("intel", "broadcom", "bcm", "atheros",
-                                      "qualcomm")):
-            return name
+        return name
     return ""
 
 
@@ -130,13 +127,19 @@ def _wifi_line(profile: HardwareProfile) -> tuple[str, str]:
     if model and model.lower() not in (net.wifi_name or "").lower():
         note = f"{model} · {note}" if note else model
     try:
-        from ..knowledge.wifi_bt import is_unsupported
-        if is_unsupported(net.wifi_chipset, net.wifi_name):
+        from ..knowledge.wifi_bt import support as wifi_support
+        info = wifi_support(net.wifi_name, net.wifi_chipset)
+        if not info.get("supported", True):
             note = (note + " · " if note else "") + tr.t("hw.wifi.unsupported")
             alt = _supported_disabled(net)
             if alt:
                 hint = tr.t("hw.wifi.enable_supported").format(name=alt)
                 note = f"{note} · {hint}"
+        else:
+            macos = str(info.get("macos") or "")
+            if macos and info.get("key") not in (
+                    "intel-iwx", "intel-iwm", "intel-iwn"):
+                note = (note + " · " if note else "") + macos
     except Exception:
         pass
     return name, note

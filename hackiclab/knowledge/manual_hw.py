@@ -255,19 +255,21 @@ ETHERNET_OPTIONS = (
 
 WIFI_OPTIONS = (
     ("", "Нет"),
-    ("intel", "Intel (AX200 / AX210 / AC-9260 / AC-8265)"),
-    ("broadcom", "Broadcom (BCM94360 / BCM943602)"),
-    ("atheros", "Atheros / Qualcomm"),
-    ("mediatek", "MediaTek (MT7925 и др.) — только USB-замена"),
-    ("realtek", "Realtek — в macOS драйвера нет"),
+    ("intel", "Intel: AX210 / AX211 / AX200 / AX201, 9560 / 9260 / 8265 / 7260"),
+    ("broadcom", "Broadcom: BCM94360 / 943602 (нативно), BCM94352 / 94350 (кесты)"),
+    ("atheros", "Atheros: AR9280 / 9285 / 9287, AR9462 / 9485 / 9565"),
+    ("mediatek", "MediaTek MT7921 / MT7922 / MT7925 — драйвера нет"),
+    ("realtek", "Realtek RTL8821 / 8822 / 8852 — драйвера нет"),
+    ("qualcomm", "Qualcomm Atheros QCA6174 / QCA9377 — драйвера нет"),
 )
 
 WIFI_NOTES = {
-    "intel": "itlwm + HeliPort или AirportItlwm (до Sonoma)",
-    "broadcom": "нативные BCM94360/602 работают без патчей, остальные — AirportBrcmFixup",
-    "atheros": "ATH9KFixup, только старые карты",
-    "mediatek": "драйвера нет: нужен USB-адаптер или замена модуля",
-    "realtek": "драйвера нет: нужен USB-адаптер или замена модуля",
+    "intel": "itlwm + HeliPort (AirportItlwm — до Sonoma 14.4); BT: IntelBluetoothFirmware",
+    "broadcom": "BCM94360 нативно до Ventura, Sonoma+ — OCLP; BCM94352/94350 — AirportBrcmFixup",
+    "atheros": "AR92xx нативно до High Sierra; AR9462/9485/9565 — ATH9KFixup до Mojave",
+    "mediatek": "драйвера нет: замена на Intel/Broadcom или USB-адаптер",
+    "realtek": "драйвера нет: PCIe-карты не заводятся, только USB-пакет chris1111",
+    "qualcomm": "штатного драйвера нет: только экспериментальный Ath10kMac",
 }
 
 TOUCHPAD_OPTIONS = (("ps2", "PS/2"), ("i2c", "I2C (VoodooI2C)"), ("none", "Нет"))
@@ -281,14 +283,37 @@ _EN_TITLES = {
     "NVIDIA (macOS не поддерживает)": "NVIDIA (not supported by macOS)",
     "MediaTek (MT7925 и др.) — только USB-замена":
         "MediaTek (MT7925 etc.) — USB adapter only",
+    "MediaTek MT7921 / MT7922 / MT7925 — драйвера нет":
+        "MediaTek MT7921 / MT7922 / MT7925 — no driver",
     "Realtek — в macOS драйвера нет": "Realtek — no macOS driver",
+    "Realtek RTL8821 / 8822 / 8852 — драйвера нет":
+        "Realtek RTL8821 / 8822 / 8852 — no driver",
+    "Qualcomm Atheros QCA6174 / QCA9377 — драйвера нет":
+        "Qualcomm Atheros QCA6174 / QCA9377 — no driver",
+    "Broadcom: BCM94360 / 943602 (нативно), BCM94352 / 94350 (кесты)":
+        "Broadcom: BCM94360 / 943602 (native), BCM94352 / 94350 (kexts)",
+    "Atheros: AR9280 / 9285 / 9287, AR9462 / 9485 / 9565":
+        "Atheros: AR9280 / 9285 / 9287, AR9462 / 9485 / 9565",
+    "Intel: AX210 / AX211 / AX200 / AX201, 9560 / 9260 / 8265 / 7260":
+        "Intel: AX210 / AX211 / AX200 / AX201, 9560 / 9260 / 8265 / 7260",
     "Нет": "None",
     "Нет / неизвестно": "None / unknown",
+    "itlwm + HeliPort (AirportItlwm — до Sonoma 14.4); BT: IntelBluetoothFirmware":
+        "itlwm + HeliPort (AirportItlwm up to Sonoma 14.4); BT: IntelBluetoothFirmware",
+    "BCM94360 нативно до Ventura, Sonoma+ — OCLP; BCM94352/94350 — AirportBrcmFixup":
+        "BCM94360 native up to Ventura, Sonoma+ via OCLP; BCM94352/94350 need AirportBrcmFixup",
+    "AR92xx нативно до High Sierra; AR9462/9485/9565 — ATH9KFixup до Mojave":
+        "AR92xx native up to High Sierra; AR9462/9485/9565 via ATH9KFixup up to Mojave",
+    "драйвера нет: замена на Intel/Broadcom или USB-адаптер":
+        "no driver: replace with Intel/Broadcom or use a USB adapter",
+    "драйвера нет: PCIe-карты не заводятся, только USB-пакет chris1111":
+        "no driver: PCIe cards do not work, only the chris1111 USB package",
+    "штатного драйвера нет: только экспериментальный Ath10kMac":
+        "no stock driver: only the experimental Ath10kMac",
 }
 
 _EN_SNIPPETS = (
-    ("(ноутбук)", "(laptop)"),
-    ("(Kaby Lake, ноутбук)", "(Kaby Lake, laptop)"),
+    ("(ноутбук)", "(laptop)"),    ("(Kaby Lake, ноутбук)", "(Kaby Lake, laptop)"),
     ("(iGPU без драйвера)", "(iGPU without driver)"),
     ("Драйвера нет: macOS не поддерживает ", "No driver: macOS does not support "),
     ("Нет драйвера: ", "No driver: "),

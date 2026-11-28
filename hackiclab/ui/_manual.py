@@ -155,6 +155,12 @@ class ManualBuildMixin:
         self.manual_wifi = QComboBox()
         for value, title in manual_hw.WIFI_OPTIONS:
             self.manual_wifi.addItem(manual_hw.ui_title(title, tr.current), value)
+            note = manual_hw.WIFI_NOTES.get(value)
+            if note:
+                self.manual_wifi.setItemData(
+                    self.manual_wifi.count() - 1,
+                    manual_hw.ui_title(note, tr.current),
+                    Qt.ItemDataRole.ToolTipRole)
         self._make_searchable(self.manual_wifi)
         self.manual_wifi.currentIndexChanged.connect(self._manual_refresh)
         self._manual_field(page, form, "manual.wifi", self.manual_wifi)
