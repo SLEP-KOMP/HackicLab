@@ -132,6 +132,36 @@ CPU_OPTIONS: tuple[CpuOption, ...] = (
 )
 
 CPU_BY_KEY = {option.key: option for option in CPU_OPTIONS}
+
+#: Поколение Intel -> ключ ручного профиля. Ключи не совпадают с шаблоном
+#: ``intel-<gen>d`` (у 2/3/4 нет суффикса, у ноутбучных 8 — 8kr/8wl/8cl),
+#: поэтому подбор идёт по таблице, а не склейкой строки.
+_INTEL_DESKTOP_KEYS = {
+    0: "intel-2", 1: "intel-2", 2: "intel-2", 3: "intel-3", 4: "intel-4",
+    5: "intel-5d", 6: "intel-6d", 7: "intel-7d", 8: "intel-8d",
+    9: "intel-9d", 10: "intel-10d",
+}
+_INTEL_LAPTOP_KEYS = {
+    0: "intel-2m", 1: "intel-2m", 2: "intel-2m", 3: "intel-3m", 4: "intel-4m",
+    5: "intel-5m", 6: "intel-6m", 7: "intel-7m", 8: "intel-8kr",
+    9: "intel-9m", 10: "intel-10cm", 11: "intel-11tl",
+}
+
+
+def intel_option_key(generation: int, laptop: bool = False) -> str:
+    """Ключ Intel-профиля для поколения из сканирования.
+
+    Core 2/Nehalem (0/1) ближе всего к Sandy Bridge, а не к Coffee Lake:
+    иначе ручная форма подставляла современные кексты и macOS.
+    """
+    try:
+        gen = int(generation or 0)
+    except (TypeError, ValueError):
+        gen = 0
+    table = _INTEL_LAPTOP_KEYS if laptop else _INTEL_DESKTOP_KEYS
+    if gen in table:
+        return table[gen]
+    return "intel-11tl" if laptop else "intel-10d"
 CPU_GROUPS = (
     ("intel_desktop", "CPU — Intel, настольный"),
     ("intel_laptop", "CPU — Intel, ноутбук"),

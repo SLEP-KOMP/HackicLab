@@ -126,7 +126,7 @@ class NetInfo:
 @dataclass
 class StorageInfo:
     nvme_present: bool = False
-    sata_present: bool = True
+    sata_present: bool = False
     nvme_pci_device: int = -1
     nvme_pci_function: int = -1
     controllers: list = field(default_factory=list)

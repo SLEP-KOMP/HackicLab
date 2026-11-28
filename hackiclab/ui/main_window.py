@@ -95,6 +95,7 @@ class MainWindow(CoreMixin, WizardMixin, ManualBuildMixin, ValidateMixin, BuildP
 
     _WORKER_ATTRS = ("_worker_scan", "_worker_build", "_usb_worker", "_worker_usb",
                      "_worker_val", "_worker_audit", "_worker_an",
+                     "_worker_wiz", "usb_list_worker",
                      "_upd_worker", "_upd_dl")
 
     _SEV = {0: "ℹ", 1: "⚠", 2: "✖"}

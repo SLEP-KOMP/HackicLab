@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
-    QLabel,
     QButtonGroup,
     QCheckBox,
     QComboBox,

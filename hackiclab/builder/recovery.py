@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Optional, cast
 
+from .. import USER_AGENT
 from ..proc import popen as hidden_popen
 
 # URL официального macrecovery.py из Acidanthera OpenCorePkg
@@ -162,7 +163,7 @@ def ensure_macrecovery() -> Path:
         ctx = ssl.create_default_context(cafile=certifi.where())
     except Exception:
         pass
-    req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackicLab/1.0"})
+    req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
         data = r.read()
     if not _validate_script(data):
@@ -190,11 +191,19 @@ def _ensure_cert_bundle_env() -> None:
 
 
 def cached_recovery_files(version: MacOSVersion) -> list:
+    """Файлы recovery из кэша; пусто, если в кэше нет целого .dmg.
+
+    Без проверки .dmg кэш из одного ``.chunklist`` (оборванная загрузка)
+    выдавался за готовый recovery: на флешку уезжал установщик без образа.
+    """
     cache = RECOVERY_CACHE_DIR / version.cache_key
     if not cache.exists():
         return []
     files = list(cache.glob("*.dmg")) + list(cache.glob("*.chunklist")) + list(cache.glob("com.apple.*"))
-    return [f for f in files if f.is_file()]
+    files = [f for f in files if f.is_file()]
+    if not any(f.suffix.lower() == ".dmg" and f.stat().st_size > 0 for f in files):
+        return []
+    return files
 
 
 _TB_NOISE = (
@@ -299,6 +308,13 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
         return False, f"Не удалось получить macrecovery.py: {e}"
 
     dest.mkdir(parents=True, exist_ok=True)
+    # Обрыв прошлой попытки оставлял в dest обрезанный .dmg: следующая
+    # попытка дописывала его и он же попадал в кэш.
+    for stale in list(dest.glob("*.dmg")) + list(dest.glob("*.chunklist")):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     script_args = macrecovery_args(version, dest)
 
     if progress_cb:

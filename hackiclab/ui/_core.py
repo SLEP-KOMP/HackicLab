@@ -295,9 +295,6 @@ class CoreMixin:
         install_qt_translator(code)
         # пересобираем страницы после выхода из обработчика сигнала
         QTimer.singleShot(0, self._rebuild_pages)
-    def _retranslate(self):
-        """Совместимость: полная пересборка страниц под текущий язык."""
-        self._rebuild_pages()
     def _workers_running(self) -> bool:
         for name in self._WORKER_ATTRS:
             w = getattr(self, name, None)

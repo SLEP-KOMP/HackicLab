@@ -36,11 +36,11 @@ def warnings_for(profile, target: str = "") -> list[tuple[str, str]]:
                 "NVIDIA Maxwell/Pascal/Turing: no Web Driver, won't work on Big Sur+."))
 
     igpu = getattr(profile, "igpu", None)
-    if igpu is not None and getattr(igpu, "vendor", "") == "intel":
-        if gen and (gen < 2 or gen > 10):
-            out.append((
-                "iGPU без драйвера: в системе будет ~7 МБ видеопамяти. Нужна дискретная карта.",
-                "iGPU has no driver: expect ~7 MB VRAM. A discrete GPU is required."))
+    if (igpu is not None and getattr(igpu, "vendor", "") == "intel"
+            and gen and (gen < 2 or gen > 10)):
+        out.append((
+            "iGPU без драйвера: в системе будет ~7 МБ видеопамяти. Нужна дискретная карта.",
+            "iGPU has no driver: expect ~7 MB VRAM. A discrete GPU is required."))
 
     audio = getattr(profile, "audio", None)
     if audio is not None and getattr(audio, "codec", "") and not getattr(audio, "layout_id", 0):

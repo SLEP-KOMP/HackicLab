@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from .. import USER_AGENT
 from ..knowledge.ssdt_logics import required_ssdts
 from ..proc import run as hidden_run
 from ..scanner.models import HardwareProfile
@@ -35,7 +36,7 @@ def _windows_iasl_zip_urls() -> list[str]:
     try:
         html = download_bytes(
             f"https://github.com/{IASL_REPO}/releases",
-            headers={"User-Agent": "HackicLab/0.1"},
+            headers={"User-Agent": USER_AGENT},
             timeout=90,
         ).decode("utf-8", "replace")
     except Exception:
@@ -100,7 +101,7 @@ def _download_iasl() -> Optional[Path]:
     urls.append(IASL_LEGACY_ZIP)
     for url in urls:
         try:
-            data = download_bytes(url, headers={"User-Agent": "HackicLab/0.1"}, timeout=120)
+            data = download_bytes(url, headers={"User-Agent": USER_AGENT}, timeout=120)
         except Exception:
             continue
         if data[:2] != b"PK":

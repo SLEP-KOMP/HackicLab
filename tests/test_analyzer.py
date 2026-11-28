@@ -70,8 +70,9 @@ class AnalyzerKextTests(unittest.TestCase):
     def test_target_macos_selects_ethernet_driver(self):
         """I211: до Monterey — AppleIntelI210Ethernet, с Monterey — AppleIGB."""
         _make_efi(self.root, ["Lilu.kext"])
-        names = lambda m: [i.kext for i in Analyzer(_profile(), m)
-                           .analyze_folder(self.root) if i.code == "kext_missing"]
+        def names(macos: str) -> list[str]:
+            return [i.kext for i in Analyzer(_profile(), macos)
+                    .analyze_folder(self.root) if i.code == "kext_missing"]
         self.assertIn("AppleIGB", names("Ventura"))
         self.assertNotIn("AppleIGB", names("Big Sur"))
         self.assertIn("AppleIntelI210Ethernet", names("Big Sur"))

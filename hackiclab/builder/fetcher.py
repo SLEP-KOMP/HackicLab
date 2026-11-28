@@ -17,10 +17,10 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+from .. import USER_AGENT
 from .cache_manager import cache_dir
 from .integrity import record, verify
 
-USER_AGENT = "HackicLab/0.1"
 _CONTEXTS: list[ssl.SSLContext] = []
 
 
@@ -188,10 +188,11 @@ def download_asset(release: dict, pattern: str, dest_dir: Path, cache_name: str 
 
     cache_root = cache_dir() / cache_name
     cached = cache_root / name
-    if cached.is_file() and (expected == 0 or abs(cached.stat().st_size - expected) <= 1024):
-        # Хэш из манифеста ловит обрезанный или подменённый файл в кэше.
-        if verify(cache_root, name, cached):
-            return cached
+    if (cached.is_file()
+            and (expected == 0 or abs(cached.stat().st_size - expected) <= 1024)
+            # Хэш из манифеста ловит обрезанный или подменённый файл в кэше.
+            and verify(cache_root, name, cached)):
+        return cached
 
     payload = download_bytes(url, timeout=120)
     _check_payload(name, payload, expected)

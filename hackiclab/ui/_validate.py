@@ -25,8 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..builder.config_editor import (SECURE_BOOT_MODELS, add_boot_args,
-                                     suggest_audio_layouts)
+from ..builder.config_editor import SECURE_BOOT_MODELS, add_boot_args, suggest_audio_layouts
 from ..i18n import tr
 from ._common import _h2, _has_cyrillic, _issue_title, _muted, _val
 from ._workers import AuditWorker, ValidateWorker

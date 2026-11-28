@@ -78,8 +78,10 @@ class WindowsScanner:
     def scan(self) -> HardwareProfile:
         p = HardwareProfile(host_os="windows")
         self._detect_system(p)
-        self._detect_cpu(p)
+        # GPU идёт первым: в _detect_cpu есть уточнение поколения по device-id
+        # iGPU, а p.igpu до _detect_gpus всегда пуст.
         self._detect_gpus(p)
+        self._detect_cpu(p)
         self._detect_audio(p)
         self._detect_network(p)
         self._detect_storage(p)

@@ -24,6 +24,7 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+from .. import USER_AGENT
 from ..proc import run as hidden_run
 
 MAP_BUNDLE_IDENTIFIER = "com.dhinakg.USBToolBox.map"
@@ -359,7 +360,7 @@ def download_usbtoolbox_zip(dest_dir: Path, log=None) -> Optional[Path]:
     try:
         raw = download_bytes(
             "https://api.github.com/repos/USBToolBox/Tool/releases?per_page=10",
-            headers={"User-Agent": "HackicLab/0.1",
+            headers={"User-Agent": USER_AGENT,
                      "Accept": "application/vnd.github+json"},
             timeout=30,
         )

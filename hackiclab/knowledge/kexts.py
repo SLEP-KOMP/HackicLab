@@ -535,5 +535,9 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm",
 
 
 def kext_sources_ok() -> dict[str, bool]:
-    """Возвращает словарь репозиториев -> доступность (заглушка, будет проверяться сетью)."""
-    return {e.repo for e in KEXT_DB.values()} if False else {}
+    """Заглушка: доступность репозиториев проверяется сетью во время сборки.
+
+    Пустой словарь — сетевой опрос при открытии каталога не делается, иначе
+    лимит GitHub API тратился бы на каждый кекс в списке.
+    """
+    return {}

@@ -10,6 +10,20 @@ from hackiclab.knowledge.oc_platforms import MAX_MACOS_BY_GEN
 
 
 class ProfileTests(unittest.TestCase):
+    def test_intel_option_key_maps_generations_to_real_keys(self):
+        cases = [
+            (0, False, "intel-2"), (1, False, "intel-2"), (2, False, "intel-2"),
+            (3, False, "intel-3"), (4, False, "intel-4"), (5, False, "intel-5d"),
+            (6, False, "intel-6d"), (7, False, "intel-7d"), (8, False, "intel-8d"),
+            (9, False, "intel-9d"), (10, False, "intel-10d"), (12, False, "intel-10d"),
+            (2, True, "intel-2m"), (6, True, "intel-6m"), (8, True, "intel-8kr"),
+            (10, True, "intel-10cm"), (11, True, "intel-11tl"), (12, True, "intel-11tl"),
+        ]
+        for generation, laptop, expected in cases:
+            key = manual_hw.intel_option_key(generation, laptop)
+            self.assertEqual(key, expected, (generation, laptop))
+            self.assertIn(key, manual_hw.CPU_BY_KEY)
+
     def test_laptop_kaby_lake_r(self):
         profile = manual_hw.build_profile(manual_hw.ManualSelection(
             cpu="intel-8kr", laptop=True, gpu="5917", audio_codec="ALC256",

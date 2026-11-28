@@ -97,7 +97,7 @@ class ThemeConfigTests(unittest.TestCase):
     def _boot(self, options):
         import plistlib
 
-        from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
+        from hackiclab.builder.config_gen import generate_config_plist
         from hackiclab.scanner.models import CPUInfo, HardwareProfile
 
         profile = HardwareProfile(platform="desktop")

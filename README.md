@@ -14,7 +14,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![GUI: PySide6](https://img.shields.io/badge/GUI-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
 
-> **Статус:** опубликованная версия v1.0.0 — обычный (Latest) релиз. Функции активно развиваются; перед операциями записи EFI на USB обязательно сохраняйте резервные копии важных данных.
+> **Статус:** опубликованная версия v1.2.1 — обычный (Latest) релиз. Функции активно развиваются; перед операциями записи EFI на USB обязательно сохраняйте резервные копии важных данных.
 
 ## Возможности
 
@@ -49,12 +49,12 @@
 
 ## Требования
 
-- **Платформа:** Windows только.
-- **Python 3.10+** (для запуска из исходников) либо готовый `HackicLab.exe`.
+- **Платформа:** Windows (основная) и macOS (предварительная сборка, см. ниже).
+- **Python 3.10+** (для запуска из исходников) либо готовый `HackicLab_<версия>_windows_x64.exe`.
 
 ## Загрузка
 
-Готовый портативный дистрибутив для Windows — в разделе [Releases](https://github.com/SLEP-KOMP/HackicLab/releases). Просто скачайте `HackicLab.exe` и запустите — установка не требуется.
+Готовый портативный дистрибутив для Windows — в разделе [Releases](https://github.com/SLEP-KOMP/HackicLab/releases). Просто скачайте `HackicLab_<версия>_windows_x64.exe` и запустите — установка не требуется.
 
 Имена файлов говорят, что внутри: `HackicLab_<версия>_windows_x64.exe` для Windows, `HackicLab_<версия>_macos_apple_silicon.zip` (Apple Silicon) и `HackicLab_<версия>_macos_intel.zip` (Intel). Это предварительная версия: она собирается в CI и ещё не проверялась на живом Маке.
 
@@ -70,7 +70,7 @@
 | Конфиг | plistlib (config.plist OpenCore) |
 | Валидация | встроенный `ocvalidate` из пакета OpenCore |
 | Сеть | GitHub Releases (redirect `latest` + `expanded_assets`) |
-| Упаковка | PyInstaller → `HackicLab.exe` |
+| Упаковка | PyInstaller → `HackicLab_<версия>_windows_x64.exe` |
 | Монетизация | `license.py` (Free → Premium) |
 
 Архитектура ядра переиспользует проверенные подходы экосистемы OpenCore: [OpCore-Simplify](https://github.com/lzhoang2801/OpCore-Simplify), [SSDTTime](https://github.com/corpnewt/SSDTTime), [USBToolBox](https://github.com/USBToolBox/tool), [acidanthera/OpenCorePkg](https://github.com/acidanthera/OpenCorePkg).
@@ -117,7 +117,7 @@ python tools/vm_boot_test.py --efi out\EFI --keep   # оставить VHD и с
 ```powershell
 python -m pip install -r requirements-dev.txt
 python -m PyInstaller --noconfirm --clean HackicLab.spec
-# результат: dist/HackicLab.exe
+# результат: dist/HackicLab_<версия>_windows_x64.exe
 ```
 
 ## Ложное срабатывание антивируса
@@ -129,12 +129,12 @@ python -m PyInstaller --noconfirm --clean HackicLab.spec
 Сверьте SHA-256 файла с хэшем из релиза (рядом лежит `*.sha256`):
 
 ```powershell
-Get-FileHash .\HackicLab_1.0.0_windows_x64.exe -Algorithm SHA256
+Get-FileHash .\HackicLab_1.2.1_windows_x64.exe -Algorithm SHA256
 ```
 
-Хэш текущего релиза v1.0.0:
-
-`4e90274a1bebf140993fa5d6ca0501218a30322d21ab448d3a05c00a0a17fdbc`
+Сравните результат с содержимым `HackicLab_1.2.1_windows_x64.exe.sha256`
+в том же релизе: хэш там всегда соответствует опубликованному файлу, поэтому
+в README он не дублируется.
 
 Если хэш совпал — файл можно восстановить в «Журнале защиты» кнопкой
 «Разрешить» и сообщить о ложном срабатывании в Microsoft:

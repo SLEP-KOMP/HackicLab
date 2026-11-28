@@ -10,6 +10,7 @@ import plistlib
 import unittest
 
 import _bootstrap  # noqa: F401
+
 from hackiclab.builder.config_gen import BuildOptions, generate_config_plist
 from hackiclab.knowledge import patches as pb
 from hackiclab.scanner.models import (

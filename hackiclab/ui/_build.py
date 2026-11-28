@@ -363,7 +363,7 @@ class BuildPageMixin:
         # первый вызов падал и список оставался пустым до «Обновить список».
         if not hasattr(self, "patch_list") or not hasattr(self, "macos_combo"):
             return
-        kb, items, profile, target = self._patch_items()
+        _, items, _, _ = self._patch_items()
         while self.patch_list.count():
             w = self.patch_list.takeAt(0).widget()
             if w is not None:
@@ -388,7 +388,7 @@ class BuildPageMixin:
         return self.build_log if hasattr(self, "build_log") else self
 
     def _render_patch_report(self):
-        kb, items, profile, target = self._patch_items()
+        kb, _items, profile, target = self._patch_items()
         if profile is None:
             self.patch_report.setPlainText("")
             return
@@ -415,8 +415,8 @@ class BuildPageMixin:
             self, "build_themes") else []
         opts = BuildOptions(
             usb_toolbox=self.opt_usb.isChecked(),
-            usb_ports=getattr(self, "build_usb_map", None)
-            and self.build_usb_map.ports() or None,
+            usb_ports=(getattr(self, "build_usb_map", None)
+            and self.build_usb_map.ports()) or None,
             themes=set(theme_sel) or None,
             picker_variant=theme_sel[0] if theme_sel else "",
             custom_themes=dict(getattr(self.build_themes, "custom_dirs", {}) or {}),

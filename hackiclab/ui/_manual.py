@@ -51,11 +51,9 @@ class ManualBuildMixin:
             if not self._select_data(self.manual_cpu, key):
                 self._select_data(self.manual_cpu, "amd-zen2d")
         elif vendor == "intel":
-            key = f"intel-{min(generation, 10)}{'m' if laptop else 'd'}"
-            if generation >= 10 and not laptop:
-                key = "intel-10d"
+            key = manual_hw.intel_option_key(generation, laptop)
             if not self._select_data(self.manual_cpu, key):
-                self._select_data(self.manual_cpu, "intel-8d")
+                self._select_data(self.manual_cpu, "intel-8d" if not laptop else "intel-7m")
 
         gpu = getattr(profile, "dgpu", None) or getattr(profile, "igpu", None)
         gpu_key = ""

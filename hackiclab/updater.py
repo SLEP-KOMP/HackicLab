@@ -218,6 +218,18 @@ def current_binary_digest() -> str:
         return ""
 
 
+def file_digest(path: Path) -> str:
+    """sha256 файла в формате «sha256:<hex>»; пустая строка при ошибке."""
+    try:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return "sha256:" + digest.hexdigest()
+    except OSError:
+        return ""
+
+
 def parse_release(release: dict, current_digest: str = "") -> Optional[UpdateInfo]:
     """Разбирает ответ GitHub API.
 
@@ -462,9 +474,16 @@ def download_update(info: UpdateInfo, progress: Optional[Callable[[int], None]] 
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"HackicLab-{info.version}.exe"
     if target.exists() and info.asset_size and target.stat().st_size == info.asset_size:
-        if progress:
-            progress(100)
-        return target
+        # Размер совпал — ещё не значит, что файл тот: в кэше мог остаться
+        # обрезанный или подменённый EXE. Сверяем sha256, если релиз его отдал.
+        if not info.asset_digest or file_digest(target) == info.asset_digest.lower():
+            if progress:
+                progress(100)
+            return target
+        try:
+            target.unlink()
+        except OSError:
+            pass
 
     data = download_bytes(
         info.asset_url,

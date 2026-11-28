@@ -9,6 +9,7 @@ PlatformInfo и квирки заполняются по правилам, а н
 from __future__ import annotations
 
 import plistlib
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
@@ -33,10 +34,12 @@ IG_PLATFORM_IDS = {
     # Skylake
     "skl_mobile": bytes([0x00, 0x00, 0x16, 0x19]),
     "skl_desktop": bytes([0x00, 0x00, 0x12, 0x19]),
+    "skl_headless": bytes([0x00, 0x00, 0x12, 0x19]),
     # Kaby Lake
     "hd620": bytes([0x00, 0x00, 0x16, 0x59]),
     "hd630_dt": bytes([0x00, 0x00, 0x12, 0x59]),
     "hd630_mb": bytes([0x00, 0x00, 0x1B, 0x59]),
+    "hd630_headless": bytes([0x00, 0x00, 0x12, 0x59]),
     # Coffee Lake
     "uhd630_dt": bytes([0x07, 0x00, 0x9B, 0x3E]),
     "uhd630_mb": bytes([0x09, 0x00, 0xA5, 0x3E]),
@@ -292,7 +295,6 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         bq["SyncRuntimePermissions"] = True
 
     # --- Misc → Boot ---
-    cfg["Misc"]["Boot"] = cfg["Misc"]["Boot"]
     if getattr(options, "gui_picker", False):
         # Графическое меню: OpenCanopy читает иконки из EFI/OC/Resources
         boot = cfg["Misc"]["Boot"]
@@ -316,7 +318,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
             aud["AudioDevice"] = pci
 
     # --- macOS-версия влияет на SecureBootModel и boot-args ---
-    _apply_macos_model(cfg, options.target_macos, profile,
+    _apply_macos_model(cfg, _target_of(options, profile), profile,
                        getattr(options, "secure_boot_model", "Disabled"))
 
     # --- NVRAM ---
@@ -408,19 +410,36 @@ def _apply_smbios(cfg: dict, data: "SMBIOSData"):
         gen["ROM"] = bytes.fromhex(data.rom)
 
 
+#: Название macOS -> мажорная версия. Проверяются до цифр: «10.15 Catalina»
+#: не должно стать 15, а «Golden Gate» — 26.
+_MACOS_WORDS = (
+    ("golden gate", 27),
+    ("tahoe", 26),
+    ("sequoia", 15),
+    ("sonoma", 14),
+    ("ventura", 13),
+    ("monterey", 12),
+    ("big sur", 11),
+    ("catalina", 10),
+    ("mojave", 10),
+    ("high sierra", 10),
+    ("sierra", 10),
+)
+
+
 def _macos_major(target: str) -> int:
     """Из имени 'macOS Sequoia / 15' возвращает мажорную версию."""
     t = (target or "").lower()
+    # слова важнее цифр: «High Sierra» не должно стать «15»
+    for word, major in _MACOS_WORDS:
+        if word in t:
+            return major
     # старые 10.x проверяем ДО числовых подстрок, иначе 10.15 → 15
-    if "catalina" in t or "10.15" in t: return 10
-    if "mojave" in t or "10.14" in t: return 10
-    if "high sierra" in t or "10.13" in t: return 10
-    if "tahoe" in t or "26" in t: return 26
-    if "sequoia" in t or "15" in t: return 15
-    if "sonoma" in t or "14" in t: return 14
-    if "ventura" in t or "13" in t: return 13
-    if "monterey" in t or "12" in t: return 12
-    if "big sur" in t or "11" in t: return 11
+    if re.search(r"10\.\d+", t):
+        return 10
+    found = re.search(r"\b(1[1-9]|2[0-9])\b", t)
+    if found:
+        return int(found.group(1))
     return 26  # по умолчанию актуальная
 
 

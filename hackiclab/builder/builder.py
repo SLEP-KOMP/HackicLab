@@ -7,19 +7,18 @@ from __future__ import annotations
 
 import shutil
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
 from ..knowledge.kexts import select_kexts, smbios_model_for
 from ..knowledge.ssdt_logics import required_ssdts
 from ..scanner.models import HardwareProfile
-from .config_gen import BuildOptions, generate_config_plist, _patch_on
+from .config_gen import BuildOptions, _patch_on, generate_config_plist
 from .efi_layout import EFIBuildResult, EFILayout
 from .fetcher import GitHubFetcher, download_asset
 from .smbios_gen import SMBIOSData, generate_smbios
 from .ssdt_factory import SSDTFactory, compile_dsl, find_iasl, irq_conflict_devices
-
 
 #: Сетевой стек для OpenNetworkBoot. Порядок важен: протоколы (SNP/MNP/IP/
 #: UDP/TCP/DNS/HTTP/TLS) регистрируются раньше самого плагина загрузки.
@@ -441,7 +440,7 @@ class EFIBuilder:
 
         # 4) config.plist с SMBIOS
         opts = self.plan.options or BuildOptions()
-        opts = BuildOptions(**{**opts.__dict__, "custom_smbios": self.plan.smbios})
+        opts = replace(opts, custom_smbios=self.plan.smbios)
         self._step(86, "Формирую config.plist…")
         data = generate_config_plist(self.plan.profile, opts)
         # впишем реально скачанные kext в Kernel/Add (пути BundlePath относительно OC/)

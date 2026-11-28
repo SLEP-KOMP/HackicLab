@@ -46,7 +46,7 @@ def gpu_note(vendor: str, device_id: str = "", name: str = "") -> dict[str, str]
                   "10.13–11. Newer systems need AMD.",
         }
     if vend == "amd":
-        for prefix, family, ok, ru, en in AMD_PREFIXES:
+        for prefix, family, _ok, ru, en in AMD_PREFIXES:
             if dev.startswith(prefix):
                 return {"ru": f"{family}: {ru}", "en": f"{family}: {en}"}
         return {"ru": "AMD: семейство не распознано, сверьтесь с гайдом.",

@@ -32,7 +32,7 @@ class CeilingTests(unittest.TestCase):
         self.assertEqual(max_macos_for(profile), "Sequoia")
 
     def test_all_generations_have_ceiling(self):
-        for generation in range(0, 16):
+        for generation in range(16):
             self.assertIn(generation, MAX_MACOS_BY_GEN)
 
 
