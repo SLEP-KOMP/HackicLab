@@ -60,9 +60,9 @@ class BuildOptions:
     usb_ports: Optional[set] = None
     # Thunderbolt: нужен AppleVTD (VT-d в BIOS, DisableIoMapper=false)
     thunderbolt: bool = False
-    # Подменённый SMBIOS отдаём только macOS: Windows видит настоящую плату
-    # (UpdateSMBIOSMode=Custom + CustomSMBIOSGuid). Ломает Boot Camp.
-    macos_only_smbios: bool = True
+    # Подменённый SMBIOS. False — Create: Windows и macOS видят одинаковый
+    # SMBIOS, Boot Camp работает (значение по умолчанию OpenCore и Dortania).
+    macos_only_smbios: bool = False
     # Темы OpenCanopy: набор id (Acidanthera\GoldenGate) и выбранная по умолчанию
     themes: Optional[set] = None
     picker_variant: str = ""
@@ -88,8 +88,10 @@ class BuildOptions:
     dual_boot: str = ""
     # Графическое меню OpenCore (OpenCanopy + Resources) вместо текстового
     gui_picker: bool = False
-    # Звук в загрузчике (AudioDxe + UEFI/Audio): звук и сигнал ошибки в меню
-    audio_dxe: bool = False
+    # Звук в загрузчике (AudioDxe + UEFI/Audio): звук и сигнал ошибки в меню.
+    # None — авто: включаем, когда найден HDA-кодек и нет Windows в мультизагрузке
+    # (AudioDxe сбрасывает NSNPEN и может глушить звук Windows).
+    audio_dxe: Optional[bool] = None
     # Сетевая загрузка (OpenNetworkBoot + сетевой стек): PXE и HTTP(S)
     network_boot: bool = False
     # Патчи, которые клиент хочет искусственно пропустить (набор имён kext)
@@ -98,6 +100,23 @@ class BuildOptions:
     extra_acpi_patches: list = field(default_factory=list)
     # Какие патчи применить: id из knowledge.patches. None — все нужные по железу.
     patches: Optional[set] = None
+
+
+def _want_audio(options, profile) -> bool:
+    """Звук в меню загрузчика: ручной выбор или авто по железу и мультизагрузке.
+
+    AudioDxe — staging-драйвер: он замедляет загрузку и сбрасывает NSNPEN,
+    из-за чего может пропасть звук в Windows. Поэтому по умолчанию включаем
+    его только при найденном HDA-кодеке и без Windows в мультизагрузке.
+    """
+    flag = getattr(options, "audio_dxe", None)
+    if flag is not None:
+        return bool(flag)
+    audio = getattr(profile, "audio", None)
+    if audio is None or not (getattr(audio, "codec", "") or getattr(audio, "name", "")):
+        return False
+    dual = str(getattr(options, "dual_boot", "") or "").strip().lower()
+    return dual not in ("windows", "both")
 
 
 def _patch_on(options, patch_id: str) -> bool:
@@ -310,7 +329,7 @@ def generate_config_plist(profile: HardwareProfile, options: BuildOptions) -> by
         # Terminus/TerminusCore лежат в Resources/Font и рисуют текст меню.
         cfg["UEFI"]["Output"]["ConsoleFont"] = font
 
-    if getattr(options, "audio_dxe", False):
+    if _want_audio(options, profile):
         # AudioDxe мало подключить драйвером: без AudioSupport звука нет.
         aud = cfg["UEFI"]["Audio"]
         aud["AudioSupport"] = True

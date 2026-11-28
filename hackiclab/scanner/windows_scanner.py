@@ -510,21 +510,46 @@ class WindowsScanner:
 
     # --- peripherals (touchpad, thunderbolt) ---
     def _detect_peripherals(self, p: HardwareProfile):
+        # Thunderbolt бывает и на десктопе (карты GC-Titan Ridge и т.п.),
+        # поэтому ищем его до ветки про ноутбук.
+        self._detect_thunderbolt(p)
         if p.platform == "desktop":
             p.has_touchpad = False
             p.touchpad_type = "none"
         else:
-            tb = ps.run("(Get-PnpDevice | Where-Object { $_.Class -eq 'System' -and $_.FriendlyName -match 'Thunderbolt' } | Measure-Object).Count")
-            try:
-                p.has_thunderbolt = int(tb.strip() or 0) > 0
-            except Exception:
-                p.has_thunderbolt = False
             i2c = ps.run("(Get-PnpDevice | Where-Object { $_.Class -eq 'HIDClass' -and $_.InstanceId -match 'I2C' } | Measure-Object).Count")
             try:
                 p.has_touchpad = int(i2c.strip() or 0) > 0
                 p.touchpad_type = "i2c" if p.has_touchpad else "ps2"
             except Exception:
                 pass
+
+    def _detect_thunderbolt(self, p: HardwareProfile):
+        """Контроллер Thunderbolt и его модель по PCI ID (база knowledge)."""
+        ids = ps.run("""
+            Get-PnpDevice -PresentOnly -Status OK | Where-Object {
+                $_.InstanceId -match 'VEN_8086&DEV_(15EA|15EB|15EF|15F0|15D2|15D3|15D4|15D9|1136|1137|1138|15C0|15C1)'
+            } | ForEach-Object { $_.InstanceId }
+        """)
+        found = [line.strip() for line in (ids or "").splitlines() if line.strip()]
+        # Устройство Thunderbolt может быть скрыто до авторизации — тогда
+        # смотрим хотя бы наличие одноимённого устройства.
+        if not found:
+            presence = ps.run(
+                "(Get-PnpDevice -PresentOnly | Where-Object { "
+                "$_.FriendlyName -match 'Thunderbolt' } | Measure-Object).Count")
+            try:
+                p.has_thunderbolt = int(presence.strip() or 0) > 0
+            except Exception:
+                p.has_thunderbolt = False
+            return
+        p.has_thunderbolt = True
+        try:
+            from ..knowledge.thunderbolt import find_controller, model_name
+            model = find_controller(found)
+            p.tb_model = model_name(model)
+        except Exception:
+            p.tb_model = ""
 
     def _disable_gpu_for_vm(self, p: HardwareProfile):
         if p.virtual_machine:

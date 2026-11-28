@@ -248,10 +248,14 @@ class ManualBuildMixin:
         profile = manual_hw.build_profile(self._manual_selection())
         self.manual_profile = profile
         self._manual_fill_smbios(profile)
+        if hasattr(self, "_refresh_tb_wifi_labels"):
+            self._refresh_tb_wifi_labels()
         target = self._manual_target()
         override = str(self.manual_smbios.currentData() or "")
+        mode = (self._wifi_kext_mode(profile)
+                if hasattr(self, "_wifi_kext_mode") else "itlwm")
         self._manual_render(profile, manual_hw.review(
-            profile, target, "itlwm", smbios_override=override))
+            profile, target, mode, smbios_override=override))
         # патчи зависят от железа и macOS — пересчитываем сразу после правки формы
         if hasattr(self, "_refresh_patches"):
             self._refresh_patches()

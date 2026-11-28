@@ -62,6 +62,9 @@ class BuildPlan:
     def __post_init__(self):
         if self.options is None:
             self.options = BuildOptions()
+        if getattr(self.options, "audio_dxe", None) is None:
+            from .config_gen import _want_audio
+            self.options.audio_dxe = _want_audio(self.options, self.profile)
         if self.smbios is None:
             model = self.options.smbios_model or smbios_model_for(
                 self.profile, self.options.target_macos)

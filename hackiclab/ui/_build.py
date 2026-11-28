@@ -76,11 +76,6 @@ class BuildPageMixin:
         self.build_themes = ThemeCards(page)
         opts.addWidget(self.build_themes)
         opts.addSpacing(8)
-        self.opt_audio = QCheckBox(tr.t("build.audio_dxe"))
-        audio_desc = _muted(page, tr.t("build.audio_dxe_desc")); audio_desc.setWordWrap(True)
-        opts.addWidget(self.opt_audio)
-        opts.addWidget(audio_desc)
-        opts.addSpacing(8)
         self.opt_netboot = QCheckBox(tr.t("build.network_boot"))
         net_desc = _muted(page, tr.t("build.network_boot_desc")); net_desc.setWordWrap(True)
         opts.addWidget(self.opt_netboot)
@@ -92,22 +87,31 @@ class BuildPageMixin:
         opts.addWidget(self.opt_tb)
         opts.addWidget(tb_desc)
         opts.addSpacing(8)
-        # SMBIOS подменяем только для macOS: Windows должен видеть свою плату
-        self.opt_smbios_macos = QCheckBox(tr.t("build.smbios_macos_only"))
-        self.opt_smbios_macos.setChecked(True)
-        smbios_desc = _muted(page, tr.t("build.smbios_macos_only_desc"))
-        smbios_desc.setWordWrap(True)
-        opts.addWidget(self.opt_smbios_macos)
-        opts.addWidget(smbios_desc)
+        # Thunderbolt: одна галочка + модель найденного контроллера рядом.
+        tb_row = QHBoxLayout()
+        self.opt_tb = QCheckBox(tr.t("build.thunderbolt"))
+        tb_row.addWidget(self.opt_tb)
+        self.build_tb_model = _muted(page, "")
+        self.build_tb_model.setWordWrap(True)
+        tb_row.addWidget(self.build_tb_model, 1)
+        opts.addLayout(tb_row)
+        tb_desc = _muted(page, tr.t("build.thunderbolt_desc"))
+        tb_desc.setWordWrap(True)
+        opts.addWidget(tb_desc)
         opts.addSpacing(8)
-        wmode_row = QHBoxLayout()
-        wmode_row.addWidget(_h2(page, tr.t("build.wifi_mode")))
-        self.wifi_mode = QComboBox()
-        self.wifi_mode.addItem(tr.t("build.wifi_itlwm"), "itlwm")
-        self.wifi_mode.addItem(tr.t("build.wifi_airport"), "airport")
-        wmode_row.addWidget(self.wifi_mode, 1)
-        opts.addLayout(wmode_row)
-        wifi_desc = _muted(page, tr.t("build.wifi_mode_desc")); wifi_desc.setWordWrap(True)
+        # Intel Wi-Fi: режим решается сам; галочка — только для нативного
+        # интерфейса AirportItlwm и только когда он применим (Intel + ≤ Sonoma).
+        wrow = QHBoxLayout()
+        wrow.addWidget(_h2(page, tr.t("build.wifi_mode")))
+        self.build_wifi_mode = _muted(page, "")
+        self.build_wifi_mode.setWordWrap(True)
+        wrow.addWidget(self.build_wifi_mode, 1)
+        self.opt_airport = QCheckBox(tr.t("build.wifi_airport_native"))
+        self.opt_airport.setToolTip(tr.t("build.wifi_airport_desc"))
+        wrow.addWidget(self.opt_airport)
+        opts.addLayout(wrow)
+        wifi_desc = _muted(page, tr.t("build.wifi_mode_desc"))
+        wifi_desc.setWordWrap(True)
         opts.addWidget(wifi_desc)
 
         # macOS version selection
@@ -261,6 +265,69 @@ class BuildPageMixin:
         sv.addWidget(self.manual_share_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         v.addWidget(share)
         return page
+    def _wifi_airport_applicable(self, profile=None) -> bool:
+        """AirportItlwm существует только для Intel и macOS ≤ Sonoma 14.4."""
+        profile = profile or getattr(self, "manual_profile", None)
+        if profile is None:
+            return False
+        chip = (getattr(getattr(profile, "net", None), "wifi_chipset", "") or "").lower()
+        if chip != "intel":
+            return False
+        from ..knowledge.mac_range import index_of
+        combo = getattr(self, "macos_combo", None)
+        target = str(combo.currentData() or "") if combo is not None else ""
+        if not target:
+            try:
+                from ..knowledge.oc_platforms import max_macos_for
+                target = max_macos_for(profile)
+            except Exception:
+                target = ""
+        limit = index_of("Sonoma")
+        pos = index_of(target)
+        return 0 <= limit and 0 <= pos <= limit
+
+    def _wifi_kext_mode(self, profile=None) -> str:
+        """itlwm/AirportItlwm: выбор автоматический, галочка только уточняет."""
+        if (getattr(self, "opt_airport", None) is not None
+                and self.opt_airport.isChecked()
+                and self._wifi_airport_applicable(profile)):
+            return "airport"
+        return "itlwm"
+
+    def _refresh_tb_wifi_labels(self):
+        """Модель Thunderbolt и текущий режим Intel Wi-Fi рядом с полями."""
+        profile = getattr(self, "manual_profile", None)
+        if hasattr(self, "build_tb_model"):
+            text = ""
+            if profile is not None and getattr(profile, "has_thunderbolt", False):
+                model = str(getattr(profile, "tb_model", "") or "")
+                key = ("build.thunderbolt_found" if model
+                       else "build.thunderbolt_unknown")
+                text = tr.t(key).format(model=model) if model else tr.t(key)
+            self.build_tb_model.setText(text)
+        if hasattr(self, "build_wifi_mode"):
+            chip = (getattr(getattr(profile, "net", None), "wifi_chipset", "")
+                    or "").lower()
+            if not chip:
+                text = ""
+            elif chip in ("mediatek", "realtek", "qualcomm"):
+                text = tr.t("build.wifi_no_driver")
+            elif self._wifi_kext_mode(profile) == "airport":
+                text = tr.t("build.wifi_auto").format(mode="AirportItlwm")
+            elif chip == "intel":
+                text = tr.t("build.wifi_auto").format(mode="itlwm + HeliPort")
+            elif chip == "broadcom":
+                text = tr.t("build.wifi_auto").format(
+                    mode="native / AirportBrcmFixup")
+            else:
+                text = tr.t("build.wifi_auto").format(mode="native / ATH9KFixup")
+            self.build_wifi_mode.setText(text)
+        if hasattr(self, "opt_airport"):
+            applicable = self._wifi_airport_applicable(profile)
+            self.opt_airport.setEnabled(applicable)
+            if not applicable:
+                self.opt_airport.setChecked(False)
+
     def _resolved_profile(self):
         """Профиль сборки: ручной выбор + UEFI-пути из последнего сканирования."""
         from ..knowledge import patches as patch_kb
@@ -373,11 +440,9 @@ class BuildPageMixin:
             menu_font=(self.build_themes.menu_font()
                        if hasattr(self, "build_themes") else ""),
             gui_picker=self.opt_gui.isChecked(),
-            audio_dxe=self.opt_audio.isChecked(),
             network_boot=self.opt_netboot.isChecked(),
             thunderbolt=self.opt_tb.isChecked(),
-            macos_only_smbios=self.opt_smbios_macos.isChecked(),
-            wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",
+            wifi_kext_mode=self._wifi_kext_mode(profile),
             target_macos=self.macos_combo.currentData() or "",
             smbios_model=getattr(getattr(self, "manual_smbios", None),
                                  "currentData", lambda: "")() or "",

@@ -45,7 +45,7 @@ class WizardMixin:
                 "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
                 "usb_mode": "auto", "usb_ports": None,
                 "gui_picker": False,
-                "audio_dxe": False, "network_boot": False,
+                "network_boot": False,
                 "thunderbolt": False,
                 "share_log": False, "smbios_model": "",
 
@@ -250,25 +250,45 @@ class WizardMixin:
         profile = state.get("profile")
         net = getattr(profile, "net", None) if profile is not None else None
         chipset = (getattr(net, "wifi_chipset", "") or "").lower()
-        native = bool(getattr(net, "bt_native_apple", False))
-        if profile is None or chipset == "intel":
-            options = self._WIFI_INTEL
-            if state.get("wifi") not in {value for value, _, _ in options}:
+        target = str(state.get("macos") or "")
+        from ..knowledge.mac_range import index_of
+        if not target and profile is not None:
+            try:
+                from ..knowledge.oc_platforms import max_macos_for
+                target = max_macos_for(profile)
+            except Exception:
+                target = ""
+        sonoma = index_of("Sonoma")
+        airport_ok = bool(chipset == "intel" and sonoma >= 0
+                          and 0 <= index_of(target) <= sonoma)
+        if state.get("wifi") not in ("itlwm", "airport", "none"):
+            state["wifi"] = "itlwm"
+        if chipset == "intel":
+            layout.addWidget(_muted(self, tr.t("build.wifi_auto").format(
+                mode="itlwm + HeliPort")))
+            chk = QCheckBox(tr.t("build.wifi_airport_native"))
+            chk.setToolTip(tr.t("build.wifi_airport_desc"))
+            chk.setChecked(state.get("wifi") == "airport" and airport_ok)
+            chk.setEnabled(airport_ok)
+            chk.toggled.connect(lambda on: self._wiz_state().__setitem__(
+                "wifi", "airport" if (on and airport_ok) else "itlwm"))
+            layout.addWidget(chk)
+            if not chk.isChecked():
                 state["wifi"] = "itlwm"
-        elif chipset == "broadcom":
-            options = self._WIFI_NATIVE if native else self._WIFI_BRCM
+        elif chipset in ("mediatek", "realtek", "qualcomm"):
             state["wifi"] = "none"
+            layout.addWidget(_muted(self, tr.t("validate.wifi_unsupported_desc")))
+        elif chipset:
+            state["wifi"] = "none"
+            from ..knowledge import wifi_bt
+            info = wifi_bt.support(getattr(net, "wifi_name", "") or "", chipset)
+            text = str(info.get("kexts") or "")
+            if text:
+                layout.addWidget(_muted(self, text))
         else:
-            options = (("none", "wizard.wifi.none", "wizard.wifi.none_desc"),)
-            state["wifi"] = "none"
-            if chipset:
-                hint = _muted(self, tr.t("validate.wifi_unsupported_desc"))
-                hint.setWordWrap(True)
-                layout.addWidget(hint)
-        for value, title, desc in options:
-            button = self._wiz_option(self, layout, "wifi", value,
-                                      tr.t(title), tr.t(desc))
-            button.setChecked(value == state.get("wifi"))
+            state["wifi"] = "itlwm"
+            layout.addWidget(_muted(self, tr.t("build.wifi_auto").format(
+                mode="itlwm + HeliPort")))
     def _wiz_scroll(self, widget) -> QScrollArea:
         """Длинные шаги (параметры и порты) прокручиваются, а не обрезаются."""
         area = QScrollArea()
@@ -344,8 +364,7 @@ class WizardMixin:
         gui_note.setWordWrap(True)
         lay.addWidget(gui_note)
 
-        for key, state_key in (("build.audio_dxe", "audio_dxe"),
-                               ("build.network_boot", "network_boot"),
+        for key, state_key in (("build.network_boot", "network_boot"),
                                ("build.thunderbolt", "thunderbolt")):
             chk = QCheckBox(tr.t(key))
             chk.toggled.connect(
@@ -354,16 +373,6 @@ class WizardMixin:
             note = _muted(page, tr.t(f"{key}_desc"))
             note.setWordWrap(True)
             lay.addWidget(note)
-
-        self.wiz_smbios_macos_chk = QCheckBox(tr.t("build.smbios_macos_only"))
-        self.wiz_smbios_macos_chk.setChecked(
-            bool(self._wiz_state().get("macos_only_smbios", True)))
-        self.wiz_smbios_macos_chk.toggled.connect(
-            lambda on: self._wiz_state().__setitem__("macos_only_smbios", bool(on)))
-        lay.addWidget(self.wiz_smbios_macos_chk)
-        smbios_note = _muted(page, tr.t("build.smbios_macos_only_desc"))
-        smbios_note.setWordWrap(True)
-        lay.addWidget(smbios_note)
 
         self.wiz_share_chk = QCheckBox(tr.t("wizard.options.share"))
         self.wiz_share_chk.toggled.connect(
@@ -768,10 +777,8 @@ class WizardMixin:
             disable_dgpu=bool(state.get("disable_dgpu")),
             dual_boot=str(state.get("dual_boot") or ""),
             gui_picker=bool(state.get("gui_picker")),
-            audio_dxe=bool(state.get("audio_dxe")),
             network_boot=bool(state.get("network_boot")),
             thunderbolt=bool(state.get("thunderbolt")),
-            macos_only_smbios=bool(state.get("macos_only_smbios", True)),
             smbios_model=str(state.get("smbios_model") or ""),
         )
         target = self._wiz_target_dir()

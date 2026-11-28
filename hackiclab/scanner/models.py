@@ -177,6 +177,7 @@ class HardwareProfile:
     has_touchpad: bool = False
     touchpad_type: str = "ps2"   # ps2 / i2c / none
     has_thunderbolt: bool = False
+    tb_model: str = ""            # «Titan Ridge (JHL7540 / JHL7440)» и т.п.
     resizable_bar: bool = False
     virtual_machine: str = ""    # непусто если обнаружена ВМ
 
@@ -203,6 +204,7 @@ class HardwareProfile:
             "has_touchpad": self.has_touchpad,
             "touchpad_type": self.touchpad_type,
             "has_thunderbolt": self.has_thunderbolt,
+            "tb_model": self.tb_model,
             "resizable_bar": self.resizable_bar,
             "virtual_machine": self.virtual_machine,
         }
