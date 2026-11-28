@@ -78,13 +78,15 @@ class DriverEntriesTests(unittest.TestCase):
 
 
 class ExtraDriverTests(unittest.TestCase):
-    """Дополнительные драйверы загрузчика: AudioDxe, OpenLegacyBoot, сеть."""
+    """Дополнительные драйверы загрузчика: AudioDxe и сеть."""
 
     def test_audio_dxe_flag_adds_driver(self):
         self.assertIn("AudioDxe.efi", want_drivers(BuildOptions(audio_dxe=True)))
 
-    def test_legacy_boot_flag_adds_driver(self):
-        self.assertIn("OpenLegacyBoot.efi", want_drivers(BuildOptions(legacy_boot=True)))
+    def test_legacy_boot_driver_is_not_offered(self):
+        # OpenLegacyBoot не работает без CSM/OpenDuet, поэтому опции нет вовсе.
+        self.assertFalse(hasattr(BuildOptions(), "legacy_boot"))
+        self.assertNotIn("OpenLegacyBoot.efi", want_drivers(BuildOptions()))
 
     def test_network_boot_adds_stack_and_plugin_last(self):
         names = want_drivers(BuildOptions(network_boot=True))

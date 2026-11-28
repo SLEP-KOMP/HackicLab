@@ -89,8 +89,6 @@ class BuildOptions:
     audio_dxe: bool = False
     # Сетевая загрузка (OpenNetworkBoot + сетевой стек): PXE и HTTP(S)
     network_boot: bool = False
-    # Загрузка legacy-ОС (OpenLegacyBoot, нужен CSM или OpenDuet)
-    legacy_boot: bool = False
     # Патчи, которые клиент хочет искусственно пропустить (набор имён kext)
     skip_kexts: set = field(default_factory=set)
     # ACPI-патчи, посчитанные по DSDT (переименования под SSDT-HPET)

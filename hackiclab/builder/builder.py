@@ -46,8 +46,6 @@ def want_drivers(options) -> list:
         names.append("OpenCanopy.efi")
     if getattr(options, "audio_dxe", False):
         names.append("AudioDxe.efi")
-    if getattr(options, "legacy_boot", False):
-        names.append("OpenLegacyBoot.efi")
     if getattr(options, "network_boot", False):
         names.extend(_NETWORK_BOOT_DRIVERS)
     return names

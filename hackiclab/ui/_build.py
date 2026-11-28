@@ -123,11 +123,6 @@ class BuildPageMixin:
         opts.addWidget(self.opt_netboot)
         opts.addWidget(net_desc)
         opts.addSpacing(8)
-        self.opt_legacy = QCheckBox(tr.t("build.legacy_boot"))
-        legacy_desc = _muted(page, tr.t("build.legacy_boot_desc")); legacy_desc.setWordWrap(True)
-        opts.addWidget(self.opt_legacy)
-        opts.addWidget(legacy_desc)
-        opts.addSpacing(8)
         # Thunderbolt: включаем AppleVTD, иначе устройства на шине не видны
         self.opt_tb = QCheckBox(tr.t("build.thunderbolt"))
         tb_desc = _muted(page, tr.t("build.thunderbolt_desc")); tb_desc.setWordWrap(True)
@@ -426,7 +421,6 @@ class BuildPageMixin:
             gui_picker=self.opt_gui.isChecked(),
             audio_dxe=self.opt_audio.isChecked(),
             network_boot=self.opt_netboot.isChecked(),
-            legacy_boot=self.opt_legacy.isChecked(),
             thunderbolt=self.opt_tb.isChecked(),
             macos_only_smbios=self.opt_smbios_macos.isChecked(),
             wifi_kext_mode=self.wifi_mode.currentData() or "itlwm",

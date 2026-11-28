@@ -45,7 +45,7 @@ class WizardMixin:
                 "usb_toolbox": True, "dual_boot": "", "disable_dgpu": False,
                 "usb_mode": "auto", "usb_ports": None,
                 "gui_picker": False,
-                "audio_dxe": False, "network_boot": False, "legacy_boot": False,
+                "audio_dxe": False, "network_boot": False,
                 "thunderbolt": False,
                 "share_log": False, "smbios_model": "",
                 "boot_args": "",
@@ -358,7 +358,6 @@ class WizardMixin:
 
         for key, state_key in (("build.audio_dxe", "audio_dxe"),
                                ("build.network_boot", "network_boot"),
-                               ("build.legacy_boot", "legacy_boot"),
                                ("build.thunderbolt", "thunderbolt")):
             chk = QCheckBox(tr.t(key))
             chk.toggled.connect(
@@ -783,7 +782,6 @@ class WizardMixin:
             gui_picker=bool(state.get("gui_picker")),
             audio_dxe=bool(state.get("audio_dxe")),
             network_boot=bool(state.get("network_boot")),
-            legacy_boot=bool(state.get("legacy_boot")),
             thunderbolt=bool(state.get("thunderbolt")),
             macos_only_smbios=bool(state.get("macos_only_smbios", True)),
             smbios_model=str(state.get("smbios_model") or ""),
